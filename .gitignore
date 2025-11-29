@@ -5,7 +5,7 @@ backend/*.pyc
 backend/.env
 backend/firebase-service-account.json
 backend/.DS_Store
-``
+
 # Frontend
 frontend/node_modules/
 frontend/.expo/

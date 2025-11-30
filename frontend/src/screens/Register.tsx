@@ -18,8 +18,7 @@ import { isValidEmail, isValidPassword } from "../utils/validation";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
-// UPDATE THIS URL AFTER DEPLOYING TO RENDER
-const API_BASE_URL = 'https://podnova-backend.onrender.com';
+const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com/';
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [fullName, setFullName] = useState("");
@@ -89,7 +88,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       const token = await firebaseUser.getIdToken();
 
       // Create backend user profile
-      const response = await fetch(`${API_BASE_URL}/user`, {
+      const response = await fetch(`${API_BASE_URL}/users/user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

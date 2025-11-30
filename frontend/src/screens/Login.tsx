@@ -6,9 +6,10 @@ import { AuthStackParamList } from "../Navigator";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { isValidEmail } from "../utils/validation";
-import { API_ENDPOINTS } from "../config";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
+
+const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com/';
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -39,7 +40,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       const token = await firebaseUser.getIdToken();
 
       // Verify user exists in MongoDB backend
-      const response = await fetch(API_ENDPOINTS.getUser, {
+      const response = await fetch(`${API_BASE_URL}/users/user`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -50,7 +51,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       if (!response.ok) {
         if (response.status === 404) {
           // User exists in Firebase but not in MongoDB - create profile
-          const createResponse = await fetch(API_ENDPOINTS.createUser, {
+          const createResponse = await fetch(`${API_BASE_URL}/users/user`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -65,9 +66,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           throw new Error("Failed to fetch user profile");
         }
       }
-
-      // Success - Firebase auth state listener will handle navigation
-      // No need to manually navigate here
+      // Login successful, navigate to main app screen
 
     } catch (error: any) {
       console.error("Login error:", error);

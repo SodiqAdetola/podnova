@@ -1,8 +1,6 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-
 from app.routes import (
     user_routes,
     # topic_routes,
@@ -13,21 +11,33 @@ from app.routes import (
 
 app = FastAPI(title="PodNova Backend")
 
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Test MongoDB connection on startup"""
+    try:
+        from app.db import client
+        await client.admin.command('ping')
+        print("MongoDB connection successful!")
+    except Exception as e:
+        print(f"MongoDB connection failed: {e}")
 
 @app.get("/")
 def root():
     return {"message": "Welcome to PodNova Backend!"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
-# Routers
 app.include_router(user_routes.router, prefix="/users", tags=["users"])
 # app.include_router(topic_routes.router, prefix="/topics", tags=["topics"])
 # app.include_router(podcast_routes.router, prefix="/podcasts", tags=["podcasts"])

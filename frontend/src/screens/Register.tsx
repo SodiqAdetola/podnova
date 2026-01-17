@@ -18,7 +18,7 @@ import { isValidEmail, isValidPassword } from "../utils/validation";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
-const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com/';
+const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com';
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [fullName, setFullName] = useState("");
@@ -102,7 +102,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       }
 
       Alert.alert(
-        "Success! 🎉",
+        "Success!",
         "Your account has been created successfully!",
         [{ text: "OK" }]
       );

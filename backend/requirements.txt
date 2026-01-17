@@ -7,3 +7,9 @@ pydantic[email]
 python-dotenv==1.0.0
 firebase-admin==6.4.0
 python-multipart==0.0.6
+feedparser
+langdetect
+beautifulsoup4
+certifi
+google-generativeai
+numpy

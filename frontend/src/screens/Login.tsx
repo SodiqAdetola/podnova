@@ -9,7 +9,7 @@ import { isValidEmail } from "../utils/validation";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
-const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com/';
+const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com';
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState("");

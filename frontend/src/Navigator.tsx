@@ -11,16 +11,17 @@ import CreateScreen from "./screens/Create";
 import LibraryScreen from "./screens/Library";
 import SearchScreen from "./screens/Search";
 import HomeScreen from "./screens/Home";
+import CategoryTopicsScreen from "./screens/CategoryTopics";
+import TopicDetailScreen from "./screens/TopicDetail";
 
-
-// route names & parameters for for Auth stack
+// Auth stack
 export type AuthStackParamList = {
     Login: undefined;
     Register: undefined;
 };
 
-// route names & parameters for main app stack
-export type MainStackParamList = {
+// Bottom tab navigator (main 5 tabs)
+export type MainTabParamList = {
     Home: undefined;
     Search: undefined;
     Create: undefined;
@@ -28,13 +29,18 @@ export type MainStackParamList = {
     Profile: undefined;
 };
 
-// navigator components with their type info
-// Auth stack for login & registration
-const AuthStack = createNativeStackNavigator<AuthStackParamList>();
-// Main app stack for logged in users
-const MainStack = createBottomTabNavigator<MainStackParamList>();
+// Main stack (includes tabs + detail screens)
+export type MainStackParamList = {
+    MainTabs: undefined;
+    CategoryTopics: { category: string };
+    TopicDetail: { topicId: string };
+};
 
-// Auth stack navigator component for login & registration screens
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const MainTabs = createBottomTabNavigator<MainTabParamList>();
+const MainStack = createNativeStackNavigator<MainStackParamList>();
+
+// Auth screens
 const AuthStackNavigator: React.FC = () => (
     <AuthStack.Navigator>
         <AuthStack.Screen name="Login" component={LoginScreen} />
@@ -42,19 +48,27 @@ const AuthStackNavigator: React.FC = () => (
     </AuthStack.Navigator>
 );
 
-// Main app stack navigator component for main app screens
+// Bottom tabs (5 main screens)
+const MainTabsNavigator: React.FC = () => (
+    <MainTabs.Navigator>
+        <MainTabs.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <MainTabs.Screen name="Search" component={SearchScreen} />
+        <MainTabs.Screen name="Create" component={CreateScreen} />
+        <MainTabs.Screen name="Library" component={LibraryScreen} />
+        <MainTabs.Screen name="Profile" component={ProfileScreen} />
+    </MainTabs.Navigator>
+);
+
+// Main stack (tabs + detail screens)
 const MainStackNavigator: React.FC = () => (
-    <MainStack.Navigator>
-        <MainStack.Screen name="Home" component={HomeScreen} />
-        <MainStack.Screen name="Search" component={SearchScreen} />
-        <MainStack.Screen name="Create" component={CreateScreen} />
-        <MainStack.Screen name="Library" component={LibraryScreen} />
-        <MainStack.Screen name="Profile" component={ProfileScreen} />
+    <MainStack.Navigator screenOptions={{ headerShown: false }}>
+        <MainStack.Screen name="MainTabs" component={MainTabsNavigator} />
+        <MainStack.Screen name="CategoryTopics" component={CategoryTopicsScreen} />
+        <MainStack.Screen name="TopicDetail" component={TopicDetailScreen} />
     </MainStack.Navigator>
 );
 
 const Navigator: React.FC = () => {
-    // get user authentication status from AuthContext
     const { user } = useAuth();
 
     return (

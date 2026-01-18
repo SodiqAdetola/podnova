@@ -8,7 +8,6 @@ from app.routes import (
     # discussion_routes,
     # auth,  # only for explicit auth routes
 )
-from podnova.backend.app.routes import topics_routes
 
 app = FastAPI(title="PodNova Backend")
 

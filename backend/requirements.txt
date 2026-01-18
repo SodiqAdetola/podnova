@@ -13,3 +13,4 @@ beautifulsoup4
 certifi
 google-generativeai
 numpy
+schedule

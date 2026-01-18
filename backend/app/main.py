@@ -3,11 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import (
     user_routes,
-    # topic_routes,
+    topics_routes,
     # podcast_routes,
     # discussion_routes,
     # auth,  # only for explicit auth routes
 )
+from podnova.backend.app.routes import topics_routes
 
 app = FastAPI(title="PodNova Backend")
 
@@ -39,7 +40,7 @@ def health_check():
     return {"status": "healthy"}
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])
-# app.include_router(topic_routes.router, prefix="/topics", tags=["topics"])
+app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])
 # app.include_router(podcast_routes.router, prefix="/podcasts", tags=["podcasts"])
 # app.include_router(discussion_routes.router, prefix="/discussions", tags=["discussions"])
 # app.include_router(auth.router, prefix="/auth", tags=["auth"])

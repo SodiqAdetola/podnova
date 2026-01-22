@@ -86,7 +86,9 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
             "confidence": topic.get("confidence", 0),
             "last_updated": topic["last_updated"].isoformat(),
             "time_ago": time_ago,
-            "category": topic["category"]
+            "category": topic["category"],
+            "image_url": topic.get("image_url")
+
         })
     
     return topics
@@ -121,7 +123,9 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
             "url": article["url"],
             "source": article["source"],
             "published_date": article["published_date"].isoformat(),
-            "word_count": article.get("word_count", 0)
+            "word_count": article.get("word_count", 0),
+            "image_url": topic.get("image_url")
+
         })
     
     # Format time ago
@@ -145,7 +149,9 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
         "created_at": topic["created_at"].isoformat(),
         "articles": articles,
         "tags": tags,
-        "has_podcast": False  # Will be updated when podcast generation is implemented
+        "has_podcast": False,
+        "image_url": topic.get("image_url")
+
     }
 
 

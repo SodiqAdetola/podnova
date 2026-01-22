@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -29,6 +30,7 @@ const CategoryTopicsScreen: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortOption>("latest");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadTopics();
@@ -41,6 +43,8 @@ const CategoryTopicsScreen: React.FC = () => {
       );
       const data = await response.json();
       setTopics(data.topics || []);
+      // Reset image errors when loading new topics
+      setImageErrors(new Set());
     } catch (error) {
       console.error("Error loading topics:", error);
     } finally {
@@ -54,12 +58,36 @@ const CategoryTopicsScreen: React.FC = () => {
     loadTopics();
   };
 
+  const handleImageError = (topicId: string) => {
+    setImageErrors((prev) => new Set(prev).add(topicId));
+  };
+
   const getSortButtonStyle = (option: SortOption) => {
     return sortBy === option ? styles.sortButtonActive : styles.sortButton;
   };
 
   const getSortTextStyle = (option: SortOption) => {
     return sortBy === option ? styles.sortButtonTextActive : styles.sortButtonText;
+  };
+
+  const renderTopicImage = (topic: Topic) => {
+    // Don't render if image failed to load or doesn't exist
+    if (!topic.image_url || imageErrors.has(topic.id)) {
+      return (
+        <View style={styles.placeholderImage}>
+          <Text style={styles.placeholderIcon}>📰</Text>
+        </View>
+      );
+    }
+
+    return (
+      <Image
+        source={{ uri: topic.image_url }}
+        style={styles.topicImage}
+        resizeMode="cover"
+        onError={() => handleImageError(topic.id)}
+      />
+    );
   };
 
   const renderTopicsTab = () => {
@@ -102,15 +130,25 @@ const CategoryTopicsScreen: React.FC = () => {
             style={styles.topicCard}
             onPress={() => navigation.navigate("TopicDetail", { topicId: topic.id })}
           >
-            <View style={styles.topicCardHeader}>
-              <Text style={styles.topicTitle}>{topic.title}</Text>
-              <TouchableOpacity>
-                <Text style={styles.menuIcon}>⋮</Text>
-              </TouchableOpacity>
+            <View style={styles.topicCardContent}>
+              {/* Topic Image */}
+              {renderTopicImage(topic)}
+
+              {/* Topic Info */}
+              <View style={styles.topicInfo}>
+                <View style={styles.topicCardHeader}>
+                  <Text style={styles.topicTitle} numberOfLines={2}>
+                    {topic.title}
+                  </Text>
+                  <TouchableOpacity>
+                    <Text style={styles.menuIcon}>⋮</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.topicMeta} numberOfLines={1}>
+                  Clustered from {topic.article_count} Sources • {topic.time_ago}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.topicMeta}>
-              Clustered from {topic.article_count} Sources • {topic.time_ago}
-            </Text>
           </TouchableOpacity>
         ))}
 
@@ -126,7 +164,6 @@ const CategoryTopicsScreen: React.FC = () => {
   const renderDiscussionsTab = () => {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyIcon}>💬</Text>
         <Text style={styles.emptyTitle}>Discussions Coming Soon</Text>
         <Text style={styles.emptyText}>
           Community discussions for {category} topics will be available soon
@@ -147,7 +184,7 @@ const CategoryTopicsScreen: React.FC = () => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{category.charAt(0).toUpperCase() + category.slice(1)}</Text>
         <TouchableOpacity style={styles.searchButton}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <View style={styles.searchIconShape} />
         </TouchableOpacity>
       </View>
 
@@ -229,8 +266,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  searchIcon: {
-    fontSize: 20,
+  searchIconShape: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#6B7280",
   },
   tabsContainer: {
     flexDirection: "row",
@@ -291,26 +332,52 @@ const styles = StyleSheet.create({
   topicCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+    overflow: "hidden",
+  },
+  topicCardContent: {
+    flexDirection: "row",
+    padding: 12,
+  },
+  topicImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  placeholderImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderIcon: {
+    fontSize: 32,
+  },
+  topicInfo: {
+    flex: 1,
+    justifyContent: "center",
   },
   topicCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   topicTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: "#111827",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   menuIcon: {
     fontSize: 20,
@@ -318,16 +385,12 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   topicMeta: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#6B7280",
   },
   emptyState: {
     paddingVertical: 60,
     alignItems: "center",
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 18,

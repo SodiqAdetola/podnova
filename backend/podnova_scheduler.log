@@ -1,0 +1,24 @@
+2026-01-22 01:19:14,633 - INFO - ================================================================================
+2026-01-22 01:19:14,633 - INFO - PodNova Scheduler Starting
+2026-01-22 01:19:14,634 - INFO - Time: 2026-01-22 01:19:14
+2026-01-22 01:19:14,634 - INFO - ================================================================================
+2026-01-22 01:19:14,634 - INFO - Scheduled: Ingestion every 4 hours
+2026-01-22 01:19:14,634 - INFO - Scheduled: Clustering every 2 hours
+2026-01-22 01:19:14,634 - INFO - Scheduled: Light maintenance every 6 hours
+2026-01-22 01:19:14,634 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-01-22 01:19:14,634 - INFO - 
+Running initial jobs on startup...
+2026-01-22 01:19:14,634 - INFO - ================================================================================
+2026-01-22 01:19:14,634 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-22 01:19:14,634 - INFO - ================================================================================
+2026-01-22 01:22:56,369 - INFO - Ingestion completed: 1 articles
+2026-01-22 01:23:56,370 - INFO - ================================================================================
+2026-01-22 01:23:56,371 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-22 01:23:56,371 - INFO - ================================================================================
+2026-01-22 01:23:56,768 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-22 01:23:57,089 - INFO - Clustering completed: 1 articles processed
+2026-01-22 01:23:57,090 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-01-22 01:23:57,090 - INFO - ================================================================================
+2026-01-22 01:33:31,819 - INFO - 
+Scheduler stopped by user

@@ -1,6 +1,7 @@
 """
 PodNova Clustering Module
 Handles article embeddings, topic assignment, and clustering logic
+WITH INTEGRATED MAINTENANCE AND IMAGE HANDLING
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
@@ -12,6 +13,9 @@ import numpy as np
 from pymongo import MongoClient
 import certifi
 from google import genai
+
+# Import maintenance service
+from app.ai_pipeline.article_maintenance import MaintenanceService
 
 # Configuration
 SIMILARITY_THRESHOLD = 0.6
@@ -32,6 +36,9 @@ class ClusteringService:
         self.db = self.client[db_name]
         self.articles_collection = self.db["articles"]
         self.topics_collection = self.db["topics"]
+        
+        # Initialize maintenance service
+        self.maintenance_service = MaintenanceService(mongo_uri, db_name)
         
         # Create indexes
         self.topics_collection.create_index("category")
@@ -65,8 +72,42 @@ class ClusteringService:
         norm_product = np.linalg.norm(vec1) * np.linalg.norm(vec2)
         return dot_product / norm_product if norm_product != 0 else 0.0
     
+    def check_and_resurrect_topic(self, topic: Dict) -> bool:
+        """
+        Check if a stale topic should be resurrected when a new highly relevant article arrives
+        Returns True if topic was resurrected
+        """
+        if topic.get("status") != "stale":
+            return False
+        
+        # Check if topic is not too old
+        stale_since = topic.get("stale_since")
+        if stale_since:
+            days_stale = (datetime.now() - stale_since).days
+            if days_stale > self.maintenance_service.config.MAX_RESURRECTION_AGE_DAYS:
+                return False
+        
+        # Resurrect the topic
+        self.topics_collection.update_one(
+            {"_id": topic["_id"]},
+            {
+                "$set": {
+                    "status": "active",
+                    "resurrected_at": datetime.now()
+                },
+                "$unset": {"stale_since": ""}
+            }
+        )
+        
+        print(f"  Resurrected stale topic: {topic.get('title', 'Untitled')}")
+        return True
+    
     def find_matching_topic(self, article_embedding: np.ndarray, category: str) -> Optional[Dict]:
-        """Find existing topic that matches the article embedding"""
+        """
+        Find existing topic that matches the article embedding
+        Now considers both active and stale topics (stale can be resurrected)
+        """
+        # Look for active topics first
         active_topics = self.topics_collection.find({
             "category": category,
             "status": "active"
@@ -85,6 +126,29 @@ class ClusteringService:
             if similarity > best_similarity and similarity >= SIMILARITY_THRESHOLD:
                 best_similarity = similarity
                 best_match = topic
+        
+        # If no active match, check stale topics with higher threshold
+        if not best_match:
+            stale_topics = self.topics_collection.find({
+                "category": category,
+                "status": "stale"
+            })
+            
+            resurrection_threshold = SIMILARITY_THRESHOLD + self.maintenance_service.config.RESURRECTION_SIMILARITY_BONUS
+            
+            for topic in stale_topics:
+                if "centroid_embedding" not in topic:
+                    continue
+                
+                topic_embedding = np.array(topic["centroid_embedding"])
+                similarity = self.cosine_similarity(article_embedding, topic_embedding)
+                
+                # Higher threshold for resurrecting stale topics
+                if similarity > best_similarity and similarity >= resurrection_threshold:
+                    best_similarity = similarity
+                    best_match = topic
+                    # Resurrect the topic
+                    self.check_and_resurrect_topic(topic)
         
         if best_match:
             print(f"  Found matching topic: {best_match.get('title', 'Untitled')} (similarity: {best_similarity:.3f})")
@@ -117,7 +181,8 @@ class ClusteringService:
             "has_title": False,
             "title": None,
             "summary": None,
-            "key_insights": None
+            "key_insights": None,
+            "image_url": article_doc.get("image_url")
         }
         
         result = self.topics_collection.insert_one(topic_doc)
@@ -133,7 +198,10 @@ class ClusteringService:
         return topic_id
     
     def update_existing_topic(self, topic: Dict, article_doc: Dict, article_embedding: np.ndarray) -> None:
-        """Add article to existing topic and update metadata"""
+        """
+        Add article to existing topic and update metadata
+        Now includes automatic topic trimming and image handling
+        """
         topic_id = topic["_id"]
         article_ids = topic["article_ids"]
         sources = set(topic.get("sources", []))
@@ -147,18 +215,23 @@ class ClusteringService:
         if is_new_source:
             confidence = min(1.0, confidence + 0.1)
         
+        # Prepare update fields
+        update_fields = {
+            "article_ids": article_ids,
+            "sources": list(sources),
+            "centroid_embedding": new_centroid.tolist() if new_centroid is not None else topic["centroid_embedding"],
+            "confidence": confidence,
+            "last_updated": datetime.now(),
+            "article_count": len(article_ids)
+        }
+        
+        # Update image if topic doesn't have one
+        if not topic.get("image_url") and article_doc.get("image_url"):
+            update_fields["image_url"] = article_doc["image_url"]
+        
         self.topics_collection.update_one(
             {"_id": topic_id},
-            {
-                "$set": {
-                    "article_ids": article_ids,
-                    "sources": list(sources),
-                    "centroid_embedding": new_centroid.tolist() if new_centroid is not None else topic["centroid_embedding"],
-                    "confidence": confidence,
-                    "last_updated": datetime.now(),
-                    "article_count": len(article_ids)
-                }
-            }
+            {"$set": update_fields}
         )
         
         self.articles_collection.update_one(
@@ -167,6 +240,15 @@ class ClusteringService:
         )
         
         print(f"  Updated topic (ID: {topic_id}, articles: {len(article_ids)}, confidence: {confidence:.2f})")
+        
+        # Check if topic needs trimming after adding article
+        age_category = self.maintenance_service.get_topic_age_category(topic)
+        max_articles = self.maintenance_service.config.TOPIC_LIMITS[age_category]["max_articles"]
+        
+        if len(article_ids) > max_articles:
+            print(f"  Topic exceeds limit ({len(article_ids)} > {max_articles}), trimming...")
+            trim_result = self.maintenance_service.trim_topic_articles(topic_id)
+            print(f"  Trimmed {trim_result.get('trimmed', 0)} articles, kept {trim_result.get('retained', 0)}")
         
         should_generate_title = (
             not topic.get("has_title", False) and

@@ -103,7 +103,9 @@ const TopicDetailScreen: React.FC = () => {
         {/* Generate Podcast Button */}
         <TouchableOpacity style={styles.podcastButton}>
           <View style={styles.podcastButtonContent}>
-            <Text style={styles.podcastIcon}>⚡</Text>
+            <View style={styles.podcastIconContainer}>
+              <View style={styles.podcastIconShape} />
+            </View>
             <View style={styles.podcastTextContainer}>
               <Text style={styles.podcastTitle}>Generate AI Podcast</Text>
               <Text style={styles.podcastSubtitle}>
@@ -112,7 +114,7 @@ const TopicDetailScreen: React.FC = () => {
             </View>
           </View>
           <View style={styles.podcastGenerateButton}>
-            <Text style={styles.podcastGenerateIcon}>⚡</Text>
+            <View style={styles.podcastGenerateIconShape} />
             <Text style={styles.podcastGenerateText}>Generate Podcast</Text>
           </View>
         </TouchableOpacity>
@@ -138,7 +140,6 @@ const TopicDetailScreen: React.FC = () => {
   const renderDiscussionTab = () => {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyIcon}>💬</Text>
         <Text style={styles.emptyTitle}>No Discussions Yet</Text>
         <Text style={styles.emptyText}>
           Be the first to start a discussion about this topic
@@ -180,7 +181,7 @@ const TopicDetailScreen: React.FC = () => {
           {topic.title}
         </Text>
         <TouchableOpacity style={styles.searchButton}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <View style={styles.searchIconShape} />
         </TouchableOpacity>
       </View>
 
@@ -259,8 +260,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  searchIcon: {
-    fontSize: 20,
+  searchIconShape: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#6B7280",
   },
   tabsContainer: {
     flexDirection: "row",
@@ -379,9 +384,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 16,
   },
-  podcastIcon: {
-    fontSize: 24,
+  podcastIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
+  },
+  podcastIconShape: {
+    width: 16,
+    height: 16,
+    backgroundColor: "#6366F1",
+    borderRadius: 3,
   },
   podcastTextContainer: {
     flex: 1,
@@ -405,8 +421,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#6366F1",
   },
-  podcastGenerateIcon: {
-    fontSize: 16,
+  podcastGenerateIconShape: {
+    width: 14,
+    height: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 3,
     marginRight: 8,
   },
   podcastGenerateText: {
@@ -434,10 +453,6 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
     alignItems: "center",
     paddingHorizontal: 32,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 18,

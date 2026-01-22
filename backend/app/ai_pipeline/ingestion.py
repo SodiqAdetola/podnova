@@ -1,6 +1,7 @@
 """
 PodNova Article Ingestion Module
 Fetches articles from RSS feeds, filters for quality, and stores in MongoDB
+NOW WITH IMAGE EXTRACTION
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 
@@ -82,6 +83,56 @@ class ArticleIngestionService:
         except Exception as e:
             print(f"Error extracting content from {url}: {str(e)}")
             return None
+    
+    def extract_image_from_entry(self, entry: Dict, url: str) -> Optional[str]:
+        """Extract image URL from RSS entry"""
+        image_url = None
+        
+        # Method 1: Check RSS feed media content
+        if hasattr(entry, 'media_content') and entry.media_content:
+            image_url = entry.media_content[0].get('url')
+        
+        # Method 2: Check RSS enclosures
+        elif hasattr(entry, 'enclosures') and entry.enclosures:
+            for enclosure in entry.enclosures:
+                if enclosure.get('type', '').startswith('image/'):
+                    image_url = enclosure.get('href') or enclosure.get('url')
+                    break
+        
+        # Method 3: Check media:thumbnail
+        elif hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            image_url = entry.media_thumbnail[0].get('url')
+        
+        # Method 4: Extract from HTML content
+        elif hasattr(entry, 'content') and entry.content:
+            content_html = entry.content[0].get('value', '')
+            image_url = self._extract_image_from_html(content_html)
+        
+        elif hasattr(entry, 'summary'):
+            image_url = self._extract_image_from_html(entry.summary)
+        
+        # Clean and validate URL
+        if image_url:
+            # Handle relative URLs
+            if image_url.startswith('//'):
+                image_url = 'https:' + image_url
+            elif image_url.startswith('/') and url:
+                from urllib.parse import urlparse
+                parsed = urlparse(url)
+                image_url = f"{parsed.scheme}://{parsed.netloc}{image_url}"
+        
+        return image_url
+    
+    def _extract_image_from_html(self, html_content: str) -> Optional[str]:
+        """Extract image URL from HTML content"""
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            img = soup.find('img')
+            if img:
+                return img.get('src') or img.get('data-src')
+        except:
+            pass
+        return None
     
     def generate_content_hash(self, text: str) -> str:
         """Generate a hash for deduplication"""
@@ -193,6 +244,9 @@ class ArticleIngestionService:
             if not content or not title or not url:
                 return None
             
+            # Extract image URL
+            image_url = self.extract_image_from_entry(entry, url)
+            
             # Generate content hash for deduplication
             content_hash = self.generate_content_hash(content)
             
@@ -208,7 +262,8 @@ class ArticleIngestionService:
                 "source_priority": feed_info.get("priority", "medium"),
                 "ingested_at": datetime.now(),
                 "status": "pending_clustering",
-                "word_count": self.count_words(content)
+                "word_count": self.count_words(content),
+                "image_url": image_url
             }
             
             return article_data
@@ -245,7 +300,8 @@ class ArticleIngestionService:
             try:
                 self.articles_collection.insert_one(article_data)
                 ingested_count += 1
-                print(f"  [INGESTED] {article_data['title'][:60]} ({article_data['word_count']} words)")
+                img_status = "📷" if article_data.get('image_url') else "  "
+                print(f"  [INGESTED] {img_status} {article_data['title'][:60]} ({article_data['word_count']} words)")
             except Exception as e:
                 print(f"  [ERROR] Failed to insert: {str(e)}")
         

@@ -31,27 +31,41 @@ const HomeScreen: React.FC = () => {
 
   const loadData = async () => {
     try {
-      // Fetch categories
+      console.log("Starting to load data...");
+      
       const categoriesRes = await fetch(`${API_BASE_URL}/topics/categories`);
       const categoriesData = await categoriesRes.json();
-      setCategories(categoriesData.categories || []);
-
-      // Fetch recent topics from all categories (for "Recently Active Topics")
-      const topicsPromises = categoriesData.categories.map((cat: Category) =>
-        fetch(`${API_BASE_URL}/topics/category/${cat.name}?sort_by=latest`)
-          .then((res) => res.json())
-          .then((data) => data.topics || [])
-      );
-
-      const allTopics = await Promise.all(topicsPromises);
-      const flatTopics = allTopics.flat();
+      console.log("Categories response:", JSON.stringify(categoriesData, null, 2));
       
-      // Sort by last_updated and take top 5
-      const sortedTopics = flatTopics
-        .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
-        .slice(0, 5);
+      const categoriesList = categoriesData.categories || categoriesData || [];
+      console.log("Categories list:", categoriesList);
       
-      setRecentTopics(sortedTopics);
+      setCategories(categoriesList);
+
+      if (categoriesList.length > 0) {
+        const topicsPromises = categoriesList.map((cat: Category) =>
+          fetch(`${API_BASE_URL}/topics/category/${cat.name}?sort_by=latest`)
+            .then((res) => res.json())
+            .then((data) => {
+              console.log(`Topics for ${cat.name}:`, data);
+              return data.topics || data || [];
+            })
+            .catch((err) => {
+              console.error(`Error fetching topics for ${cat.name}:`, err);
+              return [];
+            })
+        );
+
+        const allTopics = await Promise.all(topicsPromises);
+        const flatTopics = allTopics.flat();
+        console.log("Total topics:", flatTopics.length);
+        
+        const sortedTopics = flatTopics
+          .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
+          .slice(0, 5);
+        
+        setRecentTopics(sortedTopics);
+      }
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -65,16 +79,17 @@ const HomeScreen: React.FC = () => {
     loadData();
   };
 
-  const getCategoryIcon = (name: string) => {
-    switch (name) {
+  const getCategoryColor = (name: string) => {
+    switch (name.toLowerCase()) {
       case "technology":
-        return "📱";
+      case "tech":
+        return "#f16365ff";
       case "finance":
-        return "💰";
+        return "#73aef2ff";
       case "politics":
-        return "🏛️";
+        return "#8B5CF6";
       default:
-        return "📰";
+        return "#6B7280";
     }
   };
 
@@ -91,67 +106,70 @@ const HomeScreen: React.FC = () => {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>PODNOVA</Text>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.iconButton}>
-            <Text style={styles.iconText}>🔍</Text>
+            <View style={styles.searchIcon} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
-            <Text style={styles.iconText}>👤</Text>
+            <View style={styles.userIcon} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Explore Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Explore</Text>
 
-        {/* Categories */}
-        {categories.map((category) => (
+        {categories.map((category, index) => (
           <TouchableOpacity
             key={category.name}
-            style={styles.categoryCard}
+            style={[
+              styles.categoryCard,
+              { borderLeftColor: getCategoryColor(category.name) }
+            ]}
             onPress={() => navigation.navigate("CategoryTopics", { category: category.name })}
           >
             <View style={styles.categoryIcon}>
-              <Text style={styles.categoryEmoji}>{getCategoryIcon(category.name)}</Text>
+              <View style={styles.docIcon} />
             </View>
+            
             <View style={styles.categoryContent}>
               <Text style={styles.categoryName}>{category.display_name}</Text>
               <Text style={styles.categoryTrending}>
-                {category.trending ? `Trending: ${category.trending.substring(0, 40)}...` : "No trending topics"}
+                Trending: {category.trending ? category.trending.substring(0, 40) : "Breaking stories"}
               </Text>
-            </View>
-            <View style={styles.categoryArrow}>
-              <Text style={styles.arrowText}>›</Text>
             </View>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Recently Active Topics */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Recently Active Topics</Text>
 
-        {recentTopics.map((topic) => (
-          <TouchableOpacity
-            key={topic.id}
-            style={styles.topicCard}
-            onPress={() => navigation.navigate("TopicDetail", { topicId: topic.id })}
-          >
-            <View style={styles.topicHeader}>
-              <Text style={styles.topicTitle}>{topic.title}</Text>
-              <View style={styles.trendIndicator}>
-                <Text style={styles.trendIcon}>📈</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.topicsScrollContainer}
+        >
+          {recentTopics.map((topic) => (
+            <TouchableOpacity
+              key={topic.id}
+              style={styles.topicCard}
+              onPress={() => navigation.navigate("TopicDetail", { topicId: topic.id })}
+            >
+              <View style={styles.topicHeader}>
+                <Text style={styles.topicTitle}>{topic.title}</Text>
+                <View style={styles.trendIndicator}>
+                  <Text style={styles.trendIcon}>↗</Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.topicMeta}>
-              {topic.source_count} Sources • {topic.time_ago}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.topicMeta}>
+                {topic.source_count} Sources - {topic.time_ago}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
     </ScrollView>
   );
@@ -190,50 +208,66 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#6366F1",
     justifyContent: "center",
     alignItems: "center",
   },
-  iconText: {
-    fontSize: 20,
+  searchIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  userIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
   },
   section: {
     marginTop: 24,
-    paddingHorizontal: 20,
+    paddingLeft: 20,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 16,
     color: "#111827",
+    paddingRight: 20,
   },
   categoryCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
+    borderLeftWidth: 5,
   },
   categoryIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  categoryEmoji: {
-    fontSize: 24,
+  docIcon: {
+    width: 20,
+    height: 24,
+    backgroundColor: "#6B7280",
+    borderRadius: 2,
   },
   categoryContent: {
     flex: 1,
@@ -246,24 +280,21 @@ const styles = StyleSheet.create({
   },
   categoryTrending: {
     fontSize: 13,
-    color: "#6B7280",
+    color: "#9CA3AF",
   },
-  categoryArrow: {
-    marginLeft: 8,
-  },
-  arrowText: {
-    fontSize: 24,
-    color: "#D1D5DB",
+  topicsScrollContainer: {
+    paddingRight: 20,
   },
   topicCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginRight: 12,
+    width: 280,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
   },
   topicHeader: {
@@ -281,12 +312,20 @@ const styles = StyleSheet.create({
   },
   trendIndicator: {
     marginLeft: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
   },
   trendIcon: {
-    fontSize: 16,
+    fontSize: 14,
+    color: "#EF4444",
+    fontWeight: "bold",
   },
   topicMeta: {
     fontSize: 13,
-    color: "#6B7280",
+    color: "#9CA3AF",
   },
 });

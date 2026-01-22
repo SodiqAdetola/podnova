@@ -1,133 +1,135 @@
 """
-PodNova Pipeline Scheduler
-Automates the ingestion and clustering pipeline to run periodically
+PodNova Automated Scheduler
+Runs ingestion, clustering, and maintenance on schedule
 """
-from app.config import MONGODB_URI, MONGODB_DB_NAME
-from app.ai_pipeline.ingestion import ArticleIngestionService
-from app.ai_pipeline.clustering import ClusteringService
 import schedule
 import time
 from datetime import datetime
-import sys
+import logging
 
-# Configuration
-INGESTION_INTERVAL_MINUTES = 60  # Run ingestion every 60 minutes (1 hour)
-CLUSTERING_DELAY_MINUTES = 5  # Run clustering 5 minutes after each ingestion
+from app.ai_pipeline.ingestion import ArticleIngestionService
+from app.ai_pipeline.clustering import ClusteringService
+from app.ai_pipeline.article_maintenance import MaintenanceService
+from app.config import MONGODB_URI, MONGODB_DB_NAME
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('podnova_scheduler.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
-def run_ingestion():
-    """Run the article ingestion pipeline"""
-    print("\n" + "=" * 80)
-    print(f"[SCHEDULER] Starting Ingestion Job")
-    print(f"[SCHEDULER] Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
+class PodNovaScheduler:
+    def __init__(self):
+        self.ingestion_service = ArticleIngestionService(MONGODB_URI, MONGODB_DB_NAME)
+        self.clustering_service = ClusteringService(MONGODB_URI, MONGODB_DB_NAME)
+        self.maintenance_service = MaintenanceService(MONGODB_URI, MONGODB_DB_NAME)
     
-    try:
-        service = ArticleIngestionService(MONGODB_URI, MONGODB_DB_NAME)
-        stats = service.run_ingestion()
+    def run_ingestion(self):
+        """Scheduled ingestion job"""
+        try:
+            logger.info("=" * 80)
+            logger.info("SCHEDULED JOB: Article Ingestion")
+            logger.info("=" * 80)
+            stats = self.ingestion_service.run_ingestion()
+            logger.info(f"Ingestion completed: {stats['total_ingested']} articles")
+        except Exception as e:
+            logger.error(f"Ingestion failed: {str(e)}", exc_info=True)
+    
+    def run_clustering(self):
+        """Scheduled clustering job"""
+        try:
+            logger.info("=" * 80)
+            logger.info("SCHEDULED JOB: Article Clustering")
+            logger.info("=" * 80)
+            stats = self.clustering_service.process_pending_articles()
+            self.clustering_service.mark_inactive_topics()
+            logger.info(f"Clustering completed: {stats['total_processed']} articles processed")
+        except Exception as e:
+            logger.error(f"Clustering failed: {str(e)}", exc_info=True)
+    
+    def run_maintenance(self):
+        """Scheduled maintenance job"""
+        try:
+            logger.info("=" * 80)
+            logger.info("SCHEDULED JOB: Database Maintenance")
+            logger.info("=" * 80)
+            stats = self.maintenance_service.run_full_maintenance()
+            logger.info(f"Maintenance completed: {stats['topics_trimmed']} topics trimmed, "
+                       f"{stats['articles_cleaned']['archived']} articles archived")
+        except Exception as e:
+            logger.error(f"Maintenance failed: {str(e)}", exc_info=True)
+    
+    def run_light_maintenance(self):
+        """Light maintenance - just trim topics"""
+        try:
+            logger.info("Light maintenance: Trimming oversized topics")
+            active_topics = list(self.maintenance_service.topics_collection.find({"status": "active"}))
+            trimmed = 0
+            for topic in active_topics:
+                result = self.maintenance_service.trim_topic_articles(topic["_id"])
+                if result.get("trimmed", 0) > 0:
+                    trimmed += 1
+            logger.info(f"Light maintenance: {trimmed} topics trimmed")
+        except Exception as e:
+            logger.error(f"Light maintenance failed: {str(e)}", exc_info=True)
+    
+    def setup_schedule(self):
+        """Configure all scheduled jobs"""
         
-        print(f"\n[SCHEDULER] Ingestion completed successfully")
-        print(f"[SCHEDULER] Total articles ingested: {stats['total_ingested']}")
-        print(f"[SCHEDULER] By category:")
-        for category, count in stats['by_category'].items():
-            print(f"[SCHEDULER]   - {category.capitalize()}: {count}")
+        # INGESTION: Every 4 hours
+        schedule.every(4).hours.do(self.run_ingestion)
+        logger.info("Scheduled: Ingestion every 4 hours")
         
-    except Exception as e:
-        print(f"[SCHEDULER] ERROR during ingestion: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-
-def run_clustering():
-    """Run the article clustering and topic generation pipeline"""
-    print("\n" + "=" * 80)
-    print(f"[SCHEDULER] Starting Clustering Job")
-    print(f"[SCHEDULER] Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
-    
-    try:
-        service = ClusteringService(MONGODB_URI, MONGODB_DB_NAME)
-        stats = service.process_pending_articles()
-        service.mark_inactive_topics()
+        # CLUSTERING: Every 2 hours
+        schedule.every(2).hours.do(self.run_clustering)
+        logger.info("Scheduled: Clustering every 2 hours")
         
-        print(f"\n[SCHEDULER] Clustering completed successfully")
-        print(f"[SCHEDULER] Articles processed: {stats['total_processed']}")
-        print(f"[SCHEDULER] New topics created: {stats['new_topics']}")
-        print(f"[SCHEDULER] Existing topics updated: {stats['updated_topics']}")
-        print(f"[SCHEDULER] Titles generated: {stats['titles_generated']}")
+        # LIGHT MAINTENANCE: Every 6 hours
+        schedule.every(6).hours.do(self.run_light_maintenance)
+        logger.info("Scheduled: Light maintenance every 6 hours")
         
-    except Exception as e:
-        print(f"[SCHEDULER] ERROR during clustering: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-
-def run_full_pipeline():
-    """Run both ingestion and clustering sequentially (for startup)"""
-    run_ingestion()
-    print(f"\n[SCHEDULER] Pausing {CLUSTERING_DELAY_MINUTES} minutes before clustering...")
-    time.sleep(CLUSTERING_DELAY_MINUTES * 60)
-    run_clustering()
-
-
-def run_ingestion_with_clustering():
-    """Run ingestion followed by clustering after a delay"""
-    # Run ingestion first
-    run_ingestion()
+        # FULL MAINTENANCE: Daily at 3 AM
+        schedule.every().day.at("03:00").do(self.run_maintenance)
+        logger.info("Scheduled: Full maintenance daily at 3:00 AM")
+        
+        # Run initial jobs on startup
+        logger.info("\nRunning initial jobs on startup...")
+        self.run_ingestion()
+        time.sleep(60)
+        self.run_clustering()
     
-    # Wait before clustering
-    print(f"\n[SCHEDULER] Waiting {CLUSTERING_DELAY_MINUTES} minutes before clustering...")
-    time.sleep(CLUSTERING_DELAY_MINUTES * 60)
-    
-    # Run clustering
-    run_clustering()
-
-
-def start_scheduler():
-    """Start the automated scheduler"""
-    print("=" * 80)
-    print("PodNova Automated Pipeline Scheduler")
-    print("=" * 80)
-    print(f"Configuration:")
-    print(f"  Pipeline runs every {INGESTION_INTERVAL_MINUTES} minutes")
-    print(f"  Clustering runs {CLUSTERING_DELAY_MINUTES} minutes after ingestion")
-    print(f"  Database: {MONGODB_DB_NAME}")
-    print(f"  Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
-    print("\nSchedule:")
-    print(f"  Every hour:")
-    print(f"    - XX:00 → Run ingestion")
-    print(f"    - XX:0{CLUSTERING_DELAY_MINUTES} → Run clustering")
-    print("\nPress Ctrl+C to stop the scheduler")
-    print("=" * 80 + "\n")
-    
-    # Schedule the combined job
-    schedule.every(INGESTION_INTERVAL_MINUTES).minutes.do(run_ingestion_with_clustering)
-    
-    # Run immediately on startup
-    print("[SCHEDULER] Running initial full pipeline...")
-    run_full_pipeline()
-    
-    print("\n" + "=" * 80)
-    print("[SCHEDULER] Initial pipeline complete. Now running on schedule...")
-    print("=" * 80 + "\n")
-    
-    # Keep running scheduled jobs
-    try:
-        while True:
-            schedule.run_pending()
-            time.sleep(30)  # Check every 30 seconds
-    except KeyboardInterrupt:
-        print("\n" + "=" * 80)
-        print("[SCHEDULER] Shutdown signal received")
-        print("[SCHEDULER] Stopping gracefully...")
-        print("=" * 80)
-        sys.exit(0)
+    def start(self):
+        """Start the scheduler"""
+        logger.info("=" * 80)
+        logger.info("PodNova Scheduler Starting")
+        logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 80)
+        
+        self.setup_schedule()
+        
+        logger.info("\nScheduler running. Press Ctrl+C to stop.")
+        logger.info("=" * 80)
+        
+        try:
+            while True:
+                schedule.run_pending()
+                time.sleep(60)
+        except KeyboardInterrupt:
+            logger.info("\nScheduler stopped by user")
+        except Exception as e:
+            logger.error(f"Scheduler error: {str(e)}", exc_info=True)
 
 
 def main():
-    """Main entry point"""
-    start_scheduler()
+    """Entry point for scheduler"""
+    scheduler = PodNovaScheduler()
+    scheduler.start()
 
 
 if __name__ == "__main__":

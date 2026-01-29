@@ -1,3 +1,4 @@
+# /backend/app/ai_pipeline/article_maintenance.py
 """
 PodNova Article and Topic Maintenance Module
 Manages article limits, cleanup, and topic lifecycle
@@ -325,7 +326,7 @@ class MaintenanceService:
         )
         stats["marked_stale"] = result.modified_count
         
-        # Stale → Archived
+        # Stale -> Archived
         archive_cutoff = now - timedelta(days=self.config.TOPIC_ARCHIVE_DAYS)
         result = self.topics_collection.update_many(
             {
@@ -336,7 +337,7 @@ class MaintenanceService:
         )
         stats["marked_archived"] = result.modified_count
         
-        # Archived → Deleted
+        # Archived -> Deleted
         delete_cutoff = now - timedelta(days=self.config.TOPIC_DELETE_DAYS)
         topics_to_delete = list(self.topics_collection.find({
             "status": "archived",

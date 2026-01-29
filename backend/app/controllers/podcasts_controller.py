@@ -4,6 +4,7 @@ PodNova Podcast Generation Controller
 Handles podcast script generation, TTS conversion, and Firebase storage
 Integrates with existing UserProfile and UserPreferences models
 """
+from app.config import MONGODB_URI, MONGODB_DB_NAME, GEMINI_API_KEY
 from datetime import datetime
 from typing import Dict, Optional, List
 from bson import ObjectId
@@ -18,12 +19,7 @@ from app.models.user import UserProfile, UserPreferences
 import asyncio
 from enum import Enum
 
-# MongoDB Configuration
-MONGODB_URI = "mongodb+srv://sodiqadet11_db_user:zj0K0E21KiB6HF4E@podnova-cluster.pslz2q5.mongodb.net/?appName=podnova-cluster"
-MONGODB_DB_NAME = "podnova"
-
-# Initialize Gemini client
-GEMINI_API_KEY = "AIzaSyC_BQszmkPfFVNRqGG4NaYqFwaEKAZj8DU"
+# Initialise Gemini client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Initialize Google Cloud TTS

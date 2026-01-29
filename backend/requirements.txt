@@ -12,5 +12,6 @@ langdetect
 beautifulsoup4
 certifi
 google-generativeai
+google-cloud-texttospeech
 numpy
 schedule

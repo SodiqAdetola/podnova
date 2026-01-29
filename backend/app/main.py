@@ -16,10 +16,11 @@ import json
 # Initialise Firebase Admin SDK
 if not firebase_admin._apps:
     try:
-        cred_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY_JSON")
+        cred_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
         if cred_json:
             cred_dict = json.loads(cred_json)
-            firebase_admin.initialize_app(cred_dict, {
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred, {
                 "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
             })
             print("Firebase initialized successfully")

@@ -117,10 +117,10 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.logo}>PODNOVA</Text>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="search" size={25} color="#ffffff" />
+              <Ionicons name="notifications" size={20} color="#ffffff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="person" size={25} color="#ffffff" />
+              <Ionicons name="settings" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -212,11 +212,11 @@ const styles = StyleSheet.create({
   },
   headerIcons: {
     flexDirection: "row",
-    gap: 12,
+    gap: 20,
   },
   iconButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 22,
     backgroundColor: "#6366F1",
     justifyContent: "center",

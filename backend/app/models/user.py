@@ -3,13 +3,11 @@ from datetime import datetime
 from typing import List
 from pydantic import BaseModel, EmailStr, Field
 
-
 class UserPreferences(BaseModel):
     default_categories: List[str] = Field(default_factory=list)
     default_podcast_length: str = "medium"
     default_tone: str = "factual"
     playback_speed: float = 1.0
-
 
 class UserProfile(BaseModel):
     id: str
@@ -18,6 +16,3 @@ class UserProfile(BaseModel):
     full_name: str
     created_at: datetime
     preferences: UserPreferences
-
-
-

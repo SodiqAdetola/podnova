@@ -1,7 +1,10 @@
+# /backend/app/ai_pipeline/clustering.py
 """
 PodNova Clustering Module
 Handles article embeddings, topic assignment, and clustering logic
 WITH INTEGRATED MAINTENANCE AND IMAGE HANDLING
+
+UPDATED: Now using gemini-embedding-001 (replaces text-embedding-004)
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
@@ -18,11 +21,11 @@ from google import genai
 from app.ai_pipeline.article_maintenance import MaintenanceService
 
 # Configuration
-SIMILARITY_THRESHOLD = 0.6
+SIMILARITY_THRESHOLD = 0.7
 MIN_ARTICLES_FOR_TITLE = 2
 CONFIDENCE_THRESHOLD = 0.6
 TOPIC_INACTIVE_DAYS = 90
-EMBEDDING_MODEL = "text-embedding-004"
+EMBEDDING_MODEL = "gemini-embedding-001"  # UPDATED: Changed from text-embedding-004
 TEXT_MODEL = "gemini-2.5-flash"
 
 # Initialize Gemini client

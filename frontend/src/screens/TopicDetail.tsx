@@ -239,7 +239,7 @@ const TopicDetailScreen: React.FC = () => {
         {activeTab === "overview" ? renderOverviewTab() : renderDiscussionTab()}
       </ScrollView>
 
-      {/* ADDED: Podcast Generator Modal */}
+      {/*Podcast Generator Modal */}
       {topic && (
         <PodcastGeneratorModal
           visible={showPodcastModal}

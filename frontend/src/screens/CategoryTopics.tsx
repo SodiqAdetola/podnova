@@ -14,6 +14,8 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { Topic, SortOption } from "../types/topics";
+import { Ionicons } from '@expo/vector-icons';
+
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
@@ -103,6 +105,7 @@ const CategoryTopicsScreen: React.FC = () => {
       <View>
         {/* Sort Options */}
         <View style={styles.sortContainer}>
+
           <TouchableOpacity
             style={getSortButtonStyle("latest")}
             onPress={() => setSortBy("latest")}
@@ -184,7 +187,7 @@ const CategoryTopicsScreen: React.FC = () => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{category.charAt(0).toUpperCase() + category.slice(1)}</Text>
         <TouchableOpacity style={styles.searchButton}>
-          <View style={styles.searchIconShape} />
+          <Ionicons name="search" size={20} color="#6B7280" />
         </TouchableOpacity>
       </View>
 

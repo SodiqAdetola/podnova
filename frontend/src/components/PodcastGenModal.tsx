@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { auth } from "../firebase/config";
+import { minimum } from "firebase/firestore/pipelines";
 
 const { height } = Dimensions.get("window");
 
@@ -210,7 +211,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
       </View>
       <Slider
         style={styles.slider}
-        minimumValue={1}
+        minimumValue={3}
         maximumValue={20}
         step={1}
         value={lengthMinutes}
@@ -220,7 +221,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
         thumbTintColor="#6366F1"
       />
       <View style={styles.sliderLabels}>
-        <Text style={styles.sliderLabel}>1 min</Text>
+        <Text style={styles.sliderLabel}>3 min</Text>
         <Text style={styles.sliderLabel}>20 min</Text>
       </View>
     </View>
@@ -447,8 +448,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   voiceCard: {
-    width: 120,
-    padding: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     marginRight: 12,
     borderRadius: 12,
     borderWidth: 2,
@@ -464,7 +465,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: "#6B7280",
-    marginTop: 8,
+    marginTop: 5,
     textAlign: "center",
   },
   voiceNameActive: {
@@ -478,12 +479,12 @@ const styles = StyleSheet.create({
   },
   styleGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignSelf: "stretch",
     gap: 8,
   },
   styleButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#E5E7EB",

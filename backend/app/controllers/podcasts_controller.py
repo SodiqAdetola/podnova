@@ -4,7 +4,7 @@ PodNova Podcast Generation Controller
 Handles podcast script generation, TTS conversion, and Firebase storage
 Integrates with existing UserProfile and UserPreferences models
 """
-from config import (
+from app.config import (
     MONGODB_URI, 
     MONGODB_DB_NAME, 
     GEMINI_API_KEY, 

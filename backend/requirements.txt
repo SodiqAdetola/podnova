@@ -11,7 +11,7 @@ feedparser
 langdetect
 beautifulsoup4
 certifi
-google-generativeai
+google-genai
 google-cloud-texttospeech
 numpy
 schedule

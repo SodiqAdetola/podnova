@@ -285,8 +285,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             </View>
             <Text style={styles.successTitle}>Podcast Generation Started!</Text>
             <Text style={styles.successMessage}>
-              Your podcast is being generated in the background. This usually takes
-              {estimatedTime} - {estimatedTime + 30} seconds.
+              Your podcast is being generated in the background. Estimated time: {estimatedTime}-{estimatedTime + 30} seconds.
             </Text>
             <Text style={styles.successInstruction}>
               Navigate to the <Text style={styles.bold}>Library</Text> tab to track

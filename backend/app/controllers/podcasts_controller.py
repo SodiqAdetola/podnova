@@ -486,9 +486,9 @@ async def _upload_to_firebase(
     podcast_id: str, 
     audio_data: bytes, 
     script: str
-) -> tuple[str, str]:
+    ) -> tuple[str, str]:
     """Upload audio and transcript to Firebase Storage"""
-    bucket = storage.bucket()
+    bucket = storage.bucket("podnova-9ecc2.firebasestorage.app")
     
     # Upload audio
     audio_blob = bucket.blob(f"podcasts/{podcast_id}/audio.mp3")
@@ -648,7 +648,7 @@ async def delete_podcast(podcast_id: str, user_id: str) -> bool:
     # Delete from Firebase Storage if exists
     if podcast.get("audio_url"):
         try:
-            bucket = storage.bucket()
+            bucket = storage.bucket("podnova-9ecc2.firebasestorage.app")
             bucket.blob(f"podcasts/{podcast_id}/audio.mp3").delete()
             bucket.blob(f"podcasts/{podcast_id}/transcript.txt").delete()
         except:

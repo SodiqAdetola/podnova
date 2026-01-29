@@ -11,22 +11,22 @@ from app.routes import (
 import firebase_admin
 from firebase_admin import credentials
 import os
+import json
 
 # Initialise Firebase Admin SDK
 if not firebase_admin._apps:
     try:
-        cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
-        if cred_path and os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred, {
-                'storageBucket': os.getenv("FIREBASE_STORAGE_BUCKET")
+        cred_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY_JSON")
+        if cred_json:
+            cred_dict = json.loads(cred_json)
+            firebase_admin.initialize_app(cred_dict, {
+                "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
             })
             print("Firebase initialized successfully")
         else:
-            print("Firebase key not found")
+            print("Firebase key not found in environment variables")
     except Exception as e:
-        print(f"Firebase initialization failed: {str(e)}")
-
+        print(f"Firebase initialization failed: {e}")
 
 app = FastAPI(title="PodNova Backend")
 

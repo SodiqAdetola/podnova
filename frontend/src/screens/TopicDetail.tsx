@@ -1,4 +1,4 @@
-// frontend/src/screens/TopicDetail.tsx
+// frontend/src/screens/TopicDetail.tsx - UPDATED VERSION
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -8,11 +8,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
+  Image,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { TopicDetail } from "../types/topics";
+import { Ionicons } from '@expo/vector-icons';
+import PodcastGeneratorModal from "../components/PodcastGenModal";
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
@@ -27,6 +30,8 @@ const TopicDetailScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [topic, setTopic] = useState<TopicDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [heroImageError, setHeroImageError] = useState(false);
+  const [showPodcastModal, setShowPodcastModal] = useState(false);
 
   useEffect(() => {
     loadTopic();
@@ -48,18 +53,76 @@ const TopicDetailScreen: React.FC = () => {
     Linking.openURL(url);
   };
 
+  const handleGeneratePodcast = () => {
+    setShowPodcastModal(true);
+  };
+
+  const renderHeroImage = () => {
+    if (!topic?.image_url || heroImageError) {
+      return (
+        <View style={styles.heroPlaceholder}>
+          <Text style={styles.heroPlaceholderIcon}>📰</Text>
+          <Text style={styles.heroPlaceholderText}>{topic?.category?.toUpperCase()}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <Image
+        source={{ uri: topic.image_url }}
+        style={styles.heroImage}
+        resizeMode="cover"
+        onError={() => setHeroImageError(true)}
+      />
+    );
+  };
+
   const renderOverviewTab = () => {
     if (!topic) return null;
 
     return (
       <View>
-        {/* About this Topic */}
+        {renderHeroImage()}
+
+        <View style={styles.titleSection}>
+          <Text style={styles.topicTitle}>{topic.title}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>{topic.article_count} Articles</Text>
+            <Text style={styles.metaSeparator}>•</Text>
+            <Text style={styles.metaLabel}>Updated {topic.time_ago}</Text>
+          </View>
+          <View style={styles.confidenceBadge}>
+            <Text style={styles.confidenceText}>Confidence {Math.round(topic.confidence * 100)}%</Text>
+          </View>
+        </View>
+
+        {/* UPDATED: Podcast button now opens modal */}
+        <TouchableOpacity 
+          style={styles.podcastButton}
+          onPress={handleGeneratePodcast}
+        >
+          <View style={styles.podcastButtonContent}>
+            <View style={styles.podcastIconContainer}>
+                <Ionicons name="sparkles" size={20} color="#6366F1" />
+            </View>
+            <View style={styles.podcastTextContainer}>
+              <Text style={styles.podcastTitle}>Generate AI Podcast</Text>
+              <Text style={styles.podcastSubtitle}>
+                Create a comprehensive podcast summary of all {topic.article_count} articles on this topic.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.podcastGenerateButton}>
+            <Ionicons name="sparkles-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.podcastGenerateText}>Generate Podcast</Text>
+          </View>
+        </TouchableOpacity>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About this Topic</Text>
           <Text style={styles.summary}>{topic.summary}</Text>
         </View>
 
-        {/* Key Insights */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Key Insights</Text>
           {topic.key_insights?.map((insight, index) => (
@@ -72,54 +135,23 @@ const TopicDetailScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Tags */}
-        <View style={styles.section}>
-          <View style={styles.tagsContainer}>
-            {topic.tags?.map((tag, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
-              </View>
-            ))}
-            {topic.tags && topic.tags.length > 3 && (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>+{topic.tags.length - 3}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Meta Info */}
-        <View style={styles.section}>
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>{topic.article_count} Articles</Text>
-            <Text style={styles.metaSeparator}>•</Text>
-            <Text style={styles.metaLabel}>Updated {topic.time_ago}</Text>
-          </View>
-          <View style={styles.confidenceBadge}>
-            <Text style={styles.confidenceText}>Confidence {Math.round(topic.confidence * 100)}%</Text>
-          </View>
-        </View>
-
-        {/* Generate Podcast Button */}
-        <TouchableOpacity style={styles.podcastButton}>
-          <View style={styles.podcastButtonContent}>
-            <View style={styles.podcastIconContainer}>
-              <View style={styles.podcastIconShape} />
-            </View>
-            <View style={styles.podcastTextContainer}>
-              <Text style={styles.podcastTitle}>Generate AI Podcast</Text>
-              <Text style={styles.podcastSubtitle}>
-                Create a comprehensive podcast summary of all {topic.article_count} articles on this topic.
-              </Text>
+        {topic.tags && topic.tags.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.tagsContainer}>
+              {topic.tags?.map((tag, index) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag}</Text>
+                </View>
+              ))}
+              {topic.tags && topic.tags.length > 3 && (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>+{topic.tags.length - 3}</Text>
+                </View>
+              )}
             </View>
           </View>
-          <View style={styles.podcastGenerateButton}>
-            <View style={styles.podcastGenerateIconShape} />
-            <Text style={styles.podcastGenerateText}>Generate Podcast</Text>
-          </View>
-        </TouchableOpacity>
+        )}
 
-        {/* Articles */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Source Articles ({topic.article_count})</Text>
           {topic.articles?.map((article) => (
@@ -169,7 +201,6 @@ const TopicDetailScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -178,14 +209,13 @@ const TopicDetailScreen: React.FC = () => {
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {topic.title}
+          {topic.category?.charAt(0).toUpperCase() + topic.category?.slice(1)}
         </Text>
         <TouchableOpacity style={styles.searchButton}>
-          <View style={styles.searchIconShape} />
+          <Ionicons name="search" size={20} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === "overview" && styles.tabActive]}
@@ -205,16 +235,29 @@ const TopicDetailScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       <ScrollView style={styles.content}>
         {activeTab === "overview" ? renderOverviewTab() : renderDiscussionTab()}
       </ScrollView>
+
+      {/* ADDED: Podcast Generator Modal */}
+      {topic && (
+        <PodcastGeneratorModal
+          visible={showPodcastModal}
+          onClose={() => setShowPodcastModal(false)}
+          topic={{
+            id: topic.id,
+            title: topic.title,
+            article_count: topic.article_count,
+          }}
+        />
+      )}
     </View>
   );
 };
 
 export default TopicDetailScreen;
 
+// Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -253,19 +296,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
     marginHorizontal: 12,
+    textAlign: "center",
   },
   searchButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
-  },
-  searchIconShape: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: "#6B7280",
   },
   tabsContainer: {
     flexDirection: "row",
@@ -294,6 +331,39 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  heroImage: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#F3F4F6",
+  },
+  heroPlaceholder: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#6366F1",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroPlaceholderIcon: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  heroPlaceholderText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
+  titleSection: {
+    padding: 20,
+    backgroundColor: "#FFFFFF",
+  },
+  topicTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#111827",
+    lineHeight: 28,
+    marginBottom: 12,
   },
   section: {
     padding: 20,
@@ -363,7 +433,7 @@ const styles = StyleSheet.create({
   confidenceBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: "#D1FAE5",
   },
@@ -374,6 +444,7 @@ const styles = StyleSheet.create({
   },
   podcastButton: {
     margin: 20,
+    marginTop: 0,
     padding: 16,
     borderRadius: 12,
     backgroundColor: "#FFFFFF",
@@ -392,12 +463,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-  },
-  podcastIconShape: {
-    width: 16,
-    height: 16,
-    backgroundColor: "#6366F1",
-    borderRadius: 3,
   },
   podcastTextContainer: {
     flex: 1,
@@ -420,13 +485,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 8,
     backgroundColor: "#6366F1",
-  },
-  podcastGenerateIconShape: {
-    width: 14,
-    height: 14,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 3,
-    marginRight: 8,
+    gap: 8,
   },
   podcastGenerateText: {
     fontSize: 15,

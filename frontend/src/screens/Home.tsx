@@ -13,10 +13,17 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { Category, Topic } from "../types/topics";
+import { Ionicons } from '@expo/vector-icons';
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<MainStackParamList>;
+
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  technology: "hardware-chip-outline",
+  finance: "cash-outline",
+  politics: "people-outline",
+};
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
@@ -110,10 +117,10 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.logo}>PODNOVA</Text>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.iconButton}>
-            <View style={styles.searchIcon} />
+              <Ionicons name="search" size={25} color="#ffffff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
-            <View style={styles.userIcon} />
+              <Ionicons name="person" size={25} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -131,7 +138,7 @@ const HomeScreen: React.FC = () => {
             onPress={() => navigation.navigate("CategoryTopics", { category: category.name })}
           >
             <View style={styles.categoryIcon}>
-              <View style={styles.docIcon} />
+              <Ionicons name={CATEGORY_ICONS[category.name.toLowerCase()] ?? "grid-outline"} size={25} color={getCategoryColor(category.name)} />
             </View>
             
             <View style={styles.categoryContent}>

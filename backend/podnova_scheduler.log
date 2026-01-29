@@ -279,3 +279,30 @@ Scheduler running. Press Ctrl+C to stop.
 2026-01-29 00:31:30,674 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
 2026-01-29 00:31:31,541 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
 2026-01-29 00:31:31,961 - INFO - Clustering completed: 8 articles processed
+2026-01-29 05:25:08,636 - INFO - ================================================================================
+2026-01-29 05:25:08,637 - INFO - PodNova Scheduler Starting
+2026-01-29 05:25:08,637 - INFO - Time: 2026-01-29 05:25:08
+2026-01-29 05:25:08,637 - INFO - ================================================================================
+2026-01-29 05:25:08,637 - INFO - Scheduled: Ingestion every 4 hours
+2026-01-29 05:25:08,637 - INFO - Scheduled: Clustering every 2 hours
+2026-01-29 05:25:08,637 - INFO - Scheduled: Light maintenance every 6 hours
+2026-01-29 05:25:08,637 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-01-29 05:25:08,637 - INFO - 
+Running initial jobs on startup...
+2026-01-29 05:25:08,637 - INFO - ================================================================================
+2026-01-29 05:25:08,637 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-29 05:25:08,637 - INFO - ================================================================================
+2026-01-29 05:29:09,766 - INFO - Ingestion completed: 6 articles
+2026-01-29 05:30:09,770 - INFO - ================================================================================
+2026-01-29 05:30:09,773 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-29 05:30:09,773 - INFO - ================================================================================
+2026-01-29 05:30:09,961 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 403 Forbidden"
+2026-01-29 05:30:10,069 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 403 Forbidden"
+2026-01-29 05:30:10,178 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 403 Forbidden"
+2026-01-29 05:30:10,335 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 403 Forbidden"
+2026-01-29 05:30:10,410 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 403 Forbidden"
+2026-01-29 05:30:10,492 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 403 Forbidden"
+2026-01-29 05:30:10,543 - INFO - Clustering completed: 0 articles processed
+2026-01-29 05:30:10,543 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-01-29 05:30:10,543 - INFO - ================================================================================

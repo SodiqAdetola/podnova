@@ -430,7 +430,6 @@ Generate an expanded version:"""
 
 async def _generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
     """Generate audio from script using Google Cloud TTS"""
-    tts_client = texttospeech.TextToSpeechClient()
 
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_config = VOICE_CONFIGS[podcast["voice"]]

@@ -106,9 +106,9 @@ VOICE_CONFIGS = {
 
 # Map user preferences to podcast settings
 PODCAST_LENGTH_MAP = {
-    "short": 3,    # 3 minutes
-    "medium": 5,   # 5 minutes
-    "long": 10     # 10 minutes
+    "short": 5,    # 5 minutes
+    "medium": 10,   # 10 minutes
+    "long": 20     # 20 minutes
 }
 
 TONE_TO_STYLE_MAP = {
@@ -122,7 +122,7 @@ TONE_TO_STYLE_MAP = {
 async def get_user_profile(user_id: str) -> Optional[UserProfile]:
     """Fetch user profile from MongoDB"""
     try:
-        user_doc = await db["users"].find_one({"_id": ObjectId(user_id)})
+        user_doc = await db["users"].find_one({"firebase_uid": ObjectId(user_id)})
         if not user_doc:
             return None
         

@@ -122,7 +122,7 @@ TONE_TO_STYLE_MAP = {
 async def get_user_profile(user_id: str) -> Optional[UserProfile]:
     """Fetch user profile from MongoDB"""
     try:
-        user_doc = await db["users"].find_one({"firebase_uid": ObjectId(user_id)})
+        user_doc = await db["users"].find_one({"firebase_uid": user_id})
         if not user_doc:
             return None
         
@@ -392,7 +392,7 @@ Generate the podcast script now:"""
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         
@@ -417,7 +417,7 @@ Original script:
 Generate an expanded version:"""
             
             response = client.models.generate_content(
-                model="gemini-2.0-flash-exp",
+                model="gemini-2.5-flash",
                 contents=expansion_prompt
             )
             script = response.text.strip()

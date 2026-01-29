@@ -24,13 +24,20 @@ from app.db import db
 from app.models.user import UserProfile, UserPreferences
 import asyncio
 from enum import Enum
+from google.oauth2 import service_account
+
+
+
+if  os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    creds_dict = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+    credentials = service_account.Credentials.from_service_account_info(creds_dict)
+    tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
+else:
+    tts_client = texttospeech.TextToSpeechClient()
+
 
 # Initialize Gemini client
 client = genai.Client(api_key=GEMINI_API_KEY)
-
-# Initialize Google Cloud TTS
-tts_client = texttospeech.TextToSpeechClient()
-
 
 class PodcastStyle(str, Enum):
     CASUAL = "casual"
@@ -423,6 +430,8 @@ Generate an expanded version:"""
 
 async def _generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
     """Generate audio from script using Google Cloud TTS"""
+    tts_client = texttospeech.TextToSpeechClient()
+
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_config = VOICE_CONFIGS[podcast["voice"]]
     

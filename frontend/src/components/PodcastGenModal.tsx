@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
+import { auth } from "../firebase/config";
 
 const { height } = Dimensions.get("window");
 
@@ -83,12 +84,18 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     setGenerating(true);
 
     try {
-      const response = await fetch(
+        const token = await auth.currentUser?.getIdToken(true);
+        if (!token) {
+            throw new Error("User not authenticated");
+        }
+
+        const response = await fetch(
         "https://podnova-backend-r8yz.onrender.com/podcasts/generate",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
             topic_id: topic.id,

@@ -117,10 +117,10 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.logo}>PODNOVA</Text>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="notifications" size={20} color="#ffffff" />
+              <Ionicons name="notifications-outline" size={20} color="#ffffff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="settings" size={20} color="#ffffff" />
+              <Ionicons name="settings-outline" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>

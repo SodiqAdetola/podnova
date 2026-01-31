@@ -469,7 +469,7 @@ def _chunk_text(text: str, max_chars: int = 4000) -> List[str]:
     return chunks
 
 
-async def generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
+async def _generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
 
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]

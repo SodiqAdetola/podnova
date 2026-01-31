@@ -236,7 +236,7 @@ async def _generate_podcast_async(podcast_id: str):
         )
         
         # Generate audio from script
-        audio_data, duration = await _generate_audio(podcast_id, script)
+        audio_data, duration = await generate_audio(podcast_id, script)
         
         # Update status to uploading
         await db["podcasts"].update_one(

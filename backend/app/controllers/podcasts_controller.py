@@ -24,9 +24,16 @@ from app.db import db
 from app.models.user import UserProfile, UserPreferences
 import asyncio
 from enum import Enum
+from google.oauth2 import service_account
 
 
-tts_client = texttospeech.TextToSpeechClient()
+
+if  os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    creds_dict = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+    credentials = service_account.Credentials.from_service_account_info(creds_dict)
+    tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
+else:
+    tts_client = texttospeech.TextToSpeechClient()
 
 
 # Initialize Gemini client
@@ -229,7 +236,7 @@ async def _generate_podcast_async(podcast_id: str):
         )
         
         # Generate audio from script
-        audio_data, duration = await generate_audio(podcast_id, script)
+        audio_data, duration = await _generate_audio(podcast_id, script)
         
         # Update status to uploading
         await db["podcasts"].update_one(
@@ -464,8 +471,6 @@ def _chunk_text(text: str, max_chars: int = 4000) -> List[str]:
 
 async def generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
 
-    client = tts_client
-    
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]
 
@@ -492,7 +497,7 @@ async def generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
             speaking_rate=speaking_rate,
         )
 
-        response = client.synthesize_speech(
+        response = tts_client.synthesize_speech(
             input=synthesis_input,
             voice=voice,
             audio_config=audio_config,
@@ -511,7 +516,7 @@ async def _upload_to_firebase(
     script: str
     ) -> tuple[str, str]:
     """Upload audio and transcript to Firebase Storage"""
-    bucket = storage.bucket()
+    bucket = storage.bucket("podnova-9ecc2.firebasestorage.app")
     
     # Upload audio
     audio_blob = bucket.blob(f"podcasts/{podcast_id}/audio.mp3")

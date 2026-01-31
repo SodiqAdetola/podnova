@@ -66,43 +66,14 @@ class PodcastVoice(str, Enum):
 
 # Voice configuration mapping
 VOICE_CONFIGS = {
-    PodcastVoice.CALM_FEMALE: {
-        "language_code": "en-US",
-        "name": "en-US-Neural2-F",
-        "pitch": 0.0,
-        "speaking_rate": 0.95
-    },
-    PodcastVoice.CALM_MALE: {
-        "language_code": "en-US",
-        "name": "en-US-Neural2-D",
-        "pitch": -2.0,
-        "speaking_rate": 0.95
-    },
-    PodcastVoice.ENERGETIC_FEMALE: {
-        "language_code": "en-US",
-        "name": "en-US-Neural2-C",
-        "pitch": 2.0,
-        "speaking_rate": 1.1
-    },
-    PodcastVoice.ENERGETIC_MALE: {
-        "language_code": "en-US",
-        "name": "en-US-Neural2-A",
-        "pitch": 0.0,
-        "speaking_rate": 1.1
-    },
-    PodcastVoice.PROFESSIONAL_FEMALE: {
-        "language_code": "en-US",
-        "name": "en-US-Neural2-G",
-        "pitch": 0.0,
-        "speaking_rate": 1.0
-    },
-    PodcastVoice.PROFESSIONAL_MALE: {
-        "language_code": "en-US",
-        "name": "en-US-Neural2-J",
-        "pitch": 0.0,
-        "speaking_rate": 1.0
-    }
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Achernar",
+    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Charon",
+    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Zephyr",
+    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Fenrir",
+    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede",
+    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Orus",
 }
+
 
 # Map user preferences to podcast settings
 PODCAST_LENGTH_MAP = {
@@ -319,7 +290,7 @@ async def _generate_podcast_async(podcast_id: str):
 
 
 async def _generate_script(podcast_id: str) -> str:
-    """Generate podcast script using Gemini AI"""
+    """Generate podcast script using Gemini AI with improved prompt engineering"""
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     topic = await db["topics"].find_one({"_id": podcast["topic_id"]})
     
@@ -335,13 +306,39 @@ async def _generate_script(podcast_id: str) -> str:
             "published": article["published_date"].strftime("%Y-%m-%d")
         })
     
-    # Build style-specific instructions
+    # Build style-specific instructions with IMPROVED depth guidelines
     style_instructions = {
-        PodcastStyle.CASUAL: "Use simple language, conversational tone, avoid jargon. Explain concepts like talking to a friend.",
-        PodcastStyle.STANDARD: "Use clear professional language. Balance accessibility with depth. Explain key terms.",
-        PodcastStyle.ADVANCED: "Use industry terminology and assume listener has background knowledge. Dive into nuances.",
-        PodcastStyle.EXPERT: "Use technical language freely. Analyze implications, compare to similar events, discuss future scenarios."
+        PodcastStyle.CASUAL: {
+            "approach": "Conversational and accessible",
+            "depth": "Cover the basics and main takeaways. Explain concepts in simple terms without jargon. Keep it light and easy to follow.",
+            "analysis": "Focus on 'what happened' and 'why it matters' at a surface level. Use relatable analogies and examples.",
+            "language": "Simple, everyday language. Short sentences. Conversational tone as if explaining to a friend.",
+            "audience": "General audience with no prior knowledge"
+        },
+        PodcastStyle.STANDARD: {
+            "approach": "Balanced and professional",
+            "depth": "Provide comprehensive coverage of the topic. Explain key concepts clearly while diving into important details.",
+            "analysis": "Explore both 'what happened' and 'why it matters'. Include context, multiple perspectives, and immediate implications.",
+            "language": "Clear professional language. Explain technical terms when used. Well-structured narrative flow.",
+            "audience": "Informed readers who follow news regularly"
+        },
+        PodcastStyle.ADVANCED: {
+            "approach": "In-depth and critical",
+            "depth": "Go beyond surface-level reporting. Analyze underlying factors, systemic issues, and broader patterns. Connect to related developments and historical context.",
+            "analysis": "Critical examination of causes, effects, and stakeholder motivations. Question assumptions. Explore second and third-order consequences. Compare with similar past events.",
+            "language": "Industry terminology is fine but should serve analysis, not replace it. Focus on substance over vocabulary.",
+            "audience": "Professionals and enthusiasts with domain knowledge"
+        },
+        PodcastStyle.EXPERT: {
+            "approach": "Comprehensive and analytical",
+            "depth": "Provide expert-level analysis with deep dives into mechanisms, methodologies, and implications. Challenge conventional wisdom. Explore edge cases and nuance.",
+            "analysis": "Multi-dimensional analysis considering economic, political, social, and technical factors. Discuss competing theories and interpretations. Project future scenarios and strategic implications. Identify gaps in current understanding.",
+            "language": "Technical precision where appropriate, but clarity remains paramount. The goal is insight, not complexity.",
+            "audience": "Domain experts, researchers, and serious analysts"
+        }
     }
+    
+    style_config = style_instructions[podcast['style']]
     
     # Build prompt
     articles_text = "\n\n".join([
@@ -357,15 +354,22 @@ async def _generate_script(podcast_id: str) -> str:
     if podcast.get("custom_prompt"):
         custom_text = f"\n\nCUSTOM INSTRUCTIONS: {podcast['custom_prompt']}"
     
-    prompt = f"""You are creating a podcast script about this news topic. This will be converted to speech, so write ONLY the spoken words - no stage directions, sound effects, or formatting.
+    prompt = f"""You are creating a podcast script about this news topic. This will be converted to natural speech, so write ONLY the spoken words - no stage directions, sound effects, formatting, or meta-commentary.
 
 TOPIC: {topic['title']}
 CATEGORY: {topic['category'].upper()}
 TARGET LENGTH: {podcast['length_minutes']} minutes (~{podcast['length_minutes'] * 150} words)
 COMPREHENSION LEVEL: {podcast['style'].upper()}
 
-STYLE GUIDELINES:
-{style_instructions[podcast['style']]}
+AUDIENCE & APPROACH:
+- Target Audience: {style_config['audience']}
+- Approach: {style_config['approach']}
+- Depth Required: {style_config['depth']}
+- Analysis Style: {style_config['analysis']}
+- Language Guidelines: {style_config['language']}
+
+CRITICAL INSTRUCTION FOR {podcast['style'].upper()} LEVEL:
+{style_config['analysis']}
 
 SOURCE ARTICLES ({len(articles)} total):
 {articles_text}
@@ -373,20 +377,40 @@ SOURCE ARTICLES ({len(articles)} total):
 {focus_text}{custom_text}
 
 SCRIPT STRUCTURE:
-1. **Opening Hook** (15 seconds): Grab attention with the most compelling angle
-2. **Context & Background** (20%): Set up the story - what's happening and why it matters
-3. **Key Developments** (50%): Core narrative synthesized from all sources, presented chronologically or thematically
-4. **Analysis & Implications** (20%): What this means, who's affected, what might happen next
-5. **Closing** (10 seconds): Memorable takeaway or thought-provoking question
+1. **Opening Hook** (15 seconds): Lead with the most compelling or surprising angle. Make them want to keep listening.
 
-REQUIREMENTS:
-- Write ONLY spoken words (no [pauses], [music], etc.)
+2. **Context Setting** (20%): 
+   - What's happening and why does it matter?
+   - Essential background and setup
+   - {style_config['depth']}
+
+3. **Core Analysis** (50%): 
+   - Main developments synthesized from multiple sources
+   - {style_config['analysis']}
+   - For {podcast['style'].upper()} level: Go deeper than surface facts. Challenge the obvious. Explore the 'why behind the why.'
+
+4. **Implications & Significance** (20%):
+   - Who's affected and how?
+   - Broader consequences and connections
+   - What might happen next and why?
+   - For ADVANCED/EXPERT: Discuss competing scenarios and strategic considerations
+
+5. **Closing** (10 seconds): 
+   - Memorable synthesis or thought-provoking question
+   - Leave them thinking
+
+CRITICAL REQUIREMENTS:
+- Write ONLY spoken words (no [pauses], [music], stage directions, or "In this podcast...")
 - Synthesize information from MULTIPLE sources, not just one
-- Use natural speech patterns and transitions
+- Natural speech patterns with conversational flow
 - Include specific facts, figures, and quotes where relevant
 - Attribute information naturally ("According to Reuters..." or "As reported by...")
+- For {podcast['style'].upper()} level: DEPTH OF INSIGHT matters more than vocabulary complexity
+- Avoid unnecessary jargon - use technical terms only when they serve understanding
 - Stay objective and balanced
 - End with a clear conclusion
+
+Remember: {podcast['style'].upper()} level means deeper THINKING and ANALYSIS, not just fancier words.
 
 Generate the podcast script now:"""
 
@@ -403,18 +427,22 @@ Generate the podcast script now:"""
         target_words = podcast['length_minutes'] * 150
         
         if word_count < target_words * 0.7:
-            # Script too short, request expansion
+            # Script too short, request expansion with emphasis on depth
             expansion_prompt = f"""The previous script was too short ({word_count} words vs {target_words} target).
-Please expand it by:
-- Adding more details from the source articles
-- Including more specific examples and data
-- Elaborating on implications and analysis
-- Providing additional context
+
+EXPAND by adding MORE DEPTH AND ANALYSIS, not just more words:
+- Dig deeper into the underlying factors and mechanisms
+- Add critical analysis and multiple perspectives
+- Include more specific examples and data points
+- Explore broader implications and connections
+- For {podcast['style'].upper()} level: {style_config['analysis']}
+
+REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary.
 
 Original script:
 {script}
 
-Generate an expanded version:"""
+Generate an expanded version with significantly more analytical depth:"""
             
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -428,59 +456,60 @@ Generate an expanded version:"""
         raise Exception(f"Failed to generate script: {str(e)}")
 
 
-async def _generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
-    """Generate audio from script using Google Cloud TTS"""
+def _chunk_text(text: str, max_chars: int = 4000) -> List[str]:
+    chunks = []
+    while len(text) > max_chars:
+        split_at = text.rfind(".", 0, max_chars)
+        if split_at == -1:
+            split_at = max_chars
+        chunks.append(text[:split_at + 1].strip())
+        text = text[split_at + 1:].strip()
+    if text:
+        chunks.append(text)
+    return chunks
 
+
+async def generate_audio(podcast_id: str, script: str) -> Tuple[bytes, int]:
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
-    voice_config = VOICE_CONFIGS[podcast["voice"]]
-    
-    # Get user's playback speed preference
+    voice_name = VOICE_CONFIGS[podcast["voice"]]
+
+    client = texttospeech.TextToSpeechClient()
+
     user_profile = await get_user_profile(podcast["user_id"])
-    base_speed = voice_config["speaking_rate"]
-    
-    # Adjust speaking rate based on user preference
+    speaking_rate = 1.0
+
     if user_profile:
-        speed_adjustment = (user_profile.preferences.playback_speed - 1.0) * 0.3
-        adjusted_speed = base_speed + speed_adjustment
-        adjusted_speed = max(0.75, min(1.25, adjusted_speed))
-    else:
-        adjusted_speed = base_speed
-    
-    # Set up synthesis input
-    synthesis_input = texttospeech.SynthesisInput(text=script)
-    
-    # Configure voice
-    voice = texttospeech.VoiceSelectionParams(
-        language_code=voice_config["language_code"],
-        name=voice_config["name"]
-    )
-    
-    # Configure audio
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3,
-        speaking_rate=adjusted_speed,
-        pitch=voice_config["pitch"]
-    )
-    
-    try:
-        # Generate audio
-        response = tts_client.synthesize_speech(
+        adjustment = (user_profile.preferences.playback_speed - 1.0) * 0.3
+        speaking_rate = max(0.8, min(1.25, 1.0 + adjustment))
+
+    chunks = _chunk_text(script)
+    full_audio = b""
+
+    for chunk in chunks:
+        synthesis_input = texttospeech.SynthesisInput(text=chunk)
+
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name=voice_name,
+        )
+
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=speaking_rate,
+        )
+
+        response = client.synthesize_speech(
             input=synthesis_input,
             voice=voice,
-            audio_config=audio_config
+            audio_config=audio_config,
         )
-        
-        audio_content = response.audio_content
-        
-        # Estimate duration
-        word_count = len(script.split())
-        duration_seconds = int((word_count / 150) * 60 / adjusted_speed)
-        
-        return audio_content, duration_seconds
-        
-    except Exception as e:
-        raise Exception(f"Failed to generate audio: {str(e)}")
 
+        full_audio += response.audio_content
+
+    word_count = len(script.split())
+    duration_seconds = int((word_count / 160) * 60 / speaking_rate)
+
+    return full_audio, duration_seconds
 
 async def _upload_to_firebase(
     podcast_id: str, 

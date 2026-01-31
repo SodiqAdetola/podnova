@@ -306,3 +306,201 @@ Running initial jobs on startup...
 2026-01-29 05:30:10,543 - INFO - 
 Scheduler running. Press Ctrl+C to stop.
 2026-01-29 05:30:10,543 - INFO - ================================================================================
+2026-01-30 00:28:34,997 - INFO - ================================================================================
+2026-01-30 00:28:34,997 - INFO - PodNova Scheduler Starting
+2026-01-30 00:28:34,998 - INFO - Time: 2026-01-30 00:28:34
+2026-01-30 00:28:35,000 - INFO - ================================================================================
+2026-01-30 00:28:35,001 - INFO - Scheduled: Ingestion every 4 hours
+2026-01-30 00:28:35,001 - INFO - Scheduled: Clustering every 2 hours
+2026-01-30 00:28:35,001 - INFO - Scheduled: Light maintenance every 6 hours
+2026-01-30 00:28:35,001 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-01-30 00:28:35,001 - INFO - 
+Running initial jobs on startup...
+2026-01-30 00:28:35,001 - INFO - ================================================================================
+2026-01-30 00:28:35,001 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-30 00:28:35,001 - INFO - ================================================================================
+2026-01-30 00:32:13,948 - INFO - Ingestion completed: 3 articles
+2026-01-30 00:33:13,953 - INFO - ================================================================================
+2026-01-30 00:33:13,956 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-30 00:33:13,957 - INFO - ================================================================================
+2026-01-30 00:33:14,407 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 00:33:16,281 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 00:33:17,033 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 00:33:17,394 - INFO - Clustering completed: 3 articles processed
+2026-01-30 00:33:17,400 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-01-30 00:33:17,400 - INFO - ================================================================================
+2026-01-30 02:56:18,084 - INFO - ================================================================================
+2026-01-30 02:56:18,089 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-30 02:56:18,090 - INFO - ================================================================================
+2026-01-30 02:56:18,434 - INFO - Clustering completed: 0 articles processed
+2026-01-30 03:39:04,437 - INFO - ================================================================================
+2026-01-30 03:39:04,454 - INFO - SCHEDULED JOB: Database Maintenance
+2026-01-30 03:39:04,454 - INFO - ================================================================================
+2026-01-30 03:39:13,930 - INFO - Maintenance completed: 0 topics trimmed, 0 articles archived
+2026-01-30 05:11:08,128 - INFO - ================================================================================
+2026-01-30 05:11:08,141 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-30 05:11:08,141 - INFO - ================================================================================
+2026-01-30 15:26:47,360 - INFO - ================================================================================
+2026-01-30 15:26:47,361 - INFO - PodNova Scheduler Starting
+2026-01-30 15:26:47,361 - INFO - Time: 2026-01-30 15:26:47
+2026-01-30 15:26:47,361 - INFO - ================================================================================
+2026-01-30 15:26:47,361 - INFO - Scheduled: Ingestion every 4 hours
+2026-01-30 15:26:47,361 - INFO - Scheduled: Clustering every 2 hours
+2026-01-30 15:26:47,361 - INFO - Scheduled: Light maintenance every 6 hours
+2026-01-30 15:26:47,362 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-01-30 15:26:47,362 - INFO - 
+Running initial jobs on startup...
+2026-01-30 15:26:47,362 - INFO - ================================================================================
+2026-01-30 15:26:47,362 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-30 15:26:47,362 - INFO - ================================================================================
+2026-01-30 15:31:21,924 - INFO - Ingestion completed: 22 articles
+2026-01-30 15:32:21,930 - INFO - ================================================================================
+2026-01-30 15:32:21,934 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-30 15:32:21,934 - INFO - ================================================================================
+2026-01-30 15:32:22,596 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:23,069 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:24,643 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:26,217 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:26,745 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:27,536 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:28,314 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:29,887 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:31,458 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:31,984 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:33,557 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:35,130 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:36,702 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:38,275 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:39,847 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:41,422 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:42,993 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:44,564 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:46,139 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:46,556 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:47,188 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:48,759 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:50,333 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:51,907 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:53,478 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:54,004 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:54,597 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:56,103 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:56,512 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:56,989 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:58,543 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:32:59,120 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:00,745 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:02,393 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:02,917 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:04,491 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:05,014 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:05,539 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:06,061 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:06,468 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:08,063 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:09,736 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:11,314 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:11,830 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:13,403 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:13,927 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:15,500 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:17,088 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:17,501 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:18,155 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:19,693 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:21,299 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:22,841 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:23,364 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:23,887 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:24,284 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:25,987 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:26,514 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:27,035 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:28,607 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:29,132 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:29,674 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:30,205 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:32,276 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:32,855 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:33,364 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:33,852 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:34,382 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:34,900 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:35,423 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:35,948 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:36,476 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:37,065 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:37,645 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:38,304 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:39,094 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:39,517 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:40,143 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:41,733 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:42,341 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:42,763 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:44,336 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:45,911 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:46,546 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 15:33:47,026 - INFO - AFC is enabled with max remote calls: 10.
+2026-01-30 15:33:52,383 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-01-30 15:33:56,521 - INFO - AFC is enabled with max remote calls: 10.
+2026-01-30 15:34:05,358 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-01-30 15:34:05,433 - INFO - Clustering completed: 84 articles processed
+2026-01-30 15:34:05,434 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-01-30 15:34:05,434 - INFO - ================================================================================
+2026-01-30 17:45:32,932 - INFO - ================================================================================
+2026-01-30 17:45:32,937 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-30 17:45:32,937 - INFO - ================================================================================
+2026-01-30 17:45:33,273 - INFO - Clustering completed: 0 articles processed
+2026-01-30 19:42:13,582 - INFO - ================================================================================
+2026-01-30 19:42:13,585 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-30 19:42:13,585 - INFO - ================================================================================
+2026-01-30 20:15:19,915 - INFO - Ingestion completed: 8 articles
+2026-01-30 20:16:19,922 - INFO - ================================================================================
+2026-01-30 20:16:19,923 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-30 20:16:19,923 - INFO - ================================================================================
+2026-01-30 20:16:20,610 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:21,351 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:22,282 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:23,068 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:23,683 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:25,831 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:26,855 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:27,511 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-30 20:16:29,105 - INFO - Clustering completed: 8 articles processed
+2026-01-30 21:26:49,602 - INFO - Light maintenance: Trimming oversized topics
+2026-01-30 21:26:52,705 - INFO - Light maintenance: 0 topics trimmed
+2026-01-30 22:19:59,808 - INFO - ================================================================================
+2026-01-30 22:19:59,813 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-30 22:19:59,813 - INFO - ================================================================================
+2026-01-30 22:20:00,246 - INFO - Clustering completed: 0 articles processed
+2026-01-31 00:18:02,870 - INFO - ================================================================================
+2026-01-31 00:18:02,875 - INFO - SCHEDULED JOB: Article Ingestion
+2026-01-31 00:18:02,875 - INFO - ================================================================================
+2026-01-31 20:47:30,253 - INFO - Ingestion completed: 14 articles
+2026-01-31 20:48:30,261 - INFO - ================================================================================
+2026-01-31 20:48:30,262 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-31 20:48:30,262 - INFO - ================================================================================
+2026-01-31 20:48:30,888 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:31,520 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:32,225 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:33,026 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:33,556 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:34,357 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:35,198 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:36,065 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:37,765 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:39,336 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:39,885 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:40,374 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:41,144 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:42,739 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-01-31 20:48:43,367 - INFO - Clustering completed: 14 articles processed
+2026-01-31 20:48:43,367 - INFO - ================================================================================
+2026-01-31 20:48:43,367 - INFO - SCHEDULED JOB: Database Maintenance
+2026-01-31 20:48:43,367 - INFO - ================================================================================
+2026-01-31 20:48:45,584 - INFO - Maintenance completed: 0 topics trimmed, 0 articles archived
+2026-01-31 20:48:45,585 - INFO - Light maintenance: Trimming oversized topics
+2026-01-31 20:48:47,278 - INFO - Light maintenance: 0 topics trimmed

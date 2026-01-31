@@ -24,16 +24,9 @@ from app.db import db
 from app.models.user import UserProfile, UserPreferences
 import asyncio
 from enum import Enum
-from google.oauth2 import service_account
 
 
-
-if  os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-    creds_dict = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-    credentials = service_account.Credentials.from_service_account_info(creds_dict)
-    tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
-else:
-    tts_client = texttospeech.TextToSpeechClient()
+tts_client = texttospeech.TextToSpeechClient()
 
 
 # Initialize Gemini client
@@ -470,10 +463,11 @@ def _chunk_text(text: str, max_chars: int = 4000) -> List[str]:
 
 
 async def generate_audio(podcast_id: str, script: str) -> tuple[bytes, int]:
+
+    client = tts_client
+    
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]
-
-    client = texttospeech.TextToSpeechClient()
 
     user_profile = await get_user_profile(podcast["user_id"])
     speaking_rate = 1.0
@@ -517,7 +511,7 @@ async def _upload_to_firebase(
     script: str
     ) -> tuple[str, str]:
     """Upload audio and transcript to Firebase Storage"""
-    bucket = storage.bucket("podnova-9ecc2.firebasestorage.app")
+    bucket = storage.bucket()
     
     # Upload audio
     audio_blob = bucket.blob(f"podcasts/{podcast_id}/audio.mp3")

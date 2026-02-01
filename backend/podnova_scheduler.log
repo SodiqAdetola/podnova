@@ -504,3 +504,31 @@ Scheduler running. Press Ctrl+C to stop.
 2026-01-31 20:48:45,584 - INFO - Maintenance completed: 0 topics trimmed, 0 articles archived
 2026-01-31 20:48:45,585 - INFO - Light maintenance: Trimming oversized topics
 2026-01-31 20:48:47,278 - INFO - Light maintenance: 0 topics trimmed
+2026-01-31 22:49:32,795 - INFO - ================================================================================
+2026-01-31 22:49:32,804 - INFO - SCHEDULED JOB: Article Clustering
+2026-01-31 22:49:32,804 - INFO - ================================================================================
+2026-01-31 22:49:33,387 - INFO - Clustering completed: 0 articles processed
+2026-02-01 01:00:27,026 - INFO - ================================================================================
+2026-02-01 01:00:27,032 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-01 01:00:27,032 - INFO - ================================================================================
+2026-02-01 01:50:50,203 - INFO - Ingestion completed: 3 articles
+2026-02-01 01:50:50,214 - INFO - ================================================================================
+2026-02-01 01:50:50,215 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-01 01:50:50,215 - INFO - ================================================================================
+2026-02-01 01:50:51,249 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-01 01:50:54,157 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-01 01:50:54,906 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-01 01:50:55,292 - INFO - Clustering completed: 3 articles processed
+2026-02-01 02:53:17,040 - INFO - Light maintenance: Trimming oversized topics
+2026-02-01 02:53:19,445 - INFO - Light maintenance: 0 topics trimmed
+2026-02-01 03:17:21,182 - INFO - ================================================================================
+2026-02-01 03:17:21,186 - INFO - SCHEDULED JOB: Database Maintenance
+2026-02-01 03:17:21,186 - INFO - ================================================================================
+2026-02-01 03:17:23,443 - INFO - Maintenance completed: 0 topics trimmed, 0 articles archived
+2026-02-01 04:18:22,476 - INFO - ================================================================================
+2026-02-01 04:18:22,479 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-01 04:18:22,479 - INFO - ================================================================================
+2026-02-01 04:18:22,832 - INFO - Clustering completed: 0 articles processed
+2026-02-01 05:57:27,669 - INFO - ================================================================================
+2026-02-01 05:57:27,672 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-01 05:57:27,673 - INFO - ================================================================================

@@ -66,12 +66,12 @@ class PodcastVoice(str, Enum):
 
 # Voice configuration mapping
 VOICE_CONFIGS = {
-    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Achernar",
-    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Charon",
-    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Zephyr",
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",
+    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Achird",
+    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Achernar",
     PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Fenrir",
     PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede",
-    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Orus",
+    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Alnilam",
 }
 
 
@@ -377,25 +377,25 @@ SOURCE ARTICLES ({len(articles)} total):
 {focus_text}{custom_text}
 
 SCRIPT STRUCTURE:
-1. **Opening Hook** (15 seconds): Lead with the most compelling or surprising angle. Make them want to keep listening.
+1. **Podcast style Opening Hook** (15 seconds): Lead with the most compelling or surprising angle. Make them want to keep listening.
 
-2. **Context Setting** (20%): 
+2. **Podcast style Context Setting** (20%): 
    - What's happening and why does it matter?
    - Essential background and setup
    - {style_config['depth']}
 
-3. **Core Analysis** (50%): 
+3. **Podcast style Core Analysis** (50%): 
    - Main developments synthesized from multiple sources
    - {style_config['analysis']}
    - For {podcast['style'].upper()} level: Go deeper than surface facts. Challenge the obvious. Explore the 'why behind the why.'
 
-4. **Implications & Significance** (20%):
+4. **Podcast styleImplications & Significance** (20%):
    - Who's affected and how?
    - Broader consequences and connections
    - What might happen next and why?
    - For ADVANCED/EXPERT: Discuss competing scenarios and strategic considerations
 
-5. **Closing** (10 seconds): 
+5. **Podcast style Closing** (10 seconds): 
    - Memorable synthesis or thought-provoking question
    - Leave them thinking
 

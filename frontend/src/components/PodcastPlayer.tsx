@@ -360,15 +360,18 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             ]}
           >
             <Ionicons name="mic" size={60} color="#FFFFFF" opacity={0.9} />
+
+            {/* Podcast Info */}
+            <Text style={styles.podcastTitle} numberOfLines={2}>
+                {podcast.topic_title}
+            </Text>
+            <Text style={styles.podcastCategory}>
+                {podcast.category.toUpperCase()}
+            </Text>
+
           </View>
 
-          {/* Podcast Info */}
-          <Text style={styles.podcastTitle} numberOfLines={2}>
-            {podcast.topic_title}
-          </Text>
-          <Text style={styles.podcastCategory}>
-            {podcast.category.toUpperCase()}
-          </Text>
+
 
                   {/* Full Transcript Section */}
           {podcast.script && (
@@ -571,8 +574,9 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   albumArt: {
-    width: SCREEN_WIDTH - 50,
-    height: SCREEN_WIDTH - 150,
+    width: SCREEN_WIDTH - 40,
+    height: SCREEN_WIDTH - 120,
+    padding: 10,
     alignSelf: "center",
     borderRadius: 16,
     justifyContent: "center",
@@ -585,7 +589,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   podcastTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "700",
     color: "#FFFFFF",
     textAlign: "center",
@@ -672,7 +676,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.3)",
   },
   speedBadgeText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -708,11 +712,11 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   transcriptContent: {
-    maxHeight: 150,
+    maxHeight: 160,
     overflow: "hidden",
   },
   transcriptText: {
-    paddingTop: 60,
+    paddingTop: 30,
     fontSize: 14,
     color: "rgba(255, 255, 255, 0.9)",
     lineHeight: 22,

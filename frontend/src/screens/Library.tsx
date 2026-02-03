@@ -688,12 +688,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   generatingCard: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: "#c7baef",
     borderRadius: 12,
     marginBottom: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#FCD34D",
+    borderColor: "#c0a6d9",
   },
   generatingContent: {
     flexDirection: "row",

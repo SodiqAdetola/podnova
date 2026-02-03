@@ -144,7 +144,7 @@ const HomeScreen: React.FC = () => {
             <View style={styles.categoryContent}>
               <Text style={styles.categoryName}>{category.display_name}</Text>
               <Text style={styles.categoryTrending}>
-                Trending: {category.trending ? category.trending.substring(0, 40) : "Breaking stories"}
+                Trending: {category.trending ? category.trending : "Breaking stories"}
               </Text>
             </View>
           </TouchableOpacity>
@@ -167,8 +167,8 @@ const HomeScreen: React.FC = () => {
             >
               <View style={styles.topicHeader}>
                 <Text style={styles.topicTitle}>{topic.title}</Text>
-                <View style={styles.trendIndicator}>
-                  <Text style={styles.trendIcon}>↗</Text>
+                <View>
+                  <Ionicons name="trending-up-outline" size={25} color="#10B981" />
                 </View>
               </View>
               <Text style={styles.topicMeta}>
@@ -318,18 +318,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   trendIndicator: {
-    marginLeft: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#FEE2E2",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  trendIcon: {
-    fontSize: 14,
-    color: "#EF4444",
-    fontWeight: "bold",
+
   },
   topicMeta: {
     fontSize: 13,

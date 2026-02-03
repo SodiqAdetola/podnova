@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   transcriptContent: {
-    maxHeight: 100,
+    maxHeight: 150,
     overflow: "hidden",
   },
   transcriptText: {

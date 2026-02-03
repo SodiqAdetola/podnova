@@ -124,7 +124,7 @@ class ScriptService:
         
         prompt = f"""You are creating a podcast script about this news topic. This will be converted to natural speech, so write ONLY the spoken words - no stage directions, sound effects, formatting, or meta-commentary.
 
-Write a spoken monologue intended to be read aloud by a human. Use short clauses, incomplete sentences where natural, occasional light fillers (e.g. 'you know', 'so', 'right') but sparingly. Insert natural pauses using ellipses (...) or line breaks. Avoid polished transitions. Prefer thinking-aloud style.
+Write a spoken monologue intended to be read aloud by a human. Insert natural pauses using ellipses (...) or line breaks and occasional light fillers. Avoid polished transitions. Prefer thinking-aloud style.
 
 TOPIC: {topic['title']}
 CATEGORY: {topic['category'].upper()}

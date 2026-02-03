@@ -568,3 +568,163 @@ Scheduler running. Press Ctrl+C to stop.
 2026-02-02 20:31:05,502 - INFO - ================================================================================
 2026-02-02 20:31:05,508 - INFO - SCHEDULED JOB: Article Ingestion
 2026-02-02 20:31:05,508 - INFO - ================================================================================
+2026-02-03 11:10:17,486 - ERROR - Ingestion failed: ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: connection closed (configured timeouts: connectTimeoutMS: 20000.0ms)
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/pool.py", line 1020, in receive_message
+    return receive_message(self, request_id, self.max_message_size)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/network.py", line 257, in receive_message
+    length, _, response_to, op_code = _UNPACK_HEADER(_receive_data_on_socket(conn, 16, deadline))
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/network.py", line 348, in _receive_data_on_socket
+    raise OSError("connection closed")
+OSError: connection closed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 39, in run_ingestion
+    stats = self.ingestion_service.run_ingestion()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/ingestion.py", line 327, in run_ingestion
+    count = self.ingest_from_feed(feed, category)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/ingestion.py", line 292, in ingest_from_feed
+    if self.article_exists(article_data['url'], article_data['content_hash']):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/ingestion.py", line 211, in article_exists
+    existing = self.articles_collection.find_one({
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/collection.py", line 1506, in find_one
+    for result in cursor.limit(-1):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1181, in _refresh
+    self.__send_message(q)
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1060, in __send_message
+    response = client._run_operation(
+               ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/_csot.py", line 107, in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1394, in _run_operation
+    return self._retryable_read(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1492, in _retryable_read
+    return self._retry_internal(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/_csot.py", line 107, in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1462, in _retry_internal
+    ).run()
+      ^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2320, in run
+    self._check_last_error()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2392, in _check_last_error
+    raise self._last_error
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2315, in run
+    return self._read() if self._is_read else self._write()
+           ^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2445, in _read
+    return self._func(self._session, self._server, conn, read_pref)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1390, in _cmd
+    return server.run_operation(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/helpers.py", line 322, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/server.py", line 148, in run_operation
+    reply = conn.receive_message(request_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/pool.py", line 1022, in receive_message
+    self._raise_connection_failure(error)
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/pool.py", line 1171, in _raise_connection_failure
+    _raise_connection_failure(self.address, error, timeout_details=details)
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/pool.py", line 411, in _raise_connection_failure
+    raise AutoReconnect(msg) from error
+pymongo.errors.AutoReconnect: ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: connection closed (configured timeouts: connectTimeoutMS: 20000.0ms)
+2026-02-03 11:11:17,581 - INFO - ================================================================================
+2026-02-03 11:11:17,582 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-03 11:11:17,582 - INFO - ================================================================================
+2026-02-03 11:11:47,791 - ERROR - Clustering failed: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc556, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 50, in run_clustering
+    stats = self.clustering_service.process_pending_articles()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/clustering.py", line 394, in process_pending_articles
+    pending_articles = list(self.articles_collection.find({
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1155, in _refresh
+    self.__session = self.__collection.database.client._ensure_session()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1823, in _ensure_session
+    return self.__start_session(True, causal_consistency=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1766, in __start_session
+    self._topology._check_implicit_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 573, in _check_implicit_session_support
+    self._check_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 589, in _check_session_support
+    self._select_servers_loop(
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc556, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2026-02-03 11:11:47,798 - INFO - Light maintenance: Trimming oversized topics
+2026-02-03 11:12:18,283 - ERROR - Light maintenance failed: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc558, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 72, in run_light_maintenance
+    active_topics = list(self.maintenance_service.topics_collection.find({"status": "active"}))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1155, in _refresh
+    self.__session = self.__collection.database.client._ensure_session()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1823, in _ensure_session
+    return self.__start_session(True, causal_consistency=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1766, in __start_session
+    self._topology._check_implicit_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 573, in _check_implicit_session_support
+    self._check_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 589, in _check_session_support
+    self._select_servers_loop(
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc558, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2026-02-03 11:12:18,298 - INFO - ================================================================================
+2026-02-03 11:12:18,298 - INFO - SCHEDULED JOB: Database Maintenance
+2026-02-03 11:12:18,298 - INFO - ================================================================================
+2026-02-03 11:12:48,693 - ERROR - Maintenance failed: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc558, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 62, in run_maintenance
+    stats = self.maintenance_service.run_full_maintenance()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/article_maintenance.py", line 408, in run_full_maintenance
+    active_topics = list(self.topics_collection.find({"status": "active"}))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1155, in _refresh
+    self.__session = self.__collection.database.client._ensure_session()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1823, in _ensure_session
+    return self.__start_session(True, causal_consistency=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1766, in __start_session
+    self._topology._check_implicit_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 573, in _check_implicit_session_support
+    self._check_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 589, in _check_session_support
+    self._select_servers_loop(
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc558, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>

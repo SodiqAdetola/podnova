@@ -63,6 +63,9 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const transcriptScrollRef = useRef<ScrollView>(null);
+  const [transcriptContentHeight, setTranscriptContentHeight] = useState(0);
+  const [transcriptViewHeight, setTranscriptViewHeight] = useState(0);
 
   // Initialize audio
   useEffect(() => {
@@ -130,6 +133,23 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
 
     return () => clearInterval(saveInterval);
   }, [position, podcast]);
+
+
+  useEffect(() => {
+  if (!transcriptScrollRef.current || !duration) return;
+
+  const maxScroll = transcriptContentHeight - transcriptViewHeight;
+  if (maxScroll <= 0) return;
+
+  const progress = position / duration;
+  const scrollY = progress * maxScroll;
+
+  transcriptScrollRef.current.scrollTo({
+    y: scrollY,
+    animated: false,
+  });
+}, [position, duration, transcriptContentHeight, transcriptViewHeight]);
+
 
   const savePlaybackPosition = async () => {
     if (!podcast) return;
@@ -276,21 +296,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     })
   ).current;
 
-  // Get current transcript segment based on position
-  const getCurrentTranscriptSegment = () => {
-    if (!podcast?.script || !duration) return "";
-    
-    const words = podcast.script.split(" ");
-    const totalWords = words.length;
-    const progressRatio = position / duration;
-    const currentWordIndex = Math.floor(progressRatio * totalWords);
-    
-    // Show 20 words centered around current position
-    const start = Math.max(0, currentWordIndex - 10);
-    const end = Math.min(totalWords, currentWordIndex + 10);
-    
-    return words.slice(start, end).join(" ");
-  };
+
 
   if (!podcast) return null;
 
@@ -364,16 +370,30 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             {podcast.category.toUpperCase()}
           </Text>
 
-          {/* Live Transcript Subtitles - PROMINENT */}
-          {podcast.script && getCurrentTranscriptSegment() && (
-            <View style={styles.transcriptSubtitles}>
-              <View style={styles.subtitleIndicator}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>LIVE TRANSCRIPT</Text>
+                  {/* Full Transcript Section */}
+          {podcast.script && (
+            <View style={styles.transcriptContainer}>
+              <View style={styles.transcriptHeader}>
+                <Ionicons name="document-text-outline" size={20} color="#E9D5FF" />
+                <Text style={styles.transcriptHeaderText}>Transcript</Text>
               </View>
-              <Text style={styles.subtitleText}>
-                {getCurrentTranscriptSegment()}
-              </Text>
+
+                <View style={styles.transcriptContent}>
+                <ScrollView
+                    ref={transcriptScrollRef}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                    onContentSizeChange={(w, h) => setTranscriptContentHeight(h)}
+                    onLayout={(e) =>
+                    setTranscriptViewHeight(e.nativeEvent.layout.height)
+                    }
+                >
+                    <Text style={styles.transcriptText}>
+                    {podcast.script}
+                    </Text>
+                </ScrollView>
+                </View>
+
             </View>
           )}
 
@@ -460,18 +480,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Full Transcript Section */}
-          {podcast.script && (
-            <View style={styles.fullTranscriptContainer}>
-              <View style={styles.transcriptHeader}>
-                <Ionicons name="document-text-outline" size={20} color="#E9D5FF" />
-                <Text style={styles.transcriptHeaderText}>Full Transcript</Text>
-              </View>
-              <View style={styles.transcriptContent}>
-                <Text style={styles.transcriptText}>{podcast.script}</Text>
-              </View>
-            </View>
-          )}
+
         </ScrollView>
 
         {/* Speed Selection Menu */}
@@ -562,13 +571,13 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   albumArt: {
-    width: SCREEN_WIDTH - 100,
-    height: SCREEN_WIDTH - 100,
+    width: SCREEN_WIDTH - 50,
+    height: SCREEN_WIDTH - 150,
     alignSelf: "center",
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 15,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
@@ -589,49 +598,11 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.7)",
     textAlign: "center",
     letterSpacing: 1,
-    marginBottom: 24,
-  },
-  transcriptSubtitles: {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    minHeight: 120,
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  subtitleIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-    gap: 6,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#FCD34D",
-  },
-  liveText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FCD34D",
-    letterSpacing: 1,
-  },
-  subtitleText: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    textAlign: "center",
-    lineHeight: 24,
-    fontWeight: "500",
+    marginBottom: 15,
   },
   progressContainer: {
-    marginBottom: 32,
+    marginBottom: 24,
+    marginTop: 16,
   },
   timeContainer: {
     flexDirection: "row",
@@ -718,10 +689,10 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.9)",
     fontWeight: "500",
   },
-  fullTranscriptContainer: {
+  transcriptContainer: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 16,
-    padding: 20,
+    padding: 10,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
   },
@@ -729,7 +700,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 5,
   },
   transcriptHeaderText: {
     fontSize: 15,
@@ -737,12 +708,14 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   transcriptContent: {
-    maxHeight: 400,
+    maxHeight: 100,
+    overflow: "hidden",
   },
   transcriptText: {
+    paddingTop: 60,
     fontSize: 14,
     color: "rgba(255, 255, 255, 0.9)",
-    lineHeight: 24,
+    lineHeight: 22,
   },
   speedMenuOverlay: {
     flex: 1,
@@ -758,7 +731,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   speedMenuTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#111827",
     marginBottom: 16,
@@ -768,7 +741,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 16,
+    paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 8,
@@ -778,7 +751,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EDE9FE",
   },
   speedMenuItemText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
     color: "#374151",
   },

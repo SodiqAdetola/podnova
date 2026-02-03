@@ -1,6 +1,6 @@
 // frontend/src/screens/LibraryScreen.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -36,6 +36,9 @@ const LibraryScreen: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [downloadingPodcasts, setDownloadingPodcasts] = useState<Set<string>>(new Set());
   const [activePodcast, setActivePodcast] = useState<Podcast | null>(null);
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+  
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadLocalData();
@@ -55,9 +58,11 @@ const LibraryScreen: React.FC = () => {
     }
   };
 
-  const fetchPodcasts = async (isRefresh = false) => {
+  const fetchPodcasts = async (isRefresh = false, silent = false) => {
     try {
-      if (!isRefresh) setLoading(true);
+      if (!silent && !isRefresh && !hasInitiallyLoaded) {
+        setLoading(true);
+      }
 
       const token = await auth.currentUser?.getIdToken(true);
       if (!token) return;
@@ -74,6 +79,7 @@ const LibraryScreen: React.FC = () => {
       const data: PodcastLibraryResponse = await response.json();
       if (response.ok) {
         setPodcasts(data.podcasts || []);
+        setHasInitiallyLoaded(true);
       }
     } catch (error) {
       console.error("Error fetching podcasts:", error);
@@ -83,24 +89,47 @@ const LibraryScreen: React.FC = () => {
     }
   };
 
+  // Only load on initial mount
   useFocusEffect(
     React.useCallback(() => {
-      fetchPodcasts();
-    }, [])
+      if (!hasInitiallyLoaded) {
+        fetchPodcasts();
+      }
+      
+      return () => {
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
+        }
+      };
+    }, [hasInitiallyLoaded])
   );
 
+  // Smart polling
   useEffect(() => {
     const hasGenerating = podcasts.some((p) =>
       ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
     );
 
     if (hasGenerating) {
-      const interval = setInterval(() => {
-        fetchPodcasts(true);
-      }, 5000);
-
-      return () => clearInterval(interval);
+      if (!pollingInterval.current) {
+        pollingInterval.current = setInterval(() => {
+          fetchPodcasts(false, true);
+        }, 5000);
+      }
+    } else {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
     }
+
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+    };
   }, [podcasts]);
 
   const onRefresh = () => {
@@ -202,7 +231,7 @@ const LibraryScreen: React.FC = () => {
                   );
                 }
 
-                fetchPodcasts(true);
+                setPodcasts(prev => prev.filter(p => p.id !== podcast.id));
                 Alert.alert("Success", "Podcast deleted");
               }
             } catch (error) {
@@ -241,9 +270,12 @@ const LibraryScreen: React.FC = () => {
     setActivePodcast(podcast);
   };
 
-  const filteredPodcasts = podcasts.filter((podcast) => {
-    if (podcast.status !== "completed") return false;
-    
+  const completedPodcasts = podcasts.filter(p => p.status === "completed");
+  const generatingPodcasts = podcasts.filter(p => 
+    ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
+  );
+
+  const filteredCompletedPodcasts = completedPodcasts.filter((podcast) => {
     if (activeTab === "downloads") return downloadedPodcasts.has(podcast.id);
     if (activeTab === "saved") return savedPodcasts.has(podcast.id);
     return true;
@@ -278,6 +310,40 @@ const LibraryScreen: React.FC = () => {
       politics: "#8B5CF6",
     };
     return colors[category?.toLowerCase()] || "#6366F1";
+  };
+
+  const getStatusDisplay = (status: string) => {
+    const statusMap: { [key: string]: { text: string; color: string } } = {
+      pending: { text: "Queued", color: "#6B7280" },
+      generating_script: { text: "Writing script", color: "#F59E0B" },
+      generating_audio: { text: "Creating audio", color: "#8B5CF6" },
+      uploading: { text: "Finalizing", color: "#3B82F6" },
+    };
+    return statusMap[status] || { text: "Processing", color: "#6B7280" };
+  };
+
+  const renderGeneratingCard = ({ item }: { item: Podcast }) => {
+    const statusInfo = getStatusDisplay(item.status);
+    
+    return (
+      <View style={styles.generatingCard}>
+        <View style={styles.generatingContent}>
+          <View style={[styles.generatingThumbnail, { backgroundColor: getCategoryColor(item.category) }]}>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          </View>
+          
+          <View style={styles.generatingInfo}>
+            <Text style={styles.generatingTitle} numberOfLines={1}>
+              {item.topic_title}
+            </Text>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, { backgroundColor: statusInfo.color }]} />
+              <Text style={styles.statusText}>{statusInfo.text}...</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   const renderMenu = (podcast: Podcast) => {
@@ -472,7 +538,7 @@ const LibraryScreen: React.FC = () => {
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Library</Text>
-        <TouchableOpacity onPress={() => fetchPodcasts()} style={styles.refreshButton}>
+        <TouchableOpacity onPress={() => fetchPodcasts(true)} style={styles.refreshButton}>
           <Ionicons name="refresh" size={24} color="#6366F1" />
         </TouchableOpacity>
       </View>
@@ -509,19 +575,23 @@ const LibraryScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading && !hasInitiallyLoaded ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6366F1" />
           <Text style={styles.loadingText}>Loading your library...</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredPodcasts}
-          renderItem={renderPodcastCard}
+          data={[...generatingPodcasts, ...filteredCompletedPodcasts]}
+          renderItem={({ item }) =>
+            item.status === "completed"
+              ? renderPodcastCard({ item })
+              : renderGeneratingCard({ item })
+          }
           keyExtractor={(item) => item.id}
           contentContainerStyle={[
             styles.listContent,
-            filteredPodcasts.length === 0 && styles.emptyListContent,
+            (generatingPodcasts.length === 0 && filteredCompletedPodcasts.length === 0) && styles.emptyListContent,
           ]}
           ListEmptyComponent={renderEmptyState}
           refreshControl={
@@ -536,7 +606,6 @@ const LibraryScreen: React.FC = () => {
         />
       )}
 
-      {/* Podcast Player Modal */}
       <PodcastPlayer
         visible={activePodcast !== null}
         podcast={activePodcast}
@@ -617,6 +686,50 @@ const styles = StyleSheet.create({
   emptyListContent: {
     flex: 1,
     justifyContent: "center",
+  },
+  generatingCard: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+  generatingContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  generatingThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  generatingInfo: {
+    flex: 1,
+  },
+  generatingTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#92400E",
+    marginBottom: 4,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 12,
+    color: "#92400E",
+    fontWeight: "500",
   },
   podcastCard: {
     backgroundColor: "#FFFFFF",

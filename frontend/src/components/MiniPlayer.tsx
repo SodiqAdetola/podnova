@@ -108,7 +108,7 @@ container: {
     left: 0,
     right: 0,
     paddingBottom: 30,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#f8f7ff',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     borderBottomWidth: 3,

@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 0,
   },
   albumArt: {
     width: SCREEN_WIDTH - 40,

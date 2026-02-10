@@ -8,13 +8,17 @@ import {
   Alert, 
   TouchableOpacity, 
   ScrollView,
-  ActivityIndicator 
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { AuthStackParamList } from "../Navigator";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { isValidEmail, isValidPassword } from "../utils/validation";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
@@ -26,9 +30,10 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleRegister = async () => {
-    // Validate all fields
     if (!fullName.trim()) {
       Alert.alert("Missing Information", "Please enter your full name.");
       return;
@@ -70,7 +75,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Create Firebase user
       const cred = await createUserWithEmailAndPassword(
         auth,
         email.trim(),
@@ -79,15 +83,12 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
       const firebaseUser = cred.user;
 
-      // Update Firebase profile with display name
       await updateProfile(firebaseUser, {
         displayName: fullName.trim(),
       });
 
-      // Get Firebase token
       const token = await firebaseUser.getIdToken();
 
-      // Create backend user profile
       const response = await fetch(`${API_BASE_URL}/users/user`, {
         method: 'POST',
         headers: {
@@ -112,7 +113,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       
       let errorMessage = "An unexpected error occurred. Please try again.";
 
-      // Firebase errors
       if (error.code) {
         switch (error.code) {
           case "auth/email-already-in-use":
@@ -141,186 +141,336 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <ScrollView 
-      contentContainerStyle={styles.scrollContainer}
-      keyboardShouldPersistTaps="handled"
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Join PodNova today</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Full Name"
-          value={fullName}
-          onChangeText={setFullName}
-          autoCapitalize="words"
-          editable={!loading}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email Address"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          editable={!loading}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          editable={!loading}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={confirm}
-          onChangeText={setConfirm}
-          secureTextEntry
-          autoCapitalize="none"
-          editable={!loading}
-        />
-
-        <View style={styles.requirementsContainer}>
-          <Text style={styles.requirementsTitle}>Password must include:</Text>
-          <Text style={styles.requirementItem}>• At least 5 characters</Text>
-          <Text style={styles.requirementItem}>• Uppercase letter (A-Z)</Text>
-          <Text style={styles.requirementItem}>• Lowercase letter (a-z)</Text>
-          <Text style={styles.requirementItem}>• Number (0-9)</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* Header Section */}
+        <View style={styles.headerContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#111827" />
+          </TouchableOpacity>
+          
+          <View style={styles.logoContainer}>
+            <LinearGradient
+              colors={['#8B5CF6', '#6366F1']}
+              style={styles.logoGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="mic" size={28} color="#FFFFFF" />
+            </LinearGradient>
+          </View>
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Join PodNova today</Text>
         </View>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <View style={styles.buttonContent}>
-              <ActivityIndicator color="#fff" size="small" />
-              <Text style={styles.buttonText}>Creating Account...</Text>
+        {/* Form Section */}
+        <View style={styles.formContainer}>
+          {/* Full Name Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Full Name</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="John Doe"
+                placeholderTextColor="#9CA3AF"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                editable={!loading}
+              />
             </View>
-          ) : (
-            <Text style={styles.buttonText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
+          </View>
 
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.linkContainer}
-          disabled={loading}
-        >
-          <Text style={styles.linkText}>
-            Already have an account? <Text style={styles.linkTextBold}>Login</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          {/* Email Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor="#9CA3AF"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                editable={!loading}
+              />
+            </View>
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Create a password"
+                placeholderTextColor="#9CA3AF"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                  size={20} 
+                  color="#9CA3AF" 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Confirm Password Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Confirm Password</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm your password"
+                placeholderTextColor="#9CA3AF"
+                value={confirm}
+                onChangeText={setConfirm}
+                secureTextEntry={!showConfirm}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+              <TouchableOpacity 
+                onPress={() => setShowConfirm(!showConfirm)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showConfirm ? "eye-outline" : "eye-off-outline"} 
+                  size={20} 
+                  color="#9CA3AF" 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Password Requirements */}
+          <View style={styles.requirementsContainer}>
+            <View style={styles.requirementRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={styles.requirementText}>At least 5 characters</Text>
+            </View>
+            <View style={styles.requirementRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={styles.requirementText}>Uppercase & lowercase letters</Text>
+            </View>
+            <View style={styles.requirementRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={styles.requirementText}>At least one number</Text>
+            </View>
+          </View>
+
+          {/* Create Account Button */}
+          <TouchableOpacity
+            style={[styles.createButton, loading && styles.createButtonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={loading ? ['#9CA3AF', '#6B7280'] : ['#8B5CF6', '#6366F1']}
+              style={styles.createButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              {loading ? (
+                <View style={styles.buttonContent}>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={styles.createButtonText}>Creating Account...</Text>
+                </View>
+              ) : (
+                <Text style={styles.createButtonText}>Create Account</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Login Link */}
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.loginLink}
+            disabled={loading}
+          >
+            <Text style={styles.loginLinkText}>
+              Already have an account?{" "}
+              <Text style={styles.loginLinkTextBold}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default RegisterScreen;
 
 const styles = StyleSheet.create({
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: "center",
-    backgroundColor: "#f8f9fa",
-  },
   container: {
-    padding: 24,
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginVertical: 32,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  scrollContainer: {
+    top: 50,
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  headerContainer: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  backButton: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoContainer: {
+    marginBottom: 12,
+  },
+  logoGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 8,
-    textAlign: "center",
-    color: "#1a1a1a",
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 4,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 32,
+    fontSize: 14,
+    color: "#6B7280",
     textAlign: "center",
   },
-  input: {
+  formContainer: {
+    flex: 1,
+  },
+  inputContainer: {
+    marginBottom: 14,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 6,
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: "#fff",
-    marginBottom: 16,
+    height: 50,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: "#111827",
+    height: "100%",
+  },
+  eyeIcon: {
+    padding: 4,
   },
   requirementsContainer: {
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 24,
-    borderLeftWidth: 3,
-    borderLeftColor: "#007AFF",
-  },
-  requirementsTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  requirementItem: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 4,
-    paddingLeft: 4,
-  },
-  button: {
-    backgroundColor: "#007AFF",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
   },
-  buttonDisabled: {
-    backgroundColor: "#97c5f5",
+  requirementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  requirementText: {
+    fontSize: 12,
+    color: "#166534",
+    marginLeft: 6,
+    fontWeight: "500",
+  },
+  createButton: {
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  createButtonDisabled: {
+    shadowOpacity: 0,
+  },
+  createButtonGradient: {
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
   },
   buttonContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  buttonText: {
-    color: "#fff",
+  createButtonText: {
     fontSize: 16,
     fontWeight: "600",
+    color: "#FFFFFF",
   },
-  linkContainer: {
+  loginLink: {
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
-  linkText: {
-    color: "#666",
-    fontSize: 14,
+  loginLinkText: {
+    fontSize: 15,
+    color: "#6B7280",
   },
-  linkTextBold: {
-    color: "#007AFF",
+  loginLinkTextBold: {
     fontWeight: "600",
+    color: "#6366F1",
   },
 });

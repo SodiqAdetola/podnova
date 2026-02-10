@@ -1,11 +1,24 @@
 // frontend/src/screens/LoginScreen.tsx
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Alert, TouchableOpacity, ScrollView } from "react-native";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  StyleSheet, 
+  Alert, 
+  TouchableOpacity, 
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator
+} from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { AuthStackParamList } from "../Navigator";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { isValidEmail } from "../utils/validation";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
@@ -15,15 +28,14 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-    // 1. Basic presence check
     if (!email || !password) {
       Alert.alert("Missing information", "Please enter email and password.");
       return;
     }
 
-    // 2. Email format check
     if (!isValidEmail(email)) {
       Alert.alert("Invalid email", "Please enter a valid email address.");
       return;
@@ -32,14 +44,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Sign in with Firebase
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const firebaseUser = userCredential.user;
-
-      // Get Firebase ID token
       const token = await firebaseUser.getIdToken();
 
-      // Verify user exists in MongoDB backend
       const response = await fetch(`${API_BASE_URL}/users/user`, {
         method: "GET",
         headers: {
@@ -50,7 +58,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
       if (!response.ok) {
         if (response.status === 404) {
-          // User exists in Firebase but not in MongoDB - create profile
           const createResponse = await fetch(`${API_BASE_URL}/users/user`, {
             method: "POST",
             headers: {
@@ -66,12 +73,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           throw new Error("Failed to fetch user profile");
         }
       }
-      // Login successful, navigate to main app screen
 
     } catch (error: any) {
       console.error("Login error:", error);
       
-      // Handle Firebase errors
       let errorMessage = "Login failed. Please try again.";
       
       if (error.code === "auth/user-not-found") {
@@ -95,59 +100,252 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.container}>
-            <Text style={styles.title}>PodNova</Text>
-            <Text style={styles.subtitle}>Sign in to continue</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-
-            <Button
-              title={loading ? "Logging in..." : "Login"}
-              onPress={handleLogin}
-              disabled={loading}
-            />
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Register")}
-              style={styles.linkContainer}
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header Section */}
+        <View style={styles.headerContainer}>
+          <View style={styles.logoContainer}>
+            <LinearGradient
+              colors={['#8B5CF6', '#6366F1']}
+              style={styles.logoGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
-                <Text style={styles.linkText}>Don't have an account? Register</Text>
-            </TouchableOpacity>
+              <Ionicons name="mic" size={40} color="#FFFFFF" />
+            </LinearGradient>
+          </View>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Sign in to continue to PodNova</Text>
         </View>
-    </ScrollView>
+
+        {/* Form Section */}
+        <View style={styles.formContainer}>
+          {/* Email Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                editable={!loading}
+              />
+            </View>
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                editable={!loading}
+              />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                  size={20} 
+                  color="#9CA3AF" 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Login Button */}
+          <TouchableOpacity
+            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={loading ? ['#9CA3AF', '#6B7280'] : ['#8B5CF6', '#6366F1']}
+              style={styles.loginButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.loginButtonText}>Sign In</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Register Link */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Register")}
+            style={styles.registerLink}
+            disabled={loading}
+          >
+            <Text style={styles.registerLinkText}>
+              Don't have an account?{" "}
+              <Text style={styles.registerLinkTextBold}>Create one</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default LoginScreen;
 
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, justifyContent: "center" },
-  container: { padding: 24, backgroundColor: "#fff" },
-  title: { fontSize: 32, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
-  subtitle: { fontSize: 16, color: "#666", marginBottom: 24, textAlign: "center" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
   },
-  linkContainer: { marginTop: 16, alignItems: "center" },
-  linkText: { color: "#007AFF" },
+  scrollContainer: {
+    top: 100,
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  headerContainer: {
+    alignItems: "center",
+    marginBottom: 48,
+  },
+  logoContainer: {
+    marginBottom: 24,
+  },
+  logoGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  formContainer: {
+    flex: 1,
+  },
+  inputContainer: {
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: "#111827",
+    height: "100%",
+  },
+  eyeIcon: {
+    padding: 4,
+  },
+  loginButton: {
+    marginTop: 8,
+    marginBottom: 24,
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  loginButtonDisabled: {
+    shadowOpacity: 0,
+  },
+  loginButtonGradient: {
+    height: 56,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E5E7EB",
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: "#9CA3AF",
+    fontWeight: "500",
+  },
+  registerLink: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  registerLinkText: {
+    fontSize: 15,
+    color: "#6B7280",
+  },
+  registerLinkTextBold: {
+    fontWeight: "600",
+    color: "#6366F1",
+  },
 });

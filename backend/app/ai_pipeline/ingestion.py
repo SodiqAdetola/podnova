@@ -24,7 +24,7 @@ from app.ai_pipeline.feed_config import RSS_FEEDS, IMPORTANT_KEYWORDS, NOISE_KEY
 
 class ArticleIngestionService:
     def __init__(self, mongo_uri: str, db_name: str):
-        """Initialize the ingestion service with MongoDB connection"""
+        """Initialise the ingestion service with MongoDB connection"""
         import certifi
         
         self.client = MongoClient(mongo_uri, tlsCAFile=certifi.where())

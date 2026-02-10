@@ -728,3 +728,361 @@ Traceback (most recent call last):
   File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/.venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
     raise ServerSelectionTimeoutError(
 pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 697ccdb6c8bfc271206cc558, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2026-02-05 02:39:36,446 - INFO - ================================================================================
+2026-02-05 02:39:36,447 - INFO - PodNova Scheduler Starting
+2026-02-05 02:39:36,448 - INFO - Time: 2026-02-05 02:39:36
+2026-02-05 02:39:36,448 - INFO - ================================================================================
+2026-02-05 02:39:36,448 - INFO - Scheduled: Ingestion every 4 hours
+2026-02-05 02:39:36,448 - INFO - Scheduled: Clustering every 2 hours
+2026-02-05 02:39:36,448 - INFO - Scheduled: Light maintenance every 6 hours
+2026-02-05 02:39:36,449 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-02-05 02:39:36,449 - INFO - 
+Running initial jobs on startup...
+2026-02-05 02:39:36,449 - INFO - ================================================================================
+2026-02-05 02:39:36,449 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-05 02:39:36,450 - INFO - ================================================================================
+2026-02-05 02:43:33,463 - INFO - Ingestion completed: 34 articles
+2026-02-05 02:44:33,470 - INFO - ================================================================================
+2026-02-05 02:44:33,481 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-05 02:44:33,481 - INFO - ================================================================================
+2026-02-05 02:44:34,073 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:34,681 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:35,303 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:35,829 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:36,386 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:36,949 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:38,450 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:38,977 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:39,588 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:41,157 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:42,873 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:43,454 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:44,039 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:44,743 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:45,324 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:45,791 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:46,392 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:46,864 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:47,462 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:47,931 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:48,662 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:50,108 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:50,760 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:51,447 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:52,082 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:52,672 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:54,188 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:54,713 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:55,229 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:56,799 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:58,374 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:44:59,947 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:01,517 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:02,097 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:03,692 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:04,480 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:05,189 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:05,712 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:06,244 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:06,843 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:08,336 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:08,870 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:09,495 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:10,223 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 02:45:10,754 - INFO - Clustering completed: 44 articles processed
+2026-02-05 02:45:10,754 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-02-05 02:45:10,754 - INFO - ================================================================================
+2026-02-05 03:08:23,812 - INFO - ================================================================================
+2026-02-05 03:08:23,815 - INFO - SCHEDULED JOB: Database Maintenance
+2026-02-05 03:08:23,816 - INFO - ================================================================================
+2026-02-05 03:08:27,565 - INFO - Maintenance completed: 0 topics trimmed, 8 articles archived
+2026-02-05 05:03:00,624 - INFO - ================================================================================
+2026-02-05 05:03:00,629 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-05 05:03:00,629 - INFO - ================================================================================
+2026-02-05 05:03:01,509 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 05:03:02,358 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 05:03:02,738 - INFO - Clustering completed: 2 articles processed
+2026-02-05 07:07:02,755 - INFO - ================================================================================
+2026-02-05 07:07:02,758 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-05 07:07:02,758 - INFO - ================================================================================
+2026-02-05 10:27:38,235 - INFO - Ingestion completed: 4 articles
+2026-02-05 10:27:38,237 - INFO - ================================================================================
+2026-02-05 10:27:38,237 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-05 10:27:38,237 - INFO - ================================================================================
+2026-02-05 10:27:38,892 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 10:27:39,611 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 10:27:41,733 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 10:27:43,885 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:09:19,940 - INFO - 
+Scheduler stopped by user
+2026-02-05 15:12:23,950 - INFO - ================================================================================
+2026-02-05 15:12:23,951 - INFO - PodNova Scheduler Starting
+2026-02-05 15:12:23,951 - INFO - Time: 2026-02-05 15:12:23
+2026-02-05 15:12:23,951 - INFO - ================================================================================
+2026-02-05 15:12:23,952 - INFO - Scheduled: Ingestion every 4 hours
+2026-02-05 15:12:23,952 - INFO - Scheduled: Clustering every 2 hours
+2026-02-05 15:12:23,953 - INFO - Scheduled: Light maintenance every 6 hours
+2026-02-05 15:12:23,953 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-02-05 15:12:23,953 - INFO - 
+Running initial jobs on startup...
+2026-02-05 15:12:23,953 - INFO - ================================================================================
+2026-02-05 15:12:23,954 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-05 15:12:23,954 - INFO - ================================================================================
+2026-02-05 15:16:52,174 - INFO - Ingestion completed: 12 articles
+2026-02-05 15:17:52,200 - INFO - ================================================================================
+2026-02-05 15:17:52,204 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-05 15:17:52,204 - INFO - ================================================================================
+2026-02-05 15:17:52,686 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:53,518 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:54,264 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:54,779 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:55,300 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:56,049 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:56,640 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:58,293 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:17:59,927 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:18:00,645 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:18:02,405 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:18:04,078 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-05 15:18:04,741 - INFO - AFC is enabled with max remote calls: 10.
+2026-02-05 15:18:16,036 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-02-05 15:18:16,085 - INFO - Clustering completed: 12 articles processed
+2026-02-05 15:18:16,085 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-02-05 15:18:16,085 - INFO - ================================================================================
+2026-02-05 17:24:17,724 - INFO - ================================================================================
+2026-02-05 17:24:17,735 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-05 17:24:17,735 - INFO - ================================================================================
+2026-02-05 17:24:18,437 - INFO - Clustering completed: 0 articles processed
+2026-02-05 19:16:49,516 - INFO - ================================================================================
+2026-02-05 19:16:49,521 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-05 19:16:49,521 - INFO - ================================================================================
+2026-02-07 02:40:01,787 - INFO - Ingestion completed: 7 articles
+2026-02-07 02:41:01,794 - INFO - ================================================================================
+2026-02-07 02:41:01,798 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-07 02:41:01,798 - INFO - ================================================================================
+2026-02-07 02:41:02,510 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:03,661 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:04,612 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:05,191 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:07,151 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:08,983 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:09,749 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-02-07 02:41:11,407 - INFO - Clustering completed: 7 articles processed
+2026-02-07 02:41:11,408 - INFO - Light maintenance: Trimming oversized topics
+2026-02-07 02:41:13,689 - INFO - Light maintenance: 0 topics trimmed
+2026-02-07 02:41:13,697 - INFO - ================================================================================
+2026-02-07 02:41:13,697 - INFO - SCHEDULED JOB: Database Maintenance
+2026-02-07 02:41:13,697 - INFO - ================================================================================
+2026-02-07 02:41:17,738 - INFO - Maintenance completed: 0 topics trimmed, 0 articles archived
+2026-02-07 03:02:31,609 - INFO - ================================================================================
+2026-02-07 03:02:31,615 - INFO - SCHEDULED JOB: Database Maintenance
+2026-02-07 03:02:31,615 - INFO - ================================================================================
+2026-02-07 03:02:33,378 - INFO - Maintenance completed: 0 topics trimmed, 2 articles archived
+2026-02-07 04:42:24,324 - INFO - ================================================================================
+2026-02-07 04:42:24,331 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-07 04:42:24,331 - INFO - ================================================================================
+2026-02-07 04:42:24,637 - INFO - Clustering completed: 0 articles processed
+2026-02-07 07:08:48,528 - INFO - ================================================================================
+2026-02-07 07:08:48,542 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-07 07:08:48,542 - INFO - ================================================================================
+2026-02-08 19:58:40,356 - INFO - ================================================================================
+2026-02-08 19:58:40,358 - INFO - PodNova Scheduler Starting
+2026-02-08 19:58:40,358 - INFO - Time: 2026-02-08 19:58:40
+2026-02-08 19:58:40,358 - INFO - ================================================================================
+2026-02-08 19:58:40,358 - INFO - Scheduled: Ingestion every 4 hours
+2026-02-08 19:58:40,359 - INFO - Scheduled: Clustering every 2 hours
+2026-02-08 19:58:40,359 - INFO - Scheduled: Light maintenance every 6 hours
+2026-02-08 19:58:40,359 - INFO - Scheduled: Full maintenance daily at 3:00 AM
+2026-02-08 19:58:40,360 - INFO - 
+Running initial jobs on startup...
+2026-02-08 19:58:40,360 - INFO - ================================================================================
+2026-02-08 19:58:40,360 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-08 19:58:40,360 - INFO - ================================================================================
+2026-02-08 20:03:05,278 - INFO - Ingestion completed: 8 articles
+2026-02-08 20:04:05,279 - INFO - ================================================================================
+2026-02-08 20:04:05,280 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-08 20:04:05,280 - INFO - ================================================================================
+2026-02-08 20:04:33,098 - INFO - AFC is enabled with max remote calls: 10.
+2026-02-08 20:04:40,090 - INFO - AFC remote call 1 is done.
+2026-02-08 20:04:44,194 - INFO - AFC is enabled with max remote calls: 10.
+2026-02-08 20:04:50,118 - INFO - AFC remote call 1 is done.
+2026-02-08 20:04:50,159 - INFO - Clustering completed: 23 articles processed
+2026-02-08 20:04:50,159 - INFO - 
+Scheduler running. Press Ctrl+C to stop.
+2026-02-08 20:04:50,159 - INFO - ================================================================================
+2026-02-08 22:08:52,376 - INFO - ================================================================================
+2026-02-08 22:08:52,383 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-08 22:08:52,383 - INFO - ================================================================================
+2026-02-08 22:08:52,726 - INFO - Clustering completed: 0 articles processed
+2026-02-09 00:11:12,775 - INFO - ================================================================================
+2026-02-09 00:11:12,782 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-09 00:11:12,782 - INFO - ================================================================================
+2026-02-09 16:49:19,924 - ERROR - Ingestion failed: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: connection closed (configured timeouts: connectTimeoutMS: 20000.0ms)
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/pool.py", line 1020, in receive_message
+    return receive_message(self, request_id, self.max_message_size)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/network.py", line 257, in receive_message
+    length, _, response_to, op_code = _UNPACK_HEADER(_receive_data_on_socket(conn, 16, deadline))
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/network.py", line 348, in _receive_data_on_socket
+    raise OSError("connection closed")
+OSError: connection closed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 39, in run_ingestion
+    stats = self.ingestion_service.run_ingestion()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/ingestion.py", line 327, in run_ingestion
+    count = self.ingest_from_feed(feed, category)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/ingestion.py", line 292, in ingest_from_feed
+    if self.article_exists(article_data['url'], article_data['content_hash']):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/ingestion.py", line 211, in article_exists
+    existing = self.articles_collection.find_one({
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/collection.py", line 1506, in find_one
+    for result in cursor.limit(-1):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1181, in _refresh
+    self.__send_message(q)
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1060, in __send_message
+    response = client._run_operation(
+               ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/_csot.py", line 107, in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1394, in _run_operation
+    return self._retryable_read(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1492, in _retryable_read
+    return self._retry_internal(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/_csot.py", line 107, in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1462, in _retry_internal
+    ).run()
+      ^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2320, in run
+    self._check_last_error()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2392, in _check_last_error
+    raise self._last_error
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2315, in run
+    return self._read() if self._is_read else self._write()
+           ^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 2445, in _read
+    return self._func(self._session, self._server, conn, read_pref)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1390, in _cmd
+    return server.run_operation(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/helpers.py", line 322, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/server.py", line 148, in run_operation
+    reply = conn.receive_message(request_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/pool.py", line 1022, in receive_message
+    self._raise_connection_failure(error)
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/pool.py", line 1171, in _raise_connection_failure
+    _raise_connection_failure(self.address, error, timeout_details=details)
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/pool.py", line 411, in _raise_connection_failure
+    raise AutoReconnect(msg) from error
+pymongo.errors.AutoReconnect: ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: connection closed (configured timeouts: connectTimeoutMS: 20000.0ms)
+2026-02-09 16:49:20,029 - INFO - ================================================================================
+2026-02-09 16:49:20,029 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-09 16:49:20,029 - INFO - ================================================================================
+2026-02-09 16:49:50,365 - ERROR - Clustering failed: ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 6988eaefe0afb9529c8aae32, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 50, in run_clustering
+    stats = self.clustering_service.process_pending_articles()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/clustering.py", line 394, in process_pending_articles
+    pending_articles = list(self.articles_collection.find({
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1155, in _refresh
+    self.__session = self.__collection.database.client._ensure_session()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1823, in _ensure_session
+    return self.__start_session(True, causal_consistency=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1766, in __start_session
+    self._topology._check_implicit_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 573, in _check_implicit_session_support
+    self._check_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 589, in _check_session_support
+    self._select_servers_loop(
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 6988eaefe0afb9529c8aae32, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2026-02-09 16:50:50,380 - INFO - Light maintenance: Trimming oversized topics
+2026-02-09 16:51:20,491 - ERROR - Light maintenance failed: ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 6988eaefe0afb9529c8aae34, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 72, in run_light_maintenance
+    active_topics = list(self.maintenance_service.topics_collection.find({"status": "active"}))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1155, in _refresh
+    self.__session = self.__collection.database.client._ensure_session()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1823, in _ensure_session
+    return self.__start_session(True, causal_consistency=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1766, in __start_session
+    self._topology._check_implicit_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 573, in _check_implicit_session_support
+    self._check_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 589, in _check_session_support
+    self._select_servers_loop(
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 6988eaefe0afb9529c8aae34, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2026-02-09 16:51:20,496 - INFO - ================================================================================
+2026-02-09 16:51:20,496 - INFO - SCHEDULED JOB: Database Maintenance
+2026-02-09 16:51:20,496 - INFO - ================================================================================
+2026-02-09 16:51:50,936 - ERROR - Maintenance failed: ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 6988eaefe0afb9529c8aae34, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+Traceback (most recent call last):
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/scheduler.py", line 62, in run_maintenance
+    stats = self.maintenance_service.run_full_maintenance()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/app/ai_pipeline/article_maintenance.py", line 408, in run_full_maintenance
+    active_topics = list(self.topics_collection.find({"status": "active"}))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1264, in next
+    if len(self.__data) or self._refresh():
+                           ^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/cursor.py", line 1155, in _refresh
+    self.__session = self.__collection.database.client._ensure_session()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1823, in _ensure_session
+    return self.__start_session(True, causal_consistency=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/mongo_client.py", line 1766, in __start_session
+    self._topology._check_implicit_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 573, in _check_implicit_session_support
+    self._check_session_support()
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 589, in _check_session_support
+    self._select_servers_loop(
+  File "/Users/sodiq/Yr4ComputerScience/CO4015-FinalProject/podnova-1/backend/venv/lib/python3.11/site-packages/pymongo/topology.py", line 259, in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+pymongo.errors.ServerSelectionTimeoutError: ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms),ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 30s, Topology Description: <TopologyDescription id: 6988eaefe0afb9529c8aae34, topology_type: ReplicaSetNoPrimary, servers: [<ServerDescription ('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-00.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-01.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>, <ServerDescription ('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net', 27017) server_type: Unknown, rtt: None, error=NetworkTimeout('ac-6w1ttaq-shard-00-02.pslz2q5.mongodb.net:27017: timed out (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2026-02-09 18:56:59,498 - INFO - ================================================================================
+2026-02-09 18:56:59,503 - INFO - SCHEDULED JOB: Article Clustering
+2026-02-09 18:56:59,503 - INFO - ================================================================================
+2026-02-09 18:56:59,774 - INFO - Clustering completed: 0 articles processed
+2026-02-09 20:56:28,306 - INFO - ================================================================================
+2026-02-09 20:56:28,310 - INFO - SCHEDULED JOB: Article Ingestion
+2026-02-09 20:56:28,310 - INFO - ================================================================================

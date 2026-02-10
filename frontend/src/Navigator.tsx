@@ -62,7 +62,7 @@ const TAB_ICONS: Record<
 /* -------------------- AUTH STACK -------------------- */
 
 const AuthStackNavigator: React.FC = () => (
-  <AuthStack.Navigator>
+  <AuthStack.Navigator screenOptions={{ headerShown: false }}>
     <AuthStack.Screen name="Login" component={LoginScreen} />
     <AuthStack.Screen name="Register" component={RegisterScreen} />
   </AuthStack.Navigator>

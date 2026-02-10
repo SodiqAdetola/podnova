@@ -1,13 +1,18 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from "./src/contexts/AuthContext";
+import { AudioProvider } from "./src/contexts/AudioContext";
 import RootNavigator from "./src/Navigator";
 
 export default function App() {
   return (
-    <AuthProvider>
-      <RootNavigator />
-      <StatusBar style="auto" />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <AudioProvider>
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </AudioProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

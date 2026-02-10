@@ -17,7 +17,7 @@ class ScriptService:
     STYLE_INSTRUCTIONS = {
         "casual": {
             "approach": "Conversational and accessible",
-            "depth": "Cover the basics and main takeaways. Explain concepts in simple terms without jargon. Keep it light and easy to follow.",
+            "depth": "Cover the basics and main takeaways. Explain concepts in simple terms and vocabulary without jargon. Keep it light and easy to follow.",
             "analysis": "Focus on 'what happened' and 'why it matters' at a surface level. Use relatable analogies and examples.",
             "language": "Simple, everyday language. Short sentences. Conversational tone as if explaining to a friend.",
             "audience": "General audience with no prior knowledge"
@@ -176,7 +176,7 @@ CRITICAL REQUIREMENTS:
 - Attribute information naturally ("According to Reuters...")
 - For {podcast['style'].upper()} level: DEPTH OF INSIGHT matters more than vocabulary complexity
 - Avoid unnecessary jargon
-- Avoid using the character *
+- Avoid using the character '*'
 - Stay objective and balanced
 - End with a clear conclusion
 

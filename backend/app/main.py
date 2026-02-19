@@ -47,11 +47,12 @@ app.add_middleware(
 async def startup_event():
     """Initialize MongoDB connection on startup"""
     try:
-        # Connect to MongoDB - this will set global db references
+        # Connect to MongoDB
         await connect_to_mongo()
         print("MongoDB connection successful!")
     except Exception as e:
         print(f"MongoDB connection failed: {e}")
+        # Don't raise - let the app try to continue
 
 
 @app.get("/")
@@ -61,7 +62,10 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    from app.db import db
+    if db is None:
+        return {"status": "degraded", "database": "disconnected"}
+    return {"status": "healthy", "database": "connected"}
 
 
 @app.on_event("shutdown")

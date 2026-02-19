@@ -1,18 +1,19 @@
 # app/controllers/user_controller.py
 from datetime import datetime
-from app.db import get_database  # Change this import
+from app.db import db, get_database
 from app.models.user import UserProfile, UserPreferences
 
 async def create_user_profile(firebase_user: dict) -> UserProfile:
     """Create a new user profile in MongoDB"""
-    db = get_database()  # Get database connection
+    # Use the global db for main thread operations
+    database = db if db is not None else get_database()
     
     firebase_uid = firebase_user["uid"]
     email = firebase_user.get("email")
     full_name = firebase_user.get("name", "")
 
     # Check if user exists
-    existing = await db["users"].find_one({"firebase_uid": firebase_uid})
+    existing = await database["users"].find_one({"firebase_uid": firebase_uid})
     if existing:
         raise Exception("User profile already exists")
 
@@ -25,16 +26,17 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
         "preferences": UserPreferences().dict(),
     }
 
-    result = await db["users"].insert_one(profile_data)
+    result = await database["users"].insert_one(profile_data)
     profile_data["id"] = str(result.inserted_id)
     
     return UserProfile(**profile_data)
 
 async def get_user_profile(firebase_uid: str):
     """Get user profile from MongoDB"""
-    db = get_database()  # Get database connection
+    # Use the global db for main thread operations
+    database = db if db is not None else get_database()
     
-    data = await db["users"].find_one({"firebase_uid": firebase_uid})
+    data = await database["users"].find_one({"firebase_uid": firebase_uid})
     if not data:
         return None
 

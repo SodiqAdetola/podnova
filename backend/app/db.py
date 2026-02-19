@@ -13,23 +13,26 @@ _thread_local = threading.local()
 
 async def connect_to_mongo():
     """Initialize MongoDB connection for main thread"""
-    global _client, _db
+    global _client, _db, client, db
     mongo_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     db_name = os.getenv("MONGODB_DB_NAME", "podnova")
     
-    _client = AsyncIOMotorClient(mongo_url)
-    _db = _client[db_name]
-    
-    # Test connection
-    await _client.admin.command('ping')
-    print(f"Connected to MongoDB: {db_name}")
-    
-    # Set global references for backward compatibility
-    global client, db
-    client = _client
-    db = _db
-    
-    return _db
+    try:
+        _client = AsyncIOMotorClient(mongo_url)
+        _db = _client[db_name]
+        
+        # Test connection
+        await _client.admin.command('ping')
+        print(f"Connected to MongoDB: {db_name}")
+        
+        # Set global references for backward compatibility
+        client = _client
+        db = _db
+        
+        return _db
+    except Exception as e:
+        print(f"Failed to connect to MongoDB: {e}")
+        raise
 
 
 async def close_mongo_connection():
@@ -68,9 +71,6 @@ def get_database():
         return _thread_local.db
     else:
         # We're in the main thread - return global db
-        if _db is None:
-            # This shouldn't happen if startup event ran properly
-            raise RuntimeError("Database not initialized. Call connect_to_mongo() first.")
         return _db
 
 
@@ -84,6 +84,5 @@ def cleanup_thread_local():
 
 
 # For backward compatibility - these will be set in connect_to_mongo()
-# Some existing code might still import db directly
 client = None
 db = None

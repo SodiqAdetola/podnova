@@ -1,5 +1,5 @@
-# backend/app/routes/podcasts_routes.py
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends, Query
+# app/routes/podcast_routes.py
+from fastapi import APIRouter, HTTPException, status, Body, Depends, Query
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from app.middleware.firebase_auth import verify_firebase_token
@@ -16,7 +16,7 @@ from app.controllers.podcasts_controller import (
 router = APIRouter()
 
 
-# -------------------- Pydantic Models --------------------
+# Pydantic models for request/response
 class CreatePodcastRequest(BaseModel):
     topic_id: str = Field(..., description="Topic ID to generate podcast from")
     voice: str = Field(default=PodcastVoice.CALM_FEMALE, description="Voice type")
@@ -34,29 +34,26 @@ class RegeneratePodcastRequest(BaseModel):
     focus_areas: Optional[List[str]] = None
 
 
-# -------------------- Routes --------------------
 @router.post("/generate")
 async def generate_podcast(
     request: CreatePodcastRequest,
-    background_tasks: BackgroundTasks,
     firebase_user=Depends(verify_firebase_token)
 ):
     """
     Generate a new podcast from a topic
     
     This is an async operation - the podcast will be generated in the background.
-    The API returns immediately with a pending status.
-    Check the /podcasts/library endpoint or poll the specific podcast for updates.
+    Check the /podcasts/library endpoint or the specific podcast status for updates.
     
     Requires Firebase authentication.
     """
     try:
+        # Get user ID from Firebase token
         user_uid = firebase_user["uid"]
         
         result = await create_podcast(
             user_id=user_uid,
             topic_id=request.topic_id,
-            background_tasks=background_tasks,
             voice=request.voice,
             style=request.style,
             length_minutes=request.length_minutes,
@@ -165,7 +162,6 @@ async def get_podcast_details(
 async def regenerate_podcast_endpoint(
     podcast_id: str,
     request: RegeneratePodcastRequest,
-    background_tasks: BackgroundTasks,
     firebase_user=Depends(verify_firebase_token)
 ):
     """
@@ -198,7 +194,6 @@ async def regenerate_podcast_endpoint(
         
         result = await regenerate_podcast(
             podcast_id=podcast_id,
-            background_tasks=background_tasks,
             voice=request.voice,
             style=request.style,
             length_minutes=request.length_minutes,

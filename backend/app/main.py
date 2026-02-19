@@ -5,15 +5,13 @@ from app.routes import (
     user_routes,
     topics_routes,
     podcasts_routes,
+    # discussion_routes,
+    # auth,  # only for explicit auth routes
 )
 import firebase_admin
 from firebase_admin import credentials
 import os
 import json
-
-from app.controllers.podcasts_controller import shutdown_cleanup
-from app.db import connect_to_mongo, close_mongo_connection
-
 
 # Initialise Firebase Admin SDK
 if not firebase_admin._apps:
@@ -42,40 +40,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 async def startup_event():
-    """Initialize MongoDB connection on startup"""
+    """Test MongoDB connection on startup"""
     try:
-        # Connect to MongoDB
-        await connect_to_mongo()
+        from app.db import client
+        await client.admin.command('ping')
         print("MongoDB connection successful!")
     except Exception as e:
         print(f"MongoDB connection failed: {e}")
-        # Don't raise - let the app try to continue
-
 
 @app.get("/")
 def root():
     return {"message": "Welcome to PodNova Backend!"}
 
-
 @app.get("/health")
 def health_check():
-    from app.db import db
-    if db is None:
-        return {"status": "degraded", "database": "disconnected"}
-    return {"status": "healthy", "database": "connected"}
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up connections on shutdown"""
-    await shutdown_cleanup()
-    await close_mongo_connection()
-    print("Shutdown complete")
-
+    return {"status": "healthy"}
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])
 app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])
 app.include_router(podcasts_routes.router, prefix="/podcasts", tags=["podcasts"])
+# app.include_router(discussion_routes.router, prefix="/discussions", tags=["discussions"])
+# app.include_router(auth.router, prefix="/auth", tags=["auth"])

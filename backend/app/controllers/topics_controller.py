@@ -1,30 +1,27 @@
 # app/controllers/topics_controller.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from bson import ObjectId
-from app.db import db, get_database  # Import both
+from app.db import db
 
 
 async def get_all_categories() -> List[Dict]:
     """
     Get all categories with their active topic counts and trending info
     """
-    # Use the global db for main thread operations
-    database = db if db is not None else get_database()
-    
     categories = ["technology", "finance", "politics"]
     result = []
     
     for category in categories:
         # Count active topics
-        topic_count = await database["topics"].count_documents({
+        topic_count = await db["topics"].count_documents({
             "category": category,
             "status": "active",
             "has_title": True
         })
         
         # Get most recent topic for trending info
-        recent_topic = await database["topics"].find_one(
+        recent_topic = await db["topics"].find_one(
             {
                 "category": category,
                 "status": "active",
@@ -55,9 +52,6 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
         category: Category name
         sort_by: Sorting option (latest, reliable, most_discussed)
     """
-    # Use the global db for main thread operations
-    database = db if db is not None else get_database()
-    
     # Base query
     query = {
         "category": category,
@@ -76,7 +70,7 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
         sort = [("last_updated", -1)]
     
     # Fetch topics
-    cursor = database["topics"].find(query).sort(sort).limit(50)
+    cursor = db["topics"].find(query).sort(sort).limit(50)
     topics = []
     
     async for topic in cursor:
@@ -94,6 +88,7 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
             "time_ago": time_ago,
             "category": topic["category"],
             "image_url": topic.get("image_url")
+
         })
     
     return topics
@@ -106,11 +101,8 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
     Args:
         topic_id: Topic ID
     """
-    # Use the global db for main thread operations
-    database = db if db is not None else get_database()
-    
     try:
-        topic = await database["topics"].find_one({"_id": ObjectId(topic_id)})
+        topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
     except:
         return None
     
@@ -119,7 +111,7 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
     
     # Get all articles for this topic
     articles = []
-    cursor = database["articles"].find({
+    cursor = db["articles"].find({
         "_id": {"$in": topic.get("article_ids", [])}
     }).sort("published_date", -1)
     
@@ -133,6 +125,7 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
             "published_date": article["published_date"].isoformat(),
             "word_count": article.get("word_count", 0),
             "image_url": topic.get("image_url")
+
         })
     
     # Format time ago
@@ -158,6 +151,7 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
         "tags": tags,
         "has_podcast": False,
         "image_url": topic.get("image_url")
+
     }
 
 

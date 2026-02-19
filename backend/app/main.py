@@ -5,8 +5,6 @@ from app.routes import (
     user_routes,
     topics_routes,
     podcasts_routes,
-    # discussion_routes,
-    # auth,  # only for explicit auth routes
 )
 import firebase_admin
 from firebase_admin import credentials
@@ -14,6 +12,7 @@ import os
 import json
 
 from app.controllers.podcasts_controller import shutdown_cleanup
+from app.db import connect_to_mongo, close_mongo_connection
 
 
 # Initialise Firebase Admin SDK
@@ -26,11 +25,11 @@ if not firebase_admin._apps:
             firebase_admin.initialize_app(cred, {
                 "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
             })
-            print("Firebase initialized successfully")
+            print("✅ Firebase initialized successfully")
         else:
-            print("Firebase key not found in environment variables")
+            print("❌ Firebase key not found in environment variables")
     except Exception as e:
-        print(f"Firebase initialization failed: {e}")
+        print(f"❌ Firebase initialization failed: {e}")
 
 app = FastAPI(title="PodNova Backend")
 
@@ -43,30 +42,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.on_event("startup")
 async def startup_event():
-    """Test MongoDB connection on startup"""
+    """Initialize MongoDB connection on startup"""
     try:
-        from app.db import client
-        await client.admin.command('ping')
-        print("MongoDB connection successful!")
+        # Connect to MongoDB
+        await connect_to_mongo()
+        print("✅ MongoDB connection successful!")
     except Exception as e:
-        print(f"MongoDB connection failed: {e}")
+        print(f"❌ MongoDB connection failed: {e}")
+
 
 @app.get("/")
 def root():
     return {"message": "Welcome to PodNova Backend!"}
 
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
+    """Clean up connections on shutdown"""
     await shutdown_cleanup()
+    await close_mongo_connection()
+    print("✅ Shutdown complete")
+
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])
 app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])
 app.include_router(podcasts_routes.router, prefix="/podcasts", tags=["podcasts"])
-# app.include_router(discussion_routes.router, prefix="/discussions", tags=["discussions"])
-# app.include_router(auth.router, prefix="/auth", tags=["auth"])

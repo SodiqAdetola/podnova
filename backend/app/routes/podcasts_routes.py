@@ -1,4 +1,4 @@
-# app/routes/podcast_routes.py
+# backend/app/routes/podcasts_routes.py
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends, Query
 from typing import Optional, List
 from pydantic import BaseModel, Field

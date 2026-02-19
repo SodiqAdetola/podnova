@@ -4,10 +4,11 @@ PodNova Podcast Generation Controller
 Orchestrates podcast generation workflow using service layer
 """
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Set
 from bson import ObjectId
 from enum import Enum
 from fastapi import BackgroundTasks
+import asyncio
 
 from app.db import db
 from app.services.script_service import ScriptService
@@ -66,12 +67,16 @@ audio_service = AudioService()
 storage_service = StorageService()
 user_service = UserService()
 
+# -------------------- Background Task Tracking --------------------
+# Store background tasks to prevent garbage collection
+_background_tasks: Set[asyncio.Task] = set()
+
 
 # -------------------- Main Functions --------------------
 async def create_podcast(
     user_id: str,
     topic_id: str,
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks,  # Keep parameter for compatibility
     voice: Optional[str] = None,
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
@@ -128,8 +133,9 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
 
-    # ✅ FIXED: Schedule generation using sync wrapper
-    background_tasks.add_task(_generate_podcast_sync, podcast_id)
+    task = asyncio.create_task(_generate_podcast_async(podcast_id))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return {
         "id": podcast_id,
@@ -142,25 +148,6 @@ async def create_podcast(
     }
 
 
-# -------------------- Sync Wrapper for Background Tasks --------------------
-def _generate_podcast_sync(podcast_id: str):
-    """
-    Synchronous wrapper for background task
-    FastAPI BackgroundTasks requires sync functions, not async
-    This creates a new event loop to run the async generation
-    """
-    import asyncio
-    
-    # Create new event loop for background task
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(_generate_podcast_async(podcast_id))
-    finally:
-        loop.close()
-
-
 # -------------------- Async Podcast Generation --------------------
 async def _generate_podcast_async(podcast_id: str):
     """
@@ -170,20 +157,26 @@ async def _generate_podcast_async(podcast_id: str):
     try:
         print(f"🎙️  Starting podcast generation: {podcast_id}")
         
+        # Get podcast details first
+        podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+        if not podcast:
+            print(f"Podcast {podcast_id} not found")
+            return
+        
         # Step 1: Generate script
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         script = await script_service.generate_script(podcast_id)
-        print(f"✅ Script generated ({len(script)} chars)")
+        print(f"Script generated ({len(script)} chars)")
 
         # Step 2: Generate audio
-        await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_AUDIO, {"script": script})
+        await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_AUDIO)
         audio_data, duration = await _generate_audio_for_podcast(podcast_id, script)
-        print(f"✅ Audio generated ({duration}s)")
+        print(f"Audio generated ({duration}s)")
 
         # Step 3: Upload to storage
-        await _update_podcast_status(podcast_id, PodcastStatus.UPLOADING, {"duration_seconds": duration})
+        await _update_podcast_status(podcast_id, PodcastStatus.UPLOADING)
         audio_url, transcript_url = await storage_service.upload_podcast_files(podcast_id, audio_data, script)
-        print(f"✅ Uploaded to Firebase")
+        print(f"Uploaded to Firebase")
 
         # Step 4: Mark as completed
         credits_used = max(1, int(duration / 60))
@@ -194,14 +187,18 @@ async def _generate_podcast_async(podcast_id: str):
                 "audio_url": audio_url,
                 "transcript_url": transcript_url,
                 "credits_used": credits_used,
+                "duration_seconds": duration,
                 "completed_at": datetime.now(),
             },
         )
         
-        print(f"✅ Podcast generation complete: {podcast_id}")
+        print(f"Podcast generation complete: {podcast_id}")
 
     except Exception as e:
-        print(f"❌ Podcast generation failed: {str(e)}")
+        print(f"Podcast generation failed: {str(e)}")
+        # Log the full exception for debugging
+        import traceback
+        traceback.print_exc()
         await _update_podcast_status(podcast_id, PodcastStatus.FAILED, {"error_message": str(e)})
 
 
@@ -243,6 +240,7 @@ async def get_user_podcasts(
     async for podcast in cursor:
         podcasts.append({
             "id": str(podcast["_id"]),
+            "user_id": podcast["user_id"],
             "topic_id": str(podcast["topic_id"]),
             "topic_title": podcast["topic_title"],
             "category": podcast["category"],
@@ -344,8 +342,9 @@ async def regenerate_podcast(
     # Apply updates in DB
     await db["podcasts"].update_one({"_id": ObjectId(podcast_id)}, {"$set": update_fields})
 
-    # ✅ FIXED: Schedule regeneration using sync wrapper
-    background_tasks.add_task(_generate_podcast_sync, podcast_id)
+    task = asyncio.create_task(_generate_podcast_async(podcast_id))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return {
         "id": podcast_id,

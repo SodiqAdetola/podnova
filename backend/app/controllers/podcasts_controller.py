@@ -18,6 +18,7 @@ from app.services.user_service import UserService
 from fastapi import BackgroundTasks
 
 
+# -------------------- Enums --------------------
 class PodcastStyle(str, Enum):
     CASUAL = "casual"
     STANDARD = "standard"
@@ -43,7 +44,7 @@ class PodcastVoice(str, Enum):
     PROFESSIONAL_MALE = "professional_male"
 
 
-# Voice configuration mapping
+# -------------------- Configs --------------------
 VOICE_CONFIGS = {
     PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",
     PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Achird",
@@ -53,73 +54,52 @@ VOICE_CONFIGS = {
     PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Alnilam",
 }
 
-# Map user preferences to podcast settings
-PODCAST_LENGTH_MAP = {
-    "short": 5,
-    "medium": 10,
-    "long": 20
-}
-
+PODCAST_LENGTH_MAP = {"short": 5, "medium": 10, "long": 20}
 TONE_TO_STYLE_MAP = {
     "factual": PodcastStyle.STANDARD,
     "casual": PodcastStyle.CASUAL,
     "analytical": PodcastStyle.ADVANCED,
-    "expert": PodcastStyle.EXPERT
+    "expert": PodcastStyle.EXPERT,
 }
 
-# Initialize services
+# -------------------- Services --------------------
 script_service = ScriptService()
 audio_service = AudioService()
 storage_service = StorageService()
 user_service = UserService()
 
 
-
+# -------------------- Main Functions --------------------
 async def create_podcast(
     user_id: str,
     topic_id: str,
-    background_tasks: BackgroundTasks,  # ← ADD THIS PARAMETER
+    background_tasks: BackgroundTasks,
     voice: Optional[str] = None,
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
     custom_prompt: Optional[str] = None,
-    focus_areas: Optional[List[str]] = None
+    focus_areas: Optional[List[str]] = None,
 ) -> Dict:
-    """
-    Create a new podcast generation job
-    Uses user preferences as defaults if parameters not provided
-    """
-    # Fetch user profile for defaults
-    user_profile = await user_service.get_user_profile(user_id)
+    """Create a new podcast and schedule generation in background"""
     
-    # Apply user preferences as defaults
+    # Fetch user preferences
+    user_profile = await user_service.get_user_profile(user_id)
     if user_profile:
         prefs = user_profile.preferences
-        
-        if length_minutes is None:
-            length_minutes = PODCAST_LENGTH_MAP.get(prefs.default_podcast_length, 5)
-        
-        if style is None:
-            style = TONE_TO_STYLE_MAP.get(prefs.default_tone, PodcastStyle.STANDARD)
-        
-        if voice is None:
-            voice = PodcastVoice.CALM_FEMALE
-    else:
-        # Fallback defaults
+        length_minutes = length_minutes or PODCAST_LENGTH_MAP.get(prefs.default_podcast_length, 5)
+        style = style or TONE_TO_STYLE_MAP.get(prefs.default_tone, PodcastStyle.STANDARD)
         voice = voice or PodcastVoice.CALM_FEMALE
-        style = style or PodcastStyle.STANDARD
+    else:
         length_minutes = length_minutes or 5
-    
+        style = style or PodcastStyle.STANDARD
+        voice = voice or PodcastVoice.CALM_FEMALE
+
     # Verify topic exists
-    try:
-        topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
-    except:
-        raise ValueError("Invalid topic ID")
-    
+    topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
     if not topic:
         raise ValueError("Topic not found")
-    
-    # Create podcast document
+
+    # Insert podcast document
     podcast_doc = {
         "user_id": user_id,
         "topic_id": ObjectId(topic_id),
@@ -139,81 +119,39 @@ async def create_podcast(
         "audio_url": None,
         "transcript_url": None,
         "duration_seconds": None,
-        "error_message": None
+        "error_message": None,
     }
-    
     result = await db["podcasts"].insert_one(podcast_doc)
-    podcast_id = result.inserted_id
-    
-    # Uses BackgroundTasks instead of asyncio.create_task
-    background_tasks.add_task(_generate_podcast_sync, str(podcast_id))
-    
+    podcast_id = str(result.inserted_id)
+
+    # Schedule async generation in the existing loop
+    background_tasks.add_task(_generate_podcast_async, podcast_id)
+
     return {
-        "id": str(podcast_id),
+        "id": podcast_id,
         "status": PodcastStatus.PENDING,
         "topic_id": topic_id,
         "topic_title": topic["title"],
         "estimated_time_seconds": length_minutes * 60,
         "estimated_credits": length_minutes,
-        "message": "Podcast generation started. Check the Library tab for updates."
+        "message": "Podcast generation started. Check the Library tab for updates.",
     }
 
 
-
-def _generate_podcast_sync(podcast_id: str):
-    """
-    Synchronous wrapper for background task
-    FastAPI BackgroundTasks requires sync functions
-    """
-    import asyncio
-    
-    # Create new event loop for background task
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(_generate_podcast_async(podcast_id))
-    finally:
-        loop.close()
-
-
+# -------------------- Async Podcast Generation --------------------
 async def _generate_podcast_async(podcast_id: str):
-    """Async task to generate podcast script and audio"""
+    """Generates podcast script, audio, uploads files, updates status"""
     try:
-        # Update status: generating script
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
-        
-        # Generate script using script service
         script = await script_service.generate_script(podcast_id)
-        
-        # Update status: generating audio
-        await _update_podcast_status(
-            podcast_id, 
-            PodcastStatus.GENERATING_AUDIO,
-            {"script": script}
-        )
-        
-        # Generate audio using audio service
+
+        await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_AUDIO, {"script": script})
         audio_data, duration = await _generate_audio_for_podcast(podcast_id, script)
-        
-        # Update status: uploading
-        await _update_podcast_status(
-            podcast_id,
-            PodcastStatus.UPLOADING,
-            {"duration_seconds": duration}
-        )
-        
-        # Upload to Firebase using storage service
-        audio_url, transcript_url = await storage_service.upload_podcast_files(
-            podcast_id,
-            audio_data,
-            script
-        )
-        
-        # Calculate credits used
+
+        await _update_podcast_status(podcast_id, PodcastStatus.UPLOADING, {"duration_seconds": duration})
+        audio_url, transcript_url = await storage_service.upload_podcast_files(podcast_id, audio_data, script)
+
         credits_used = max(1, int(duration / 60))
-        
-        # Mark as completed
         await _update_podcast_status(
             podcast_id,
             PodcastStatus.COMPLETED,
@@ -221,49 +159,31 @@ async def _generate_podcast_async(podcast_id: str):
                 "audio_url": audio_url,
                 "transcript_url": transcript_url,
                 "credits_used": credits_used,
-                "completed_at": datetime.now()
-            }
+                "completed_at": datetime.now(),
+            },
         )
-        
+
     except Exception as e:
-        # Mark as failed
-        await _update_podcast_status(
-            podcast_id,
-            PodcastStatus.FAILED,
-            {"error_message": str(e)}
-        )
+        await _update_podcast_status(podcast_id, PodcastStatus.FAILED, {"error_message": str(e)})
 
 
-async def _update_podcast_status(
-    podcast_id: str,
-    status: PodcastStatus,
-    additional_fields: Optional[Dict] = None
-):
+async def _update_podcast_status(podcast_id: str, status: PodcastStatus, additional_fields: Optional[Dict] = None):
     """Helper to update podcast status"""
-    update_fields = {
-        "status": status,
-        "updated_at": datetime.now()
-    }
-    
+    update_fields = {"status": status, "updated_at": datetime.now()}
     if additional_fields:
         update_fields.update(additional_fields)
-    
-    await db["podcasts"].update_one(
-        {"_id": ObjectId(podcast_id)},
-        {"$set": update_fields}
-    )
+
+    await db["podcasts"].update_one({"_id": ObjectId(podcast_id)}, {"$set": update_fields})
 
 
 async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[bytes, int]:
-    """Generate audio for podcast using audio service"""
+    """Generate audio using audio service"""
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]
-    
-    # Get user's speaking rate preference
+
     user_profile = await user_service.get_user_profile(podcast["user_id"])
     speaking_rate = user_service.calculate_speaking_rate(user_profile)
-    
-    # Generate audio
+
     return await audio_service.generate_audio(script, voice_name, speaking_rate)
 
 
@@ -340,23 +260,27 @@ async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
 
 
 
+# -------------------- Regenerate Podcast --------------------
 async def regenerate_podcast(
     podcast_id: str,
-    background_tasks: BackgroundTasks,  # ← ADD THIS PARAMETER
+    background_tasks: BackgroundTasks,
     voice: Optional[str] = None,
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
     custom_prompt: Optional[str] = None,
-    focus_areas: Optional[List[str]] = None
+    focus_areas: Optional[List[str]] = None,
 ) -> Dict:
-    """Regenerate an existing podcast with updated settings"""
+    """
+    Regenerate an existing podcast with updated settings.
+    Schedules background generation task.
+    """
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     if not podcast:
         raise ValueError("Podcast not found")
-    
-    # Update settings if provided
+
+    # Prepare updated fields
     update_fields = {"updated_at": datetime.now(), "status": PodcastStatus.PENDING}
-    
+
     if voice:
         update_fields["voice"] = voice
     if style:
@@ -368,7 +292,7 @@ async def regenerate_podcast(
         update_fields["custom_prompt"] = custom_prompt
     if focus_areas is not None:
         update_fields["focus_areas"] = focus_areas
-    
+
     # Clear previous results
     update_fields.update({
         "script": None,
@@ -376,17 +300,15 @@ async def regenerate_podcast(
         "transcript_url": None,
         "duration_seconds": None,
         "error_message": None,
-        "completed_at": None
+        "completed_at": None,
     })
-    
-    await db["podcasts"].update_one(
-        {"_id": ObjectId(podcast_id)},
-        {"$set": update_fields}
-    )
-    
-    # Uses BackgroundTasks instead of asyncio.create_task
-    background_tasks.add_task(_generate_podcast_sync, podcast_id)
-    
+
+    # Apply updates in DB
+    await db["podcasts"].update_one({"_id": ObjectId(podcast_id)}, {"$set": update_fields})
+
+    # Schedule async podcast generation
+    background_tasks.add_task(_generate_podcast_async, podcast_id)
+
     return {
         "id": podcast_id,
         "status": PodcastStatus.PENDING,
@@ -394,22 +316,21 @@ async def regenerate_podcast(
     }
 
 
-
+# -------------------- Delete Podcast --------------------
 async def delete_podcast(podcast_id: str, user_id: str) -> bool:
-    """Delete a podcast (user must own it)"""
-    podcast = await db["podcasts"].find_one({
-        "_id": ObjectId(podcast_id),
-        "user_id": user_id
-    })
-    
+    """
+    Delete a podcast. Ensures user owns the podcast.
+    Deletes audio from storage and removes DB entry.
+    """
+    podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id), "user_id": user_id})
     if not podcast:
         return False
-    
-    # Delete from Firebase Storage if exists
+
+    # Delete files from storage if audio exists
     if podcast.get("audio_url"):
         await storage_service.delete_podcast_files(podcast_id)
-    
-    # Delete from MongoDB
+
+    # Remove from MongoDB
     await db["podcasts"].delete_one({"_id": ObjectId(podcast_id)})
-    
+
     return True

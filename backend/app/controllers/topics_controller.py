@@ -2,13 +2,15 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from bson import ObjectId
-from app.db import db
+from app.db import get_database  # Change this import
 
 
 async def get_all_categories() -> List[Dict]:
     """
     Get all categories with their active topic counts and trending info
     """
+    db = get_database()  # Get database connection
+    
     categories = ["technology", "finance", "politics"]
     result = []
     
@@ -52,6 +54,8 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
         category: Category name
         sort_by: Sorting option (latest, reliable, most_discussed)
     """
+    db = get_database()  # Get database connection
+    
     # Base query
     query = {
         "category": category,
@@ -88,7 +92,6 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
             "time_ago": time_ago,
             "category": topic["category"],
             "image_url": topic.get("image_url")
-
         })
     
     return topics
@@ -101,6 +104,8 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
     Args:
         topic_id: Topic ID
     """
+    db = get_database()  # Get database connection
+    
     try:
         topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
     except:
@@ -125,7 +130,6 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
             "published_date": article["published_date"].isoformat(),
             "word_count": article.get("word_count", 0),
             "image_url": topic.get("image_url")
-
         })
     
     # Format time ago
@@ -151,7 +155,6 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
         "tags": tags,
         "has_podcast": False,
         "image_url": topic.get("image_url")
-
     }
 
 

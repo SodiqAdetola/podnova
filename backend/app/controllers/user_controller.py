@@ -1,10 +1,12 @@
 # app/controllers/user_controller.py
 from datetime import datetime
-from app.db import db
+from app.db import get_database  # Change this import
 from app.models.user import UserProfile, UserPreferences
 
 async def create_user_profile(firebase_user: dict) -> UserProfile:
     """Create a new user profile in MongoDB"""
+    db = get_database()  # Get database connection
+    
     firebase_uid = firebase_user["uid"]
     email = firebase_user.get("email")
     full_name = firebase_user.get("name", "")
@@ -30,6 +32,8 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
 
 async def get_user_profile(firebase_uid: str):
     """Get user profile from MongoDB"""
+    db = get_database()  # Get database connection
+    
     data = await db["users"].find_one({"firebase_uid": firebase_uid})
     if not data:
         return None

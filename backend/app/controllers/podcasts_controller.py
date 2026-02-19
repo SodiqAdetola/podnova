@@ -170,7 +170,7 @@ def _generate_podcast_sync_wrapper(podcast_id: str):
         # Run the entire generation process in this loop
         loop.run_until_complete(_generate_podcast_complete(podcast_id))
     except Exception as e:
-        print(f"❌ Fatal error in podcast generation thread for {podcast_id}: {str(e)}")
+        print(f"Fatal error in podcast generation thread for {podcast_id}: {str(e)}")
         import traceback
         traceback.print_exc()
     finally:
@@ -192,7 +192,7 @@ async def _generate_podcast_complete(podcast_id: str):
     try:
         # Get thread-local database connection
         db = get_database()
-        print(f"🎙️  Starting podcast generation in thread: {podcast_id}")
+        print(f"Starting podcast generation in thread: {podcast_id}")
         
         # Create fresh service instances for this thread
         script_service = ScriptService()
@@ -203,13 +203,13 @@ async def _generate_podcast_complete(podcast_id: str):
         # Get podcast details
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
         if not podcast:
-            print(f"❌ Podcast {podcast_id} not found")
+            print(f"Podcast {podcast_id} not found")
             return
         
         # Step 1: Generate script
         await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.GENERATING_SCRIPT)
         script = await script_service.generate_script(podcast_id)
-        print(f"✅ Script generated ({len(script)} chars)")
+        print(f"Script generated ({len(script)} chars)")
 
         # Step 2: Generate audio
         await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.GENERATING_AUDIO)
@@ -220,12 +220,12 @@ async def _generate_podcast_complete(podcast_id: str):
         speaking_rate = user_service.calculate_speaking_rate(user_profile)
         
         audio_data, duration = await audio_service.generate_audio(script, voice_name, speaking_rate)
-        print(f"✅ Audio generated ({duration}s)")
+        print(f"Audio generated ({duration}s)")
 
         # Step 3: Upload to storage
         await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.UPLOADING)
         audio_url, transcript_url = await storage_service.upload_podcast_files(podcast_id, audio_data, script)
-        print(f"✅ Uploaded to Firebase")
+        print(f"Uploaded to Firebase")
 
         # Step 4: Mark as completed
         credits_used = max(1, int(duration / 60))
@@ -242,10 +242,10 @@ async def _generate_podcast_complete(podcast_id: str):
             },
         )
         
-        print(f"✅ Podcast generation complete: {podcast_id}")
+        print(f"Podcast generation complete: {podcast_id}")
 
     except Exception as e:
-        print(f"❌ Podcast generation failed: {str(e)}")
+        print(f"Podcast generation failed: {str(e)}")
         import traceback
         traceback.print_exc()
         if 'db' in locals():

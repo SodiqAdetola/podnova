@@ -25,11 +25,11 @@ if not firebase_admin._apps:
             firebase_admin.initialize_app(cred, {
                 "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
             })
-            print("✅ Firebase initialized successfully")
+            print("Firebase initialized successfully")
         else:
-            print("❌ Firebase key not found in environment variables")
+            print("Firebase key not found in environment variables")
     except Exception as e:
-        print(f"❌ Firebase initialization failed: {e}")
+        print(f"Firebase initialization failed: {e}")
 
 app = FastAPI(title="PodNova Backend")
 
@@ -47,11 +47,11 @@ app.add_middleware(
 async def startup_event():
     """Initialize MongoDB connection on startup"""
     try:
-        # Connect to MongoDB
+        # Connect to MongoDB - this will set global db references
         await connect_to_mongo()
-        print("✅ MongoDB connection successful!")
+        print("MongoDB connection successful!")
     except Exception as e:
-        print(f"❌ MongoDB connection failed: {e}")
+        print(f"MongoDB connection failed: {e}")
 
 
 @app.get("/")
@@ -69,7 +69,7 @@ async def shutdown_event():
     """Clean up connections on shutdown"""
     await shutdown_cleanup()
     await close_mongo_connection()
-    print("✅ Shutdown complete")
+    print("Shutdown complete")
 
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])

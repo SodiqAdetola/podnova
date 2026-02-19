@@ -15,6 +15,8 @@ from app.services.audio_service import AudioService
 from app.services.storage_service import StorageService
 from app.services.user_service import UserService
 
+from fastapi import BackgroundTasks
+
 
 class PodcastStyle(str, Enum):
     CASUAL = "casual"
@@ -72,9 +74,11 @@ storage_service = StorageService()
 user_service = UserService()
 
 
+
 async def create_podcast(
     user_id: str,
     topic_id: str,
+    background_tasks: BackgroundTasks,  # ← ADD THIS PARAMETER
     voice: Optional[str] = None,
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
@@ -141,8 +145,8 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = result.inserted_id
     
-    # Start async generation task
-    asyncio.create_task(_generate_podcast_async(str(podcast_id)))
+    # Uses BackgroundTasks instead of asyncio.create_task
+    background_tasks.add_task(_generate_podcast_sync, str(podcast_id))
     
     return {
         "id": str(podcast_id),
@@ -153,6 +157,24 @@ async def create_podcast(
         "estimated_credits": length_minutes,
         "message": "Podcast generation started. Check the Library tab for updates."
     }
+
+
+
+def _generate_podcast_sync(podcast_id: str):
+    """
+    Synchronous wrapper for background task
+    FastAPI BackgroundTasks requires sync functions
+    """
+    import asyncio
+    
+    # Create new event loop for background task
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(_generate_podcast_async(podcast_id))
+    finally:
+        loop.close()
 
 
 async def _generate_podcast_async(podcast_id: str):
@@ -317,8 +339,10 @@ async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
     }
 
 
+
 async def regenerate_podcast(
     podcast_id: str,
+    background_tasks: BackgroundTasks,  # ← ADD THIS PARAMETER
     voice: Optional[str] = None,
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
@@ -360,14 +384,15 @@ async def regenerate_podcast(
         {"$set": update_fields}
     )
     
-    # Start regeneration
-    asyncio.create_task(_generate_podcast_async(podcast_id))
+    # Uses BackgroundTasks instead of asyncio.create_task
+    background_tasks.add_task(_generate_podcast_sync, podcast_id)
     
     return {
         "id": podcast_id,
         "status": PodcastStatus.PENDING,
         "message": "Podcast regeneration started"
     }
+
 
 
 async def delete_podcast(podcast_id: str, user_id: str) -> bool:

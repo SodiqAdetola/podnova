@@ -288,36 +288,55 @@ class ClusteringService:
             
             combined_articles = "\n---\n".join(article_texts)
             
-            prompt = f"""You are analyzing multiple news articles on the same topic to create a comprehensive podcast topic.
+            prompt = f"""You are an AI news analyst tasked with creating a balanced, informative podcast topic by synthesizing information from multiple news articles covering the same story.
 
 Category: {topic['category'].upper()}
+Number of articles analyzed: {len(articles)}
 
-Articles:
+Below are the article excerpts (titles and content) from various sources:
+
 {combined_articles}
 
-Based on these {len(articles)} articles from different sources, generate:
+Your task is to produce a JSON object containing a title, summary, key insights, and a confidence score that will serve as the foundation for a podcast episode. The podcast aims to inform listeners with a comprehensive, unbiased overview.
 
-1. A concise, engaging topic title (max 10 words) that captures the core story
-2. A brief summary (2-3 sentences) that synthesizes the key narrative across all sources
-3. Exactly 3-5 key insights as bullet points that highlight the most important facts, developments, or implications
+Follow these steps internally before generating the output:
+1. **Identify core narrative**: Determine the central story that all articles revolve around.
+2. **Detect consensus and conflicts**: Note points where sources agree, and highlight any significant disagreements or different angles.
+3. **Extract key facts**: Pull out the most important facts, developments, statistics, quotes, and implications.
+4. **Synthesize across sources**: Combine information from all articles to create a cohesive picture, avoiding over-reliance on a single source.
+5. **Assess confidence**: Based on factors such as source authority, consistency across articles, number of sources, recency, and any contradictions, assign a confidence score (0-100%) reflecting how reliable and well-established the synthesized narrative is.
 
-Format your response as JSON:
+Now, generate a JSON object with the following fields:
+
+- **title** (string): A concise, engaging, and newsworthy title (maximum 10 words). It should capture the core story without sensationalism.
+- **summary** (string): A 2-3 sentence summary that synthesizes the key narrative across all sources. It should include the main event, context, and significance.
+- **key_insights** (array of strings): Exactly 3-5 bullet points highlighting the most important facts, developments, or implications. Each insight should be a complete sentence, focus on facts (not opinions), and be distinct from the others. If sources conflict, you may note the different perspectives or choose the most supported view, but avoid simply listing "Source A says X, Source B says Y".
+- **confidence_score** (integer): A number from 0 to 100 representing the confidence in the synthesized information. Base this on:
+  - **Source authority** (e.g., major news outlets vs. blogs)
+  - **Consistency** (how much the sources agree)
+  - **Number of sources** (more sources generally increase confidence)
+  - **Recency** (prefer recent articles)
+  - **Contradictions** (lower confidence if major conflicts exist)
+
+Output format requirements:
+- The JSON must be valid and parseable.
+- Do not include any additional text outside the JSON.
+- Ensure the JSON keys are exactly as specified: "title", "summary", "key_insights", "confidence_score".
+
+Example output:
 {{
-  "title": "Your topic title here",
-  "summary": "Your 2-3 sentence summary here",
+  "title": "Global Climate Summit Reaches Historic Deforestation Deal",
+  "summary": "Leaders from over 100 nations pledged to halt deforestation by 2030 at the COP26 climate summit, backed by $19 billion in public and private funds. Environmental groups welcome the commitment but question enforcement mechanisms.",
   "key_insights": [
-    "First key insight",
-    "Second key insight",
-    "Third key insight"
-  ]
+    "More than 100 countries, representing 85% of the world's forests, signed the pledge.",
+    "The funding package includes $12 billion from public sources and $7 billion from private investors.",
+    "Critics point out that previous similar pledges, such as the 2014 New York Declaration on Forests, failed to meet targets.",
+    "Indigenous rights groups demand inclusion in decision-making processes for forest conservation."
+  ],
+  "confidence_score": 85
 }}
 
-Requirements:
-- Title should be professional, clear, and newsworthy
-- Summary should synthesize information from ALL sources, not just one
-- Key insights should highlight facts, not opinions
-- Focus on what's new, important, and impactful
-- Avoid clickbait or sensationalism"""
+Now produce the JSON output for the provided articles."""
 
             try:
                 response = client.models.generate_content(

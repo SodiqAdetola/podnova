@@ -9,6 +9,8 @@ from bson import ObjectId
 from enum import Enum
 from fastapi import BackgroundTasks
 import asyncio
+import concurrent.futures
+import threading
 
 from app.db import db
 from app.services.script_service import ScriptService
@@ -67,16 +69,18 @@ audio_service = AudioService()
 storage_service = StorageService()
 user_service = UserService()
 
-# -------------------- Background Task Tracking --------------------
-# Store background tasks to prevent garbage collection
-_background_tasks: Set[asyncio.Task] = set()
+# -------------------- Thread Pool for Background Tasks --------------------
+# Create a thread pool executor for CPU-intensive tasks
+_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+# Track background tasks
+_background_tasks: Set[concurrent.futures.Future] = set()
 
 
 # -------------------- Main Functions --------------------
 async def create_podcast(
     user_id: str,
     topic_id: str,
-    background_tasks: BackgroundTasks,  # Keep parameter for compatibility
+    background_tasks: BackgroundTasks,
     voice: Optional[str] = None,
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
@@ -133,9 +137,15 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
 
-    task = asyncio.create_task(_generate_podcast_async(podcast_id))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    # ✅ FIXED: Run generation in thread pool to free up event loop
+    loop = asyncio.get_running_loop()
+    future = loop.run_in_executor(
+        _thread_pool, 
+        _run_podcast_generation_sync, 
+        podcast_id
+    )
+    _background_tasks.add(future)
+    future.add_done_callback(_background_tasks.discard)
 
     return {
         "id": podcast_id,
@@ -148,11 +158,29 @@ async def create_podcast(
     }
 
 
+# -------------------- Synchronous Podcast Generation (Runs in Thread) --------------------
+def _run_podcast_generation_sync(podcast_id: str):
+    """
+    Synchronous wrapper that runs in a thread pool
+    This prevents blocking the main event loop
+    """
+    # Create a new event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(_generate_podcast_async(podcast_id))
+    except Exception as e:
+        print(f"❌ Thread error for podcast {podcast_id}: {str(e)}")
+    finally:
+        loop.close()
+
+
 # -------------------- Async Podcast Generation --------------------
 async def _generate_podcast_async(podcast_id: str):
     """
     Generates podcast script, audio, uploads files, updates status
-    This runs in the background after the API response is sent
+    This runs in a background thread
     """
     try:
         print(f"🎙️  Starting podcast generation: {podcast_id}")
@@ -160,23 +188,23 @@ async def _generate_podcast_async(podcast_id: str):
         # Get podcast details first
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
         if not podcast:
-            print(f"Podcast {podcast_id} not found")
+            print(f"❌ Podcast {podcast_id} not found")
             return
         
         # Step 1: Generate script
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         script = await script_service.generate_script(podcast_id)
-        print(f"Script generated ({len(script)} chars)")
+        print(f"✅ Script generated ({len(script)} chars)")
 
         # Step 2: Generate audio
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_AUDIO)
         audio_data, duration = await _generate_audio_for_podcast(podcast_id, script)
-        print(f"Audio generated ({duration}s)")
+        print(f"✅ Audio generated ({duration}s)")
 
         # Step 3: Upload to storage
         await _update_podcast_status(podcast_id, PodcastStatus.UPLOADING)
         audio_url, transcript_url = await storage_service.upload_podcast_files(podcast_id, audio_data, script)
-        print(f"Uploaded to Firebase")
+        print(f"✅ Uploaded to Firebase")
 
         # Step 4: Mark as completed
         credits_used = max(1, int(duration / 60))
@@ -192,10 +220,10 @@ async def _generate_podcast_async(podcast_id: str):
             },
         )
         
-        print(f"Podcast generation complete: {podcast_id}")
+        print(f"✅ Podcast generation complete: {podcast_id}")
 
     except Exception as e:
-        print(f"Podcast generation failed: {str(e)}")
+        print(f"❌ Podcast generation failed: {str(e)}")
         # Log the full exception for debugging
         import traceback
         traceback.print_exc()
@@ -342,9 +370,15 @@ async def regenerate_podcast(
     # Apply updates in DB
     await db["podcasts"].update_one({"_id": ObjectId(podcast_id)}, {"$set": update_fields})
 
-    task = asyncio.create_task(_generate_podcast_async(podcast_id))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    # ✅ FIXED: Run regeneration in thread pool
+    loop = asyncio.get_running_loop()
+    future = loop.run_in_executor(
+        _thread_pool,
+        _run_podcast_generation_sync,
+        podcast_id
+    )
+    _background_tasks.add(future)
+    future.add_done_callback(_background_tasks.discard)
 
     return {
         "id": podcast_id,
@@ -371,3 +405,9 @@ async def delete_podcast(podcast_id: str, user_id: str) -> bool:
     await db["podcasts"].delete_one({"_id": ObjectId(podcast_id)})
 
     return True
+
+
+# -------------------- Cleanup on Shutdown --------------------
+async def shutdown_cleanup():
+    """Clean up thread pool on application shutdown"""
+    _thread_pool.shutdown(wait=True)

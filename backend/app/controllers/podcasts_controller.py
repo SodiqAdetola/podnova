@@ -1,4 +1,3 @@
-# app/controllers/podcasts_controller.py
 """
 PodNova Podcast Generation Controller
 Orchestrates podcast generation workflow using service layer
@@ -12,7 +11,7 @@ import asyncio
 import concurrent.futures
 import threading
 
-from app.db import db
+# Import service classes, not instances
 from app.services.script_service import ScriptService
 from app.services.audio_service import AudioService
 from app.services.storage_service import StorageService
@@ -63,12 +62,6 @@ TONE_TO_STYLE_MAP = {
     "expert": PodcastStyle.EXPERT,
 }
 
-# -------------------- Services --------------------
-script_service = ScriptService()
-audio_service = AudioService()
-storage_service = StorageService()
-user_service = UserService()
-
 # -------------------- Thread Pool for Background Tasks --------------------
 # Create a thread pool executor for CPU-intensive tasks
 _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
@@ -91,7 +84,11 @@ async def create_podcast(
     Create a new podcast generation job
     Returns immediately while generation happens in background
     """
+    # Import db here to avoid circular imports
+    from app.db import db
+    
     # Fetch user preferences
+    user_service = UserService()
     user_profile = await user_service.get_user_profile(user_id)
     if user_profile:
         prefs = user_profile.preferences
@@ -137,7 +134,8 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
 
-    # ✅ FIXED: Run generation in thread pool to free up event loop
+    # ✅ FIXED: Run generation in thread pool with podcast_id only
+    # Pass minimal data to avoid loop attachment issues
     loop = asyncio.get_running_loop()
     future = loop.run_in_executor(
         _thread_pool, 
@@ -169,21 +167,33 @@ def _run_podcast_generation_sync(podcast_id: str):
     asyncio.set_event_loop(loop)
     
     try:
-        loop.run_until_complete(_generate_podcast_async(podcast_id))
+        # Run the async generation in this thread's loop
+        loop.run_until_complete(_generate_podcast_async_in_thread(podcast_id))
     except Exception as e:
         print(f"❌ Thread error for podcast {podcast_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
     finally:
         loop.close()
 
 
-# -------------------- Async Podcast Generation --------------------
-async def _generate_podcast_async(podcast_id: str):
+# -------------------- Async Podcast Generation (Runs in Thread's Loop) --------------------
+async def _generate_podcast_async_in_thread(podcast_id: str):
     """
     Generates podcast script, audio, uploads files, updates status
-    This runs in a background thread
+    This runs in a background thread with its own event loop
     """
+    # Import db here to get a fresh connection for this thread
+    from app.db import db
+    
+    # Create NEW service instances for this thread
+    script_service = ScriptService()
+    audio_service = AudioService()
+    storage_service = StorageService()
+    user_service = UserService()
+    
     try:
-        print(f"🎙️  Starting podcast generation: {podcast_id}")
+        print(f"🎙️  Starting podcast generation in thread: {podcast_id}")
         
         # Get podcast details first
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
@@ -192,23 +202,26 @@ async def _generate_podcast_async(podcast_id: str):
             return
         
         # Step 1: Generate script
-        await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
+        await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.GENERATING_SCRIPT)
         script = await script_service.generate_script(podcast_id)
         print(f"✅ Script generated ({len(script)} chars)")
 
         # Step 2: Generate audio
-        await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_AUDIO)
-        audio_data, duration = await _generate_audio_for_podcast(podcast_id, script)
+        await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.GENERATING_AUDIO)
+        audio_data, duration = await _generate_audio_for_podcast_in_thread(
+            db, user_service, audio_service, podcast_id, script
+        )
         print(f"✅ Audio generated ({duration}s)")
 
         # Step 3: Upload to storage
-        await _update_podcast_status(podcast_id, PodcastStatus.UPLOADING)
+        await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.UPLOADING)
         audio_url, transcript_url = await storage_service.upload_podcast_files(podcast_id, audio_data, script)
         print(f"✅ Uploaded to Firebase")
 
         # Step 4: Mark as completed
         credits_used = max(1, int(duration / 60))
-        await _update_podcast_status(
+        await _update_podcast_status_in_thread(
+            db,
             podcast_id,
             PodcastStatus.COMPLETED,
             {
@@ -224,14 +237,13 @@ async def _generate_podcast_async(podcast_id: str):
 
     except Exception as e:
         print(f"❌ Podcast generation failed: {str(e)}")
-        # Log the full exception for debugging
         import traceback
         traceback.print_exc()
-        await _update_podcast_status(podcast_id, PodcastStatus.FAILED, {"error_message": str(e)})
+        await _update_podcast_status_in_thread(db, podcast_id, PodcastStatus.FAILED, {"error_message": str(e)})
 
 
-async def _update_podcast_status(podcast_id: str, status: PodcastStatus, additional_fields: Optional[Dict] = None):
-    """Helper to update podcast status in database"""
+async def _update_podcast_status_in_thread(db, podcast_id: str, status: PodcastStatus, additional_fields: Optional[Dict] = None):
+    """Helper to update podcast status in database - uses passed db instance"""
     update_fields = {"status": status, "updated_at": datetime.now()}
     if additional_fields:
         update_fields.update(additional_fields)
@@ -239,8 +251,8 @@ async def _update_podcast_status(podcast_id: str, status: PodcastStatus, additio
     await db["podcasts"].update_one({"_id": ObjectId(podcast_id)}, {"$set": update_fields})
 
 
-async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[bytes, int]:
-    """Generate audio using audio service with user preferences"""
+async def _generate_audio_for_podcast_in_thread(db, user_service, audio_service, podcast_id: str, script: str) -> tuple[bytes, int]:
+    """Generate audio using audio service with user preferences - uses passed instances"""
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]
 
@@ -250,14 +262,16 @@ async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[byt
     return await audio_service.generate_audio(script, voice_name, speaking_rate)
 
 
-# -------------------- Get Podcasts --------------------
+# -------------------- Get Podcasts (Main Loop Functions) --------------------
 async def get_user_podcasts(
     user_id: str,
     status: Optional[str] = None,
     limit: int = 50,
     skip: int = 0
 ) -> List[Dict]:
-    """Get all podcasts for a user"""
+    """Get all podcasts for a user - runs in main loop"""
+    from app.db import db
+    
     query = {"user_id": user_id}
     if status:
         query["status"] = status
@@ -290,7 +304,9 @@ async def get_user_podcasts(
 
 
 async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
-    """Get podcast details by ID"""
+    """Get podcast details by ID - runs in main loop"""
+    from app.db import db
+    
     try:
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     except:
@@ -338,6 +354,8 @@ async def regenerate_podcast(
     Regenerate an existing podcast with updated settings
     Returns immediately while regeneration happens in background
     """
+    from app.db import db
+    
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     if not podcast:
         raise ValueError("Podcast not found")
@@ -393,12 +411,16 @@ async def delete_podcast(podcast_id: str, user_id: str) -> bool:
     Delete a podcast - ensures user owns the podcast
     Deletes audio from storage and removes DB entry
     """
+    from app.db import db
+    from app.services.storage_service import StorageService
+    
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id), "user_id": user_id})
     if not podcast:
         return False
 
     # Delete files from storage if audio exists
     if podcast.get("audio_url"):
+        storage_service = StorageService()
         await storage_service.delete_podcast_files(podcast_id)
 
     # Remove from MongoDB

@@ -13,6 +13,9 @@ from firebase_admin import credentials
 import os
 import json
 
+from app.controllers.podcasts_controller import shutdown_cleanup
+
+
 # Initialise Firebase Admin SDK
 if not firebase_admin._apps:
     try:
@@ -57,6 +60,10 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await shutdown_cleanup()
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])
 app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])

@@ -6,7 +6,8 @@ from app.controllers.topics_controller import (
     get_topics_by_category,
     get_topic_by_id,
     get_topic_history,
-    force_history_check
+    force_history_check,
+    search_topics
 )
 
 router = APIRouter()
@@ -189,6 +190,37 @@ async def get_developing_stories(
             "developing_stories": topics,
             "count": len(topics)
         }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    
+@router.get("/search")
+async def search_topics_endpoint(
+    q: str = Query(..., min_length=1, description="Search query"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum results to return")
+):
+    """
+    Search topics by query string
+    
+    Searches across:
+    - Topic titles
+    - Summaries  
+    - Categories
+    
+    Returns matching topics sorted by relevance.
+    
+    Example usage:
+    - /topics/search?q=climate
+    - /topics/search?q=AI&category=technology
+    - /topics/search?q=election&category=politics&limit=20
+    """
+    try:
+        result = await search_topics(q, category, limit)
+        return result
         
     except Exception as e:
         raise HTTPException(

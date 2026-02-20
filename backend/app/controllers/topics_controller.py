@@ -200,3 +200,66 @@ def _extract_tags(topic: Dict) -> List[str]:
         tags.append("developing-story")
     
     return tags
+
+
+async def search_topics(query: str, category: Optional[str] = None, limit: int = 50) -> Dict:
+    """
+    Search topics by query string across multiple fields
+    
+    Args:
+        query: Search query string
+        category: Optional category filter (None or 'all' for all categories)
+        limit: Maximum number of results to return
+        
+    Returns:
+        Dict with query info and matching topics
+    """
+    from app.db import db
+    
+    # Build search query
+    search_query = {
+        "status": "active",
+        "has_title": True
+    }
+    
+    # Add category filter if provided and not "all"
+    if category and category != "all":
+        search_query["category"] = category
+    
+    # Search in title, summary, category using regex (case-insensitive)
+    search_pattern = {"$regex": query, "$options": "i"}
+    search_query["$or"] = [
+        {"title": search_pattern},
+        {"summary": search_pattern},
+        {"category": search_pattern}
+    ]
+    
+    # Fetch topics
+    cursor = db["topics"].find(search_query).limit(limit)
+    
+    topics = []
+    async for topic in cursor:
+        time_ago = _format_time_ago(topic["last_updated"])
+        tags = _extract_tags(topic)
+        
+        topics.append({
+            "id": str(topic["_id"]),
+            "title": topic["title"],
+            "summary": topic.get("summary"),
+            "category": topic["category"],
+            "article_count": topic.get("article_count", 0),
+            "confidence_score": topic.get("confidence", 0),
+            "last_updated": topic["last_updated"].isoformat(),
+            "time_ago": time_ago,
+            "tags": tags,
+            "image_url": topic.get("image_url"),
+            "history_point_count": topic.get("history_point_count", 0),
+            "development_note": topic.get("development_note")
+        })
+    
+    return {
+        "query": query,
+        "category": category or "all",
+        "topics": topics,
+        "count": len(topics)
+    }

@@ -58,7 +58,7 @@ def root():
 def health_check():
     return {"status": "healthy"}
 
-app.include_router(user_routes.router, prefix="/users", tags=["users"])
+app.include_router(user_routes.router, prefix="/user", tags=["users"])
 app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])
 app.include_router(podcasts_routes.router, prefix="/podcasts", tags=["podcasts"])
 # app.include_router(discussion_routes.router, prefix="/discussions", tags=["discussions"])

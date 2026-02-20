@@ -1,10 +1,7 @@
-# /backend/app/ai_pipeline/clustering.py
+# backend/app/ai_pipeline/clustering.py 
 """
 PodNova Clustering Module
-Handles article embeddings, topic assignment, and clustering logic
-WITH INTEGRATED MAINTENANCE AND IMAGE HANDLING
-
-UPDATED: Now using gemini-embedding-001 (replaces text-embedding-004)
+NOW WITH INTEGRATED TOPIC HISTORY TRACKING
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
@@ -17,15 +14,16 @@ from pymongo import MongoClient
 import certifi
 from google import genai
 
-# Import maintenance service
+# Import services
 from app.ai_pipeline.article_maintenance import MaintenanceService
+from app.ai_pipeline.topic_history import TopicHistoryService
 
 # Configuration
 SIMILARITY_THRESHOLD = 0.7
 MIN_ARTICLES_FOR_TITLE = 2
 CONFIDENCE_THRESHOLD = 0.6
 TOPIC_INACTIVE_DAYS = 90
-EMBEDDING_MODEL = "gemini-embedding-001"  # UPDATED: Changed from text-embedding-004
+EMBEDDING_MODEL = "gemini-embedding-001"
 TEXT_MODEL = "gemini-2.5-flash"
 
 # Initialize Gemini client
@@ -40,8 +38,9 @@ class ClusteringService:
         self.articles_collection = self.db["articles"]
         self.topics_collection = self.db["topics"]
         
-        # Initialize maintenance service
+        # Initialize maintenance and history services
         self.maintenance_service = MaintenanceService(mongo_uri, db_name)
+        self.history_service = TopicHistoryService(mongo_uri, db_name)
         
         # Create indexes
         self.topics_collection.create_index("category")
@@ -76,21 +75,16 @@ class ClusteringService:
         return dot_product / norm_product if norm_product != 0 else 0.0
     
     def check_and_resurrect_topic(self, topic: Dict) -> bool:
-        """
-        Check if a stale topic should be resurrected when a new highly relevant article arrives
-        Returns True if topic was resurrected
-        """
+        """Check if a stale topic should be resurrected"""
         if topic.get("status") != "stale":
             return False
         
-        # Check if topic is not too old
         stale_since = topic.get("stale_since")
         if stale_since:
             days_stale = (datetime.now() - stale_since).days
             if days_stale > self.maintenance_service.config.MAX_RESURRECTION_AGE_DAYS:
                 return False
         
-        # Resurrect the topic
         self.topics_collection.update_one(
             {"_id": topic["_id"]},
             {
@@ -106,11 +100,7 @@ class ClusteringService:
         return True
     
     def find_matching_topic(self, article_embedding: np.ndarray, category: str) -> Optional[Dict]:
-        """
-        Find existing topic that matches the article embedding
-        Now considers both active and stale topics (stale can be resurrected)
-        """
-        # Look for active topics first
+        """Find existing topic that matches the article embedding"""
         active_topics = self.topics_collection.find({
             "category": category,
             "status": "active"
@@ -130,7 +120,6 @@ class ClusteringService:
                 best_similarity = similarity
                 best_match = topic
         
-        # If no active match, check stale topics with higher threshold
         if not best_match:
             stale_topics = self.topics_collection.find({
                 "category": category,
@@ -146,11 +135,9 @@ class ClusteringService:
                 topic_embedding = np.array(topic["centroid_embedding"])
                 similarity = self.cosine_similarity(article_embedding, topic_embedding)
                 
-                # Higher threshold for resurrecting stale topics
                 if similarity > best_similarity and similarity >= resurrection_threshold:
                     best_similarity = similarity
                     best_match = topic
-                    # Resurrect the topic
                     self.check_and_resurrect_topic(topic)
         
         if best_match:
@@ -169,7 +156,7 @@ class ClusteringService:
         
         return np.mean(embeddings, axis=0) if embeddings else None
     
-    def create_new_topic(self, article_doc: Dict, article_embedding: np.ndarray) -> str:
+    async def create_new_topic(self, article_doc: Dict, article_embedding: np.ndarray) -> str:
         """Create a new topic seeded with this article"""
         topic_doc = {
             "category": article_doc["category"],
@@ -185,25 +172,40 @@ class ClusteringService:
             "title": None,
             "summary": None,
             "key_insights": None,
-            "image_url": article_doc.get("image_url")
+            "image_url": article_doc.get("image_url"),
+            "history_point_count": 0,
+            "last_history_point": None
         }
         
-        result = self.topics_collection.insert_one(topic_doc)
+        result = await self.topics_collection.insert_one(topic_doc)
         topic_id = result.inserted_id
         
         print(f"  Created new topic (ID: {topic_id})")
         
-        self.articles_collection.update_one(
+        await self.articles_collection.update_one(
             {"_id": article_doc["_id"]},
             {"$set": {"topic_id": topic_id, "status": "clustered"}}
         )
         
+        # Create initial history point
+        await self.history_service.create_history_point(
+            str(topic_id),
+            "initial",
+            {"total_score": 1.0, "type": "initial"},
+            None
+        )
+        
         return topic_id
     
-    def update_existing_topic(self, topic: Dict, article_doc: Dict, article_embedding: np.ndarray) -> None:
+    async def update_existing_topic(
+        self,
+        topic: Dict,
+        article_doc: Dict,
+        article_embedding: np.ndarray
+    ) -> None:
         """
         Add article to existing topic and update metadata
-        Now includes automatic topic trimming and image handling
+        NOW WITH AUTOMATIC HISTORY CHECKING
         """
         topic_id = topic["_id"]
         article_ids = topic["article_ids"]
@@ -232,19 +234,25 @@ class ClusteringService:
         if not topic.get("image_url") and article_doc.get("image_url"):
             update_fields["image_url"] = article_doc["image_url"]
         
-        self.topics_collection.update_one(
+        await self.topics_collection.update_one(
             {"_id": topic_id},
             {"$set": update_fields}
         )
         
-        self.articles_collection.update_one(
+        await self.articles_collection.update_one(
             {"_id": article_doc["_id"]},
             {"$set": {"topic_id": topic_id, "status": "clustered"}}
         )
         
         print(f"  Updated topic (ID: {topic_id}, articles: {len(article_ids)}, confidence: {confidence:.2f})")
         
-        # Check if topic needs trimming after adding article
+        # ✅ NEW: Check if update is significant enough for history point
+        if topic.get("has_title"):  # Only check history for topics with titles
+            history_result = await self.history_service.check_and_create_history(topic_id)
+            if history_result and history_result.get("action") == "created_history":
+                print(f"  ✨ Created {history_result['history_type']} history point (score: {history_result['significance_score']:.3f})")
+        
+        # Check if topic needs trimming
         age_category = self.maintenance_service.get_topic_age_category(topic)
         max_articles = self.maintenance_service.config.TOPIC_LIMITS[age_category]["max_articles"]
         
@@ -262,17 +270,19 @@ class ClusteringService:
         if should_generate_title:
             print(f"  Topic ready for title generation")
     
-    def generate_topic_title(self, topic_id: str) -> bool:
+    async def generate_topic_title(self, topic_id: str) -> bool:
         """Generate title and summary for a topic using Gemini LLM"""
         try:
-            topic = self.topics_collection.find_one({"_id": topic_id})
+            topic = await self.topics_collection.find_one({"_id": topic_id})
             if not topic:
                 print(f"  Topic {topic_id} not found")
                 return False
             
-            articles = list(self.articles_collection.find({
+            articles = []
+            async for article in self.articles_collection.find({
                 "_id": {"$in": topic["article_ids"]}
-            }))
+            }):
+                articles.append(article)
             
             if not articles:
                 print(f"  No articles found for topic {topic_id}")
@@ -288,76 +298,32 @@ class ClusteringService:
             
             combined_articles = "\n---\n".join(article_texts)
             
-            prompt = f"""You are an AI news analyst tasked with creating a balanced, informative podcast topic by synthesizing information from multiple news articles covering the same story.
+            prompt = f"""You are an AI news analyst creating a podcast topic from multiple news articles.
 
 Category: {topic['category'].upper()}
-Number of articles analyzed: {len(articles)}
+Number of articles: {len(articles)}
 
-Below are the article excerpts (titles and content) from various sources:
-
+Articles:
 {combined_articles}
 
-Your task is to produce a JSON object containing a title, summary, key insights, and a confidence score that will serve as the foundation for a podcast episode. The podcast aims to inform listeners with a comprehensive, unbiased overview.
+Generate a JSON object with:
+- **title** (string, max 10 words): Concise newsworthy headline
+- **summary** (string, 2-3 sentences): Synthesized overview
+- **key_insights** (array, 3-5 strings): Most important facts/developments
+- **confidence_score** (integer, 0-100): Reliability assessment
 
-Follow these steps internally before generating the output:
-1. **Identify core narrative**: Determine the central story that all articles revolve around.
-2. **Detect consensus and conflicts**: Note points where sources agree, and highlight any significant disagreements or different angles.
-3. **Extract key facts**: Pull out the most important facts, developments, statistics, quotes, and implications.
-4. **Synthesize across sources**: Combine information from all articles to create a cohesive picture, avoiding over-reliance on a single source.
-5. **Assess confidence**: Based on factors such as source authority, consistency across articles, number of sources, recency, and any contradictions, assign a confidence score (0-100%) reflecting how reliable and well-established the synthesized narrative is.
+JSON only, no markdown:"""
 
-Now, generate a JSON object with the following fields:
-
-- **title** (string): A concise, engaging, and newsworthy title (maximum 10 words). It should capture the core story without sensationalism.
-- **summary** (string): A 2-3 sentence summary that synthesizes the key narrative across all sources. It should include the main event, context, and significance.
-- **key_insights** (array of strings): Exactly 3-5 bullet points highlighting the most important facts, developments, or implications. Each insight should be a complete sentence, focus on facts (not opinions), and be distinct from the others. If sources conflict, you may note the different perspectives or choose the most supported view, but avoid simply listing "Source A says X, Source B says Y".
-- **confidence_score** (integer): A number from 0 to 100 representing the confidence in the synthesized information. Base this on:
-  - **Source authority** (e.g., major news outlets vs. blogs)
-  - **Consistency** (how much the sources agree)
-  - **Number of sources** (more sources generally increase confidence)
-  - **Recency** (prefer recent articles)
-  - **Contradictions** (lower confidence if major conflicts exist)
-
-Output format requirements:
-- The JSON must be valid and parseable.
-- Do not include any additional text outside the JSON.
-- Ensure the JSON keys are exactly as specified: "title", "summary", "key_insights", "confidence_score".
-
-Example output:
-{{
-  "title": "Global Climate Summit Reaches Historic Deforestation Deal",
-  "summary": "Leaders from over 100 nations pledged to halt deforestation by 2030 at the COP26 climate summit, backed by $19 billion in public and private funds. Environmental groups welcome the commitment but question enforcement mechanisms.",
-  "key_insights": [
-    "More than 100 countries, representing 85% of the world's forests, signed the pledge.",
-    "The funding package includes $12 billion from public sources and $7 billion from private investors.",
-    "Critics point out that previous similar pledges, such as the 2014 New York Declaration on Forests, failed to meet targets.",
-    "Indigenous rights groups demand inclusion in decision-making processes for forest conservation."
-  ],
-  "confidence_score": 85
-}}
-
-Now produce the JSON output for the provided articles."""
-
-            try:
-                response = client.models.generate_content(
-                    model=TEXT_MODEL,
-                    contents=prompt
-                )
-                
-                response_text = response.text.strip()
-                
-            except Exception as api_error:
-                error_str = str(api_error)
-                if "429" in error_str or "quota" in error_str.lower():
-                    print(f"  Quota exceeded - skipping for now")
-                    return False
-                raise api_error
+            response = client.models.generate_content(
+                model=TEXT_MODEL,
+                contents=prompt
+            )
             
-            # Clean markdown formatting
+            response_text = response.text.strip()
             response_text = response_text.replace("```json", "").replace("```", "").strip()
             result = json.loads(response_text)
             
-            self.topics_collection.update_one(
+            await self.topics_collection.update_one(
                 {"_id": topic_id},
                 {
                     "$set": {
@@ -365,13 +331,21 @@ Now produce the JSON output for the provided articles."""
                         "summary": result["summary"],
                         "key_insights": result["key_insights"],
                         "has_title": True,
-                        "title_generated_at": datetime.now()
+                        "title_generated_at": datetime.now(),
+                        "confidence": result["confidence_score"] / 100.0
                     }
                 }
             )
             
             print(f"  Generated title: {result['title']}")
-            print(f"  Key insights: {len(result['key_insights'])} points")
+            
+            # ✅ NEW: Create initial history point when title is first generated
+            await self.history_service.create_history_point(
+                str(topic_id),
+                "initial",
+                {"total_score": 1.0, "type": "initial_title"},
+                result
+            )
             
             return True
             
@@ -379,7 +353,7 @@ Now produce the JSON output for the provided articles."""
             print(f"  Error generating topic title: {str(e)}")
             return False
     
-    def assign_to_topic(self, article_doc: Dict) -> Optional[str]:
+    async def assign_to_topic(self, article_doc: Dict) -> Optional[str]:
         """Main function: compute embedding and assign article to topic"""
         print(f"\nProcessing article: {article_doc['title'][:60]}...")
         
@@ -390,7 +364,7 @@ Now produce the JSON output for the provided articles."""
             print(f"  Failed to compute embedding")
             return None
         
-        self.articles_collection.update_one(
+        await self.articles_collection.update_one(
             {"_id": article_doc["_id"]},
             {"$set": {"embedding": embedding.tolist()}}
         )
@@ -398,27 +372,30 @@ Now produce the JSON output for the provided articles."""
         matching_topic = self.find_matching_topic(embedding, article_doc["category"])
         
         if matching_topic:
-            self.update_existing_topic(matching_topic, article_doc, embedding)
+            await self.update_existing_topic(matching_topic, article_doc, embedding)
             return matching_topic["_id"]
         else:
-            return self.create_new_topic(article_doc, embedding)
+            return await self.create_new_topic(article_doc, embedding)
     
-    def process_pending_articles(self) -> Dict:
+    async def process_pending_articles(self) -> Dict:
         """Process all articles with status 'pending_clustering'"""
         print("=" * 80)
         print("Starting Article Clustering")
         print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 80)
         
-        pending_articles = list(self.articles_collection.find({
+        pending_articles = []
+        async for article in self.articles_collection.find({
             "status": "pending_clustering"
-        }))
+        }):
+            pending_articles.append(article)
         
         stats = {
             "total_processed": 0,
             "new_topics": 0,
             "updated_topics": 0,
             "titles_generated": 0,
+            "history_points_created": 0,
             "failed": 0,
             "start_time": datetime.now()
         }
@@ -427,12 +404,12 @@ Now produce the JSON output for the provided articles."""
         
         for article in pending_articles:
             try:
-                topics_before = self.topics_collection.count_documents({})
-                topic_id = self.assign_to_topic(article)
+                topics_before = await self.topics_collection.count_documents({})
+                topic_id = await self.assign_to_topic(article)
                 
                 if topic_id:
                     stats["total_processed"] += 1
-                    topics_after = self.topics_collection.count_documents({})
+                    topics_after = await self.topics_collection.count_documents({})
                     
                     if topics_after > topics_before:
                         stats["new_topics"] += 1
@@ -450,20 +427,22 @@ Now produce the JSON output for the provided articles."""
         print("Generating Titles for Ready Topics")
         print("=" * 80)
         
-        ready_topics = list(self.topics_collection.find({
+        ready_topics = []
+        async for topic in self.topics_collection.find({
             "has_title": False,
             "status": "active",
             "article_count": {"$gte": MIN_ARTICLES_FOR_TITLE},
             "confidence": {"$gte": CONFIDENCE_THRESHOLD}
-        }))
+        }):
+            ready_topics.append(topic)
         
         print(f"Found {len(ready_topics)} topics ready for title generation")
         
         for i, topic in enumerate(ready_topics):
             if i > 0:
-                time.sleep(4)  # Rate limiting
+                time.sleep(4)
             
-            if self.generate_topic_title(topic["_id"]):
+            if await self.generate_topic_title(topic["_id"]):
                 stats["titles_generated"] += 1
         
         stats["end_time"] = datetime.now()
@@ -482,11 +461,11 @@ Now produce the JSON output for the provided articles."""
         
         return stats
     
-    def mark_inactive_topics(self) -> int:
+    async def mark_inactive_topics(self) -> int:
         """Mark topics as inactive if not updated recently"""
         cutoff_date = datetime.now() - timedelta(days=TOPIC_INACTIVE_DAYS)
         
-        result = self.topics_collection.update_many(
+        result = await self.topics_collection.update_many(
             {"last_updated": {"$lt": cutoff_date}, "status": "active"},
             {"$set": {"status": "inactive"}}
         )
@@ -497,12 +476,13 @@ Now produce the JSON output for the provided articles."""
         return result.modified_count
 
 
-def main():
-    """Main entry point for manual execution or scheduling"""
+async def main():
+    """Main entry point"""
     service = ClusteringService(MONGODB_URI, MONGODB_DB_NAME)
-    service.process_pending_articles()
-    service.mark_inactive_topics()
+    await service.process_pending_articles()
+    await service.mark_inactive_topics()
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())

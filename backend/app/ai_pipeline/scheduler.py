@@ -1,18 +1,20 @@
+# backend/app/ai_pipeline/scheduler.py
 """
 PodNova Automated Scheduler
-Runs ingestion, clustering, and maintenance on schedule
+NOW WITH TOPIC HISTORY TRACKING
 """
 import schedule
 import time
 from datetime import datetime
 import logging
+import asyncio
 
 from app.ai_pipeline.ingestion import ArticleIngestionService
 from app.ai_pipeline.clustering import ClusteringService
 from app.ai_pipeline.article_maintenance import MaintenanceService
+from app.ai_pipeline.topic_history import TopicHistoryService
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -29,6 +31,7 @@ class PodNovaScheduler:
         self.ingestion_service = ArticleIngestionService(MONGODB_URI, MONGODB_DB_NAME)
         self.clustering_service = ClusteringService(MONGODB_URI, MONGODB_DB_NAME)
         self.maintenance_service = MaintenanceService(MONGODB_URI, MONGODB_DB_NAME)
+        self.history_service = TopicHistoryService(MONGODB_URI, MONGODB_DB_NAME)  # ✅ NEW
     
     def run_ingestion(self):
         """Scheduled ingestion job"""
@@ -47,11 +50,36 @@ class PodNovaScheduler:
             logger.info("=" * 80)
             logger.info("SCHEDULED JOB: Article Clustering")
             logger.info("=" * 80)
-            stats = self.clustering_service.process_pending_articles()
-            self.clustering_service.mark_inactive_topics()
+            
+            # Run clustering (async)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            stats = loop.run_until_complete(self.clustering_service.process_pending_articles())
+            loop.run_until_complete(self.clustering_service.mark_inactive_topics())
+            loop.close()
+            
             logger.info(f"Clustering completed: {stats['total_processed']} articles processed")
+            
         except Exception as e:
             logger.error(f"Clustering failed: {str(e)}", exc_info=True)
+    
+    def run_history_check(self):
+        """✅ NEW: Scheduled history check job"""
+        try:
+            logger.info("=" * 80)
+            logger.info("SCHEDULED JOB: Topic History Check")
+            logger.info("=" * 80)
+            
+            # Run history check (async)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            stats = loop.run_until_complete(self.history_service.run_history_check_cycle())
+            loop.close()
+            
+            logger.info(f"History check completed: {stats['histories_created']} history points created")
+            
+        except Exception as e:
+            logger.error(f"History check failed: {str(e)}", exc_info=True)
     
     def run_maintenance(self):
         """Scheduled maintenance job"""
@@ -87,8 +115,14 @@ class PodNovaScheduler:
         logger.info("Scheduled: Ingestion every 4 hours")
         
         # CLUSTERING: Every 2 hours
+        # Note: Clustering now includes inline history checks when topics are updated
         schedule.every(2).hours.do(self.run_clustering)
         logger.info("Scheduled: Clustering every 2 hours")
+        
+        # ✅ NEW: HISTORY CHECK: Every 3 hours
+        # This catches topics that weren't updated during clustering
+        schedule.every(3).hours.do(self.run_history_check)
+        logger.info("Scheduled: History check every 3 hours")
         
         # LIGHT MAINTENANCE: Every 6 hours
         schedule.every(6).hours.do(self.run_light_maintenance)
@@ -103,11 +137,13 @@ class PodNovaScheduler:
         self.run_ingestion()
         time.sleep(60)
         self.run_clustering()
+        time.sleep(30)
+        self.run_history_check()  # ✅ NEW
     
     def start(self):
         """Start the scheduler"""
         logger.info("=" * 80)
-        logger.info("PodNova Scheduler Starting")
+        logger.info("PodNova Scheduler Starting (WITH HISTORY TRACKING)")
         logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 80)
         

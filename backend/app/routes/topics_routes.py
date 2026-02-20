@@ -13,6 +13,38 @@ from app.controllers.topics_controller import (
 router = APIRouter()
 
 
+@router.get("/search")
+async def search_topics_endpoint(
+    q: str = Query(..., min_length=1, description="Search query"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum results to return")
+):
+    """
+    Search topics by query string
+    
+    Searches across:
+    - Topic titles
+    - Summaries  
+    - Categories
+    
+    Returns matching topics sorted by relevance.
+    
+    Example usage:
+    - /topics/search?q=climate
+    - /topics/search?q=AI&category=technology
+    - /topics/search?q=election&category=politics&limit=20
+    """
+    try:
+        result = await search_topics(q, category, limit)
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
 @router.get("/categories")
 async def list_categories():
     """Get all categories with topic counts"""
@@ -45,6 +77,61 @@ async def get_category_topics(
             detail=str(e)
         )
 
+
+@router.get("/categories/{category_name}/developing")
+async def get_developing_stories(
+    category_name: str,
+    min_history_points: int = Query(3, ge=2, le=10, description="Minimum history points")
+):
+    """
+    Get developing stories in a category
+    
+    Returns topics that have evolved significantly over time,
+    based on number of history points created.
+    
+    Perfect for highlighting stories that are actively developing
+    with new information coming in.
+    """
+    try:
+        from app.db import db
+        
+        cursor = db["topics"].find({
+            "category": category_name,
+            "status": "active",
+            "has_title": True,
+            "history_point_count": {"$gte": min_history_points}
+        }).sort("last_updated", -1).limit(20)
+        
+        topics = []
+        async for topic in cursor:
+            from app.controllers.topics_controller import _format_time_ago
+            
+            topics.append({
+                "id": str(topic["_id"]),
+                "title": topic["title"],
+                "summary": topic.get("summary"),
+                "article_count": topic.get("article_count", 0),
+                "history_point_count": topic.get("history_point_count", 0),
+                "last_updated": topic["last_updated"].isoformat(),
+                "time_ago": _format_time_ago(topic["last_updated"]),
+                "development_note": topic.get("development_note"),
+                "image_url": topic.get("image_url")
+            })
+        
+        return {
+            "category": category_name,
+            "developing_stories": topics,
+            "count": len(topics)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# PARAMETERIZED ROUTES LAST - These come after all specific routes
 
 @router.get("/{topic_id}")
 async def get_topic_details(topic_id: str):
@@ -138,90 +225,6 @@ async def trigger_history_check(topic_id: str):
         
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.get("/categories/{category_name}/developing")
-async def get_developing_stories(
-    category_name: str,
-    min_history_points: int = Query(3, ge=2, le=10, description="Minimum history points")
-):
-    """
-    Get developing stories in a category
-    
-    Returns topics that have evolved significantly over time,
-    based on number of history points created.
-    
-    Perfect for highlighting stories that are actively developing
-    with new information coming in.
-    """
-    try:
-        from app.db import db
-        
-        cursor = db["topics"].find({
-            "category": category_name,
-            "status": "active",
-            "has_title": True,
-            "history_point_count": {"$gte": min_history_points}
-        }).sort("last_updated", -1).limit(20)
-        
-        topics = []
-        async for topic in cursor:
-            from app.controllers.topics_controller import _format_time_ago
-            
-            topics.append({
-                "id": str(topic["_id"]),
-                "title": topic["title"],
-                "summary": topic.get("summary"),
-                "article_count": topic.get("article_count", 0),
-                "history_point_count": topic.get("history_point_count", 0),
-                "last_updated": topic["last_updated"].isoformat(),
-                "time_ago": _format_time_ago(topic["last_updated"]),
-                "development_note": topic.get("development_note"),
-                "image_url": topic.get("image_url")
-            })
-        
-        return {
-            "category": category_name,
-            "developing_stories": topics,
-            "count": len(topics)
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-    
-@router.get("/search")
-async def search_topics_endpoint(
-    q: str = Query(..., min_length=1, description="Search query"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    limit: int = Query(50, ge=1, le=100, description="Maximum results to return")
-):
-    """
-    Search topics by query string
-    
-    Searches across:
-    - Topic titles
-    - Summaries  
-    - Categories
-    
-    Returns matching topics sorted by relevance.
-    
-    Example usage:
-    - /topics/search?q=climate
-    - /topics/search?q=AI&category=technology
-    - /topics/search?q=election&category=politics&limit=20
-    """
-    try:
-        result = await search_topics(q, category, limit)
-        return result
-        
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

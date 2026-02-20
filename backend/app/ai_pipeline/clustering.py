@@ -22,7 +22,7 @@ from app.ai_pipeline.article_maintenance import MaintenanceService
 from app.ai_pipeline.topic_history import TopicHistoryService
 
 # Configuration
-SIMILARITY_THRESHOLD = 0.75
+SIMILARITY_THRESHOLD = 0.70
 MIN_ARTICLES_FOR_TITLE = 2
 CONFIDENCE_THRESHOLD = 0.6
 TOPIC_INACTIVE_DAYS = 90

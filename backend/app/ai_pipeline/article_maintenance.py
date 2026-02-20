@@ -1,14 +1,21 @@
-# /backend/app/ai_pipeline/article_maintenance.py
+# backend/app/ai_pipeline/article_maintenance.py
 """
 PodNova Article and Topic Maintenance Module
+FULLY ASYNC VERSION with Motor
 Manages article limits, cleanup, and topic lifecycle
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from pymongo import MongoClient
+from typing import List, Dict, Optional, Any
+import motor.motor_asyncio
 import certifi
 import numpy as np
+import asyncio
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class MaintenanceConfig:
@@ -47,6 +54,13 @@ class MaintenanceConfig:
         "content_quality": 0.1
     }
     
+    # Source priority mapping
+    PRIORITY_MAP = {
+        "high": 1.0,
+        "medium": 0.6,
+        "low": 0.3
+    }
+    
     # Resurrection settings
     RESURRECTION_SIMILARITY_BONUS = 0.15
     MAX_RESURRECTION_AGE_DAYS = 14
@@ -54,17 +68,30 @@ class MaintenanceConfig:
 
 class MaintenanceService:
     def __init__(self, mongo_uri: str, db_name: str):
-        """Initialize maintenance service with MongoDB connection"""
-        self.client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
+        """Initialize with Motor async client"""
+        self.client = motor.motor_asyncio.AsyncIOMotorClient(
+            mongo_uri, 
+            tlsCAFile=certifi.where(),
+            maxPoolSize=50,
+            minPoolSize=10
+        )
         self.db = self.client[db_name]
         self.articles_collection = self.db["articles"]
         self.topics_collection = self.db["topics"]
         self.config = MaintenanceConfig()
         
-        # Create maintenance-specific indexes
-        self.articles_collection.create_index([("status", 1), ("ingested_at", 1)])
-        self.articles_collection.create_index("topic_id")
-        self.topics_collection.create_index([("status", 1), ("last_updated", 1)])
+        # Create indexes on initialization
+        asyncio.create_task(self._ensure_indexes())
+    
+    async def _ensure_indexes(self):
+        """Create maintenance-specific indexes"""
+        try:
+            await self.articles_collection.create_index([("status", 1), ("ingested_at", 1)])
+            await self.articles_collection.create_index("topic_id")
+            await self.topics_collection.create_index([("status", 1), ("last_updated", 1)])
+            logger.info("Maintenance indexes verified")
+        except Exception as e:
+            logger.error(f"Error creating indexes: {e}")
     
     def cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """Calculate cosine similarity between two vectors"""
@@ -72,7 +99,7 @@ class MaintenanceService:
         norm_product = np.linalg.norm(vec1) * np.linalg.norm(vec2)
         return dot_product / norm_product if norm_product != 0 else 0.0
     
-    def rank_article(self, article: Dict, topic: Dict, now: datetime) -> float:
+    def rank_article(self, article: Dict[str, Any], topic: Dict[str, Any], now: datetime) -> float:
         """
         Calculate ranking score for an article within its topic
         Higher score = more important to keep
@@ -81,14 +108,14 @@ class MaintenanceService:
         weights = self.config.RANKING_WEIGHTS
         
         # 1. Recency score (0-1, newer is better)
-        article_age_hours = (now - article["ingested_at"]).total_seconds() / 3600
+        article_age_hours = (now - article.get("ingested_at", now)).total_seconds() / 3600
         max_age_hours = 720  # 30 days
         recency_score = max(0, 1 - (article_age_hours / max_age_hours))
         score += recency_score * weights["recency"]
         
         # 2. Source priority score (0-1)
-        priority_map = {"high": 1.0, "medium": 0.6, "low": 0.3}
-        source_score = priority_map.get(article.get("source_priority", "medium"), 0.6)
+        priority = article.get("source_priority", "medium")
+        source_score = self.config.PRIORITY_MAP.get(priority, 0.6)
         score += source_score * weights["source_priority"]
         
         # 3. Similarity to centroid score (0-1)
@@ -107,9 +134,9 @@ class MaintenanceService:
         
         return score
     
-    def get_topic_age_category(self, topic: Dict) -> str:
+    def get_topic_age_category(self, topic: Dict[str, Any]) -> str:
         """Determine topic age category"""
-        age_days = (datetime.now() - topic["created_at"]).days
+        age_days = (datetime.now() - topic.get("created_at", datetime.now())).days
         
         if age_days <= self.config.TOPIC_LIMITS["new"]["max_age_days"]:
             return "new"
@@ -118,12 +145,12 @@ class MaintenanceService:
         else:
             return "mature"
     
-    def trim_topic_articles(self, topic_id: str) -> Dict:
+    async def trim_topic_articles(self, topic_id: str) -> Dict[str, Any]:
         """
         Trim articles from a topic if it exceeds limits
         Returns: dict with trim statistics
         """
-        topic = self.topics_collection.find_one({"_id": topic_id})
+        topic = await self.topics_collection.find_one({"_id": topic_id})
         if not topic:
             return {"error": "Topic not found"}
         
@@ -135,9 +162,12 @@ class MaintenanceService:
             return {"trimmed": 0, "retained": current_count}
         
         # Get all articles in this topic
-        articles = list(self.articles_collection.find({
+        articles = []
+        cursor = self.articles_collection.find({
             "_id": {"$in": topic["article_ids"]}
-        }))
+        })
+        async for article in cursor:
+            articles.append(article)
         
         now = datetime.now()
         
@@ -162,20 +192,21 @@ class MaintenanceService:
         removed_ids = [item["article"]["_id"] for item in to_remove]
         
         # Archive removed articles
-        self.articles_collection.update_many(
-            {"_id": {"$in": removed_ids}},
-            {
-                "$set": {
-                    "status": "archived_from_topic",
-                    "archived_at": now,
-                    "former_topic_id": topic_id
-                },
-                "$unset": {"topic_id": ""}
-            }
-        )
+        if removed_ids:
+            await self.articles_collection.update_many(
+                {"_id": {"$in": removed_ids}},
+                {
+                    "$set": {
+                        "status": "archived_from_topic",
+                        "archived_at": now,
+                        "former_topic_id": topic_id
+                    },
+                    "$unset": {"topic_id": ""}
+                }
+            )
         
         # Update topic with new article list
-        self.topics_collection.update_one(
+        await self.topics_collection.update_one(
             {"_id": topic_id},
             {
                 "$set": {
@@ -187,7 +218,9 @@ class MaintenanceService:
         )
         
         # Recalculate centroid with remaining articles
-        self._recalculate_topic_centroid(topic_id, kept_ids)
+        await self._recalculate_topic_centroid(topic_id, kept_ids)
+        
+        logger.info(f"  Trimmed topic {topic_id}: {len(removed_ids)} removed, {len(kept_ids)} kept")
         
         return {
             "trimmed": len(removed_ids),
@@ -196,12 +229,12 @@ class MaintenanceService:
             "max_allowed": max_articles
         }
     
-    def _recalculate_topic_centroid(self, topic_id: str, article_ids: List[str]) -> bool:
+    async def _recalculate_topic_centroid(self, topic_id: str, article_ids: List[str]) -> bool:
         """Recalculate topic centroid from current articles"""
         embeddings = []
         
         for article_id in article_ids:
-            article = self.articles_collection.find_one({"_id": article_id})
+            article = await self.articles_collection.find_one({"_id": article_id})
             if article and "embedding" in article:
                 embeddings.append(np.array(article["embedding"]))
         
@@ -210,14 +243,14 @@ class MaintenanceService:
         
         new_centroid = np.mean(embeddings, axis=0)
         
-        self.topics_collection.update_one(
+        await self.topics_collection.update_one(
             {"_id": topic_id},
             {"$set": {"centroid_embedding": new_centroid.tolist()}}
         )
         
         return True
     
-    def cleanup_old_articles(self) -> Dict:
+    async def cleanup_old_articles(self) -> Dict[str, Any]:
         """Remove articles past their retention period"""
         stats = {
             "archived": 0,
@@ -234,7 +267,7 @@ class MaintenanceService:
             
             cutoff_date = now - timedelta(days=retention_days)
             
-            result = self.articles_collection.update_many(
+            result = await self.articles_collection.update_many(
                 {
                     "category": category,
                     "ingested_at": {"$lt": cutoff_date},
@@ -255,7 +288,7 @@ class MaintenanceService:
         default_retention = self.config.ARTICLE_RETENTION["default"]
         cutoff_date = now - timedelta(days=default_retention)
         
-        result = self.articles_collection.update_many(
+        result = await self.articles_collection.update_many(
             {
                 "category": {"$nin": list(self.config.ARTICLE_RETENTION.keys())},
                 "ingested_at": {"$lt": cutoff_date},
@@ -274,7 +307,7 @@ class MaintenanceService:
         
         # Delete articles archived for > 30 days
         delete_cutoff = now - timedelta(days=self.config.ARCHIVED_ARTICLE_PURGE_DAYS)
-        result = self.articles_collection.delete_many({
+        result = await self.articles_collection.delete_many({
             "status": {"$in": ["archived_expired", "archived_from_topic"]},
             "archived_at": {"$lt": delete_cutoff}
         })
@@ -283,11 +316,11 @@ class MaintenanceService:
         
         return stats
     
-    def cleanup_orphan_articles(self) -> int:
+    async def cleanup_orphan_articles(self) -> int:
         """Remove articles without topics that are past grace period"""
         cutoff_date = datetime.now() - timedelta(days=self.config.ORPHAN_ARTICLE_GRACE_DAYS)
         
-        result = self.articles_collection.update_many(
+        result = await self.articles_collection.update_many(
             {
                 "status": "pending_clustering",
                 "ingested_at": {"$lt": cutoff_date},
@@ -306,7 +339,7 @@ class MaintenanceService:
         
         return result.modified_count
     
-    def update_topic_lifecycle(self) -> Dict:
+    async def update_topic_lifecycle(self) -> Dict[str, Any]:
         """Update topic statuses based on activity"""
         now = datetime.now()
         stats = {
@@ -317,7 +350,7 @@ class MaintenanceService:
         
         # Active → Stale
         stale_cutoff = now - timedelta(days=self.config.TOPIC_STALE_DAYS)
-        result = self.topics_collection.update_many(
+        result = await self.topics_collection.update_many(
             {
                 "status": "active",
                 "last_updated": {"$lt": stale_cutoff}
@@ -328,7 +361,7 @@ class MaintenanceService:
         
         # Stale -> Archived
         archive_cutoff = now - timedelta(days=self.config.TOPIC_ARCHIVE_DAYS)
-        result = self.topics_collection.update_many(
+        result = await self.topics_collection.update_many(
             {
                 "status": "stale",
                 "stale_since": {"$lt": archive_cutoff}
@@ -339,14 +372,17 @@ class MaintenanceService:
         
         # Archived -> Deleted
         delete_cutoff = now - timedelta(days=self.config.TOPIC_DELETE_DAYS)
-        topics_to_delete = list(self.topics_collection.find({
+        topics_to_delete = []
+        cursor = self.topics_collection.find({
             "status": "archived",
             "archived_at": {"$lt": delete_cutoff}
-        }))
+        })
+        async for topic in cursor:
+            topics_to_delete.append(topic)
         
         for topic in topics_to_delete:
             # Archive associated articles first
-            self.articles_collection.update_many(
+            await self.articles_collection.update_many(
                 {"topic_id": topic["_id"]},
                 {
                     "$set": {
@@ -358,22 +394,25 @@ class MaintenanceService:
             )
             
             # Delete the topic
-            self.topics_collection.delete_one({"_id": topic["_id"]})
+            await self.topics_collection.delete_one({"_id": topic["_id"]})
             stats["deleted"] += 1
         
         return stats
     
-    def cleanup_small_topics(self) -> int:
+    async def cleanup_small_topics(self) -> int:
         """Remove topics with too few articles"""
-        small_topics = list(self.topics_collection.find({
+        small_topics = []
+        cursor = self.topics_collection.find({
             "article_count": {"$lt": self.config.MIN_TOPIC_ARTICLES},
             "status": {"$in": ["stale", "archived"]}
-        }))
+        })
+        async for topic in cursor:
+            small_topics.append(topic)
         
         deleted = 0
         for topic in small_topics:
             # Move articles back to pending
-            self.articles_collection.update_many(
+            await self.articles_collection.update_many(
                 {"topic_id": topic["_id"]},
                 {
                     "$set": {"status": "pending_clustering"},
@@ -381,17 +420,17 @@ class MaintenanceService:
                 }
             )
             
-            self.topics_collection.delete_one({"_id": topic["_id"]})
+            await self.topics_collection.delete_one({"_id": topic["_id"]})
             deleted += 1
         
         return deleted
     
-    def run_full_maintenance(self) -> Dict:
+    async def run_full_maintenance(self) -> Dict[str, Any]:
         """Execute complete maintenance cycle"""
-        print("=" * 80)
-        print("Starting PodNova Maintenance Cycle")
-        print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("Starting PodNova Maintenance Cycle")
+        logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 80)
         
         stats = {
             "start_time": datetime.now(),
@@ -404,69 +443,85 @@ class MaintenanceService:
         }
         
         # 1. Trim oversized topics
-        print("\n[1/5] Trimming oversized topics...")
-        active_topics = list(self.topics_collection.find({"status": "active"}))
+        logger.info("\n[1/5] Trimming oversized topics...")
+        active_topics = []
+        cursor = self.topics_collection.find({"status": "active"})
+        async for topic in cursor:
+            active_topics.append(topic)
         
         for topic in active_topics:
-            result = self.trim_topic_articles(topic["_id"])
+            result = await self.trim_topic_articles(topic["_id"])
             if result.get("trimmed", 0) > 0:
                 stats["topics_trimmed"] += 1
                 stats["articles_trimmed"] += result["trimmed"]
-                print(f"  Trimmed '{topic.get('title', 'Untitled')[:50]}': "
+                logger.info(f"  Trimmed '{topic.get('title', 'Untitled')[:50]}': "
                       f"{result['trimmed']} removed, {result['retained']} kept")
         
         # 2. Clean up old articles
-        print("\n[2/5] Cleaning up old articles...")
-        article_stats = self.cleanup_old_articles()
+        logger.info("\n[2/5] Cleaning up old articles...")
+        article_stats = await self.cleanup_old_articles()
         stats["articles_cleaned"] = article_stats
-        print(f"  Archived: {article_stats['archived']}, Deleted: {article_stats['deleted']}")
+        logger.info(f"  Archived: {article_stats['archived']}, Deleted: {article_stats['deleted']}")
         
         # 3. Clean up orphan articles
-        print("\n[3/5] Cleaning up orphan articles...")
-        orphan_count = self.cleanup_orphan_articles()
+        logger.info("\n[3/5] Cleaning up orphan articles...")
+        orphan_count = await self.cleanup_orphan_articles()
         stats["orphans_cleaned"] = orphan_count
-        print(f"  Orphaned articles archived: {orphan_count}")
+        logger.info(f"  Orphaned articles archived: {orphan_count}")
         
         # 4. Update topic lifecycle
-        print("\n[4/5] Updating topic lifecycle...")
-        lifecycle_stats = self.update_topic_lifecycle()
+        logger.info("\n[4/5] Updating topic lifecycle...")
+        lifecycle_stats = await self.update_topic_lifecycle()
         stats["topics_lifecycle"] = lifecycle_stats
-        print(f"  Stale: {lifecycle_stats['marked_stale']}, "
+        logger.info(f"  Stale: {lifecycle_stats['marked_stale']}, "
               f"Archived: {lifecycle_stats['marked_archived']}, "
               f"Deleted: {lifecycle_stats['deleted']}")
         
         # 5. Clean up small topics
-        print("\n[5/5] Cleaning up small topics...")
-        small_topics = self.cleanup_small_topics()
+        logger.info("\n[5/5] Cleaning up small topics...")
+        small_topics = await self.cleanup_small_topics()
         stats["small_topics_deleted"] = small_topics
-        print(f"  Small topics deleted: {small_topics}")
+        logger.info(f"  Small topics deleted: {small_topics}")
         
         stats["end_time"] = datetime.now()
         stats["duration_seconds"] = (stats["end_time"] - stats["start_time"]).total_seconds()
         
-        print("\n" + "=" * 80)
-        print("Maintenance Summary")
-        print("=" * 80)
-        print(f"Topics trimmed: {stats['topics_trimmed']}")
-        print(f"Articles removed from topics: {stats['articles_trimmed']}")
-        print(f"Old articles archived: {stats['articles_cleaned']['archived']}")
-        print(f"Old articles deleted: {stats['articles_cleaned']['deleted']}")
-        print(f"Orphan articles cleaned: {stats['orphans_cleaned']}")
-        print(f"Topics marked stale: {stats['topics_lifecycle']['marked_stale']}")
-        print(f"Topics archived: {stats['topics_lifecycle']['marked_archived']}")
-        print(f"Topics deleted: {stats['topics_lifecycle']['deleted']}")
-        print(f"Small topics removed: {stats['small_topics_deleted']}")
-        print(f"Duration: {stats['duration_seconds']:.2f} seconds")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("Maintenance Summary")
+        logger.info("=" * 80)
+        logger.info(f"Topics trimmed: {stats['topics_trimmed']}")
+        logger.info(f"Articles removed from topics: {stats['articles_trimmed']}")
+        logger.info(f"Old articles archived: {stats['articles_cleaned']['archived']}")
+        logger.info(f"Old articles deleted: {stats['articles_cleaned']['deleted']}")
+        logger.info(f"Orphan articles cleaned: {stats['orphans_cleaned']}")
+        logger.info(f"Topics marked stale: {stats['topics_lifecycle']['marked_stale']}")
+        logger.info(f"Topics archived: {stats['topics_lifecycle']['marked_archived']}")
+        logger.info(f"Topics deleted: {stats['topics_lifecycle']['deleted']}")
+        logger.info(f"Small topics removed: {stats['small_topics_deleted']}")
+        logger.info(f"Duration: {stats['duration_seconds']:.2f} seconds")
+        logger.info("=" * 80)
         
         return stats
+    
+    async def close(self):
+        """Close database connection"""
+        self.client.close()
+        logger.info("MongoDB connection closed")
 
 
-def main():
-    """Main entry point for manual execution"""
-    service = MaintenanceService(MONGODB_URI, MONGODB_DB_NAME)
-    service.run_full_maintenance()
+async def main():
+    """Main entry point"""
+    service = None
+    try:
+        service = MaintenanceService(MONGODB_URI, MONGODB_DB_NAME)
+        await service.run_full_maintenance()
+    except Exception as e:
+        logger.error(f"Maintenance failed: {e}")
+        raise
+    finally:
+        if service:
+            await service.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

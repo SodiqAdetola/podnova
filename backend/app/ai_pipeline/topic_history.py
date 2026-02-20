@@ -1,6 +1,7 @@
 # backend/app/ai_pipeline/topic_history.py
 """
 PodNova Topic History Module
+FULLY ASYNC VERSION with Motor
 Manages longitudinal topic development with intelligent snapshot creation
 Tracks significant updates and regenerates titles/summaries when needed
 """
@@ -22,7 +23,7 @@ from app.config import MONGODB_URI, MONGODB_DB_NAME
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Model configuration - match clustering.py
+# Model configuration
 EMBEDDING_MODEL = "gemini-embedding-001"
 TEXT_MODEL = "gemini-2.5-flash"
 
@@ -87,24 +88,19 @@ class TopicHistoryService:
             logger.warning("GEMINI_API_KEY not set. Metadata regeneration will fail.")
         self.gemini_client = genai.Client(api_key=api_key) if api_key else None
         
-        # Initialize indexes
+        # Create indexes on initialization
         asyncio.create_task(self._ensure_indexes())
     
     async def _ensure_indexes(self):
         """Ensure all required indexes exist"""
         try:
             # History collection indexes
-            await self.history_collection.create_index([
-                ("topic_id", 1), ("created_at", -1)
-            ], background=True)
-            
-            await self.history_collection.create_index("created_at", background=True)
+            await self.history_collection.create_index([("topic_id", 1), ("created_at", -1)])
+            await self.history_collection.create_index("created_at")
             
             # Topics collection indexes
-            await self.topics_collection.create_index("last_history_check", background=True)
-            await self.topics_collection.create_index([
-                ("status", 1), ("has_title", 1)
-            ], background=True)
+            await self.topics_collection.create_index("last_history_check")
+            await self.topics_collection.create_index([("status", 1), ("has_title", 1)])
             
             logger.info("Database indexes verified")
         except Exception as e:
@@ -123,7 +119,7 @@ class TopicHistoryService:
                 return 0.0
                 
             similarity = dot_product / norm_product
-            return float(similarity)  # Convert numpy float to Python float
+            return float(similarity)
         except Exception as e:
             logger.error(f"Error calculating cosine similarity: {e}")
             return 0.0
@@ -137,8 +133,6 @@ class TopicHistoryService:
         """
         Calculate composite significance score (0-1)
         Returns: (score, breakdown_dict)
-        
-        This is the core algorithm that determines if a topic update is significant
         """
         weights = self.config.SIGNIFICANCE_WEIGHTS
         breakdown = {}
@@ -180,7 +174,7 @@ class TopicHistoryService:
         
         breakdown["source_diversity"] = {
             "score": source_score,
-            "new_sources": list(new_sources)[:5],  # Limit to first 5 for display
+            "new_sources": list(new_sources)[:5],
             "total_sources": len(current_sources)
         }
         total_score += source_score * weights["source_diversity"]
@@ -301,18 +295,19 @@ class TopicHistoryService:
             if not article_ids:
                 return {"error": "No articles found"}
             
+            articles = []
             cursor = self.articles_collection.find({
                 "_id": {"$in": article_ids}
-            }).sort("published_date", -1).limit(20)  # Limit to 20 most recent articles
-            
-            articles = await cursor.to_list(length=20)
+            }).sort("published_date", -1).limit(20)
+            async for article in cursor:
+                articles.append(article)
             
             if not articles:
                 return {"error": "No articles found"}
             
             # Prepare article texts
             article_texts = []
-            for article in articles[:10]:  # Use only 10 most recent for generation
+            for article in articles[:10]:
                 published_date = article.get("published_date", datetime.now())
                 if isinstance(published_date, datetime):
                     date_str = published_date.strftime('%Y-%m-%d')
@@ -341,6 +336,8 @@ class TopicHistoryService:
 
 {context_note}
 
+Your task is to generate a CLEAR headline explaining the LATEST development in this ongoing story.
+
 Category: {topic.get('category', 'GENERAL').upper()}
 Number of articles: {len(articles)}
 Sources: {', '.join(topic.get('sources', [])[:5])}
@@ -351,16 +348,30 @@ Articles:
 
 Generate an UPDATED synthesis that reflects the current state of this story. Output JSON with:
 
-- **title** (string, max 10 words): Current headline capturing the story's present state
+- **title** (string, max 10 words): A headline explaining what's NEW in this story. Include specific names and concrete developments.
+
+  Examples of CLEAR update titles:
+  "Senate passes $95 billion aid package for Ukraine and Israel"
+  "Judge sets June 2024 trial date in Google antitrust case"
+  "Microsoft completes $69 billion Activision Blizzard acquisition"
+  
+  Examples of CONFUSING titles (AVOID):
+  "Historic vote reshapes foreign policy landscape"
+  "Trial date set in major tech case"
+  "Deal finally closes after regulatory hurdles"
+
 - **summary** (string, 2-3 sentences): Updated overview reflecting latest developments
+
 - **key_insights** (array, 3-5 strings): Current most important facts/developments
+
 - **confidence_score** (integer, 0-100): Current reliability assessment
+
 - **development_note** (string, 1 sentence): What has changed since earlier in this story
 
 JSON format only, no markdown:"""
 
             response = self.gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=TEXT_MODEL,
                 contents=prompt
             )
             
@@ -388,7 +399,6 @@ JSON format only, no markdown:"""
             
         except json.JSONDecodeError as e:
             logger.error(f"JSON parsing error in metadata regeneration: {e}")
-            logger.debug(f"Response text: {response_text if 'response_text' in locals() else 'N/A'}")
             return {"error": "Failed to parse AI response"}
         except Exception as e:
             logger.error(f"Error regenerating metadata: {str(e)}")
@@ -412,6 +422,11 @@ JSON format only, no markdown:"""
             article_ids = topic.get("article_ids", [])
             sources = topic.get("sources", [])
             
+            # Safely get development note
+            development_note = None
+            if regenerated_metadata and isinstance(regenerated_metadata, dict):
+                development_note = regenerated_metadata.get("development_note")
+            
             # Create snapshot
             history_doc = {
                 "topic_id": ObjectId(topic_id),
@@ -433,7 +448,7 @@ JSON format only, no markdown:"""
                 "significance_score": significance_breakdown.get("total_score"),
                 "significance_breakdown": significance_breakdown,
                 "was_regenerated": regenerated_metadata is not None,
-                "development_note": regenerated_metadata.get("development_note") if regenerated_metadata else None
+                "development_note": development_note
             }
             
             result = await self.history_collection.insert_one(history_doc)
@@ -591,7 +606,7 @@ JSON format only, no markdown:"""
             
             logger.info(f"Total active topics to check: {total_topics}")
             
-            # Process in batches to avoid memory issues
+            # Process in batches
             skip = 0
             while skip < total_topics:
                 cursor = self.topics_collection.find({
@@ -624,9 +639,7 @@ JSON format only, no markdown:"""
                         stats["errors"] += 1
                 
                 skip += batch_size
-                
-                # Small delay to prevent overwhelming the database
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.1)  # Small delay
             
         except Exception as e:
             logger.error(f"Error in history check cycle: {e}")
@@ -674,26 +687,19 @@ async def run_history_check():
             await service.close()
 
 
-def main():
+async def main():
     """Entry point for manual execution"""
-    import asyncio
+    logger.info("Starting topic history check...")
+    stats = await run_history_check()
     
-    async def async_main():
-        logger.info("Starting topic history check...")
-        stats = await run_history_check()
-        
-        # Exit with appropriate code
-        if stats and stats.get("errors", 0) == 0:
-            logger.info("History check completed successfully")
-            return 0
-        else:
-            logger.error("History check completed with errors")
-            return 1
-    
-    # Run the async function
-    exit_code = asyncio.run(async_main())
-    exit(exit_code)
+    if stats and stats.get("errors", 0) == 0:
+        logger.info("History check completed successfully")
+        return 0
+    else:
+        logger.error("History check completed with errors")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    exit_code = asyncio.run(main())
+    exit(exit_code)

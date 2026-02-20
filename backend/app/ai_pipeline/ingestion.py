@@ -1,8 +1,8 @@
-# /backend/app/ai_pipeline/ingestion.py
+# backend/app/ai_pipeline/ingestion.py
 """
 PodNova Article Ingestion Module
+FULLY ASYNC VERSION with Motor and aiohttp
 Fetches articles from RSS feeds, filters for quality, and stores in MongoDB
-NOW WITH IMAGE EXTRACTION
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 
@@ -12,62 +12,86 @@ import ssl
 import certifi
 import urllib.request
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from pymongo import MongoClient
+from typing import List, Dict, Optional, Any
+import motor.motor_asyncio
 from langdetect import detect
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 import re
+import logging
 
 # Ingestion Configuration
 from app.ai_pipeline.feed_config import RSS_FEEDS, IMPORTANT_KEYWORDS, NOISE_KEYWORDS, FETCH_INTERVAL_HOURS, MIN_WORD_COUNT, MAX_WORD_COUNT, MAX_ARTICLE_AGE_HOURS
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 class ArticleIngestionService:
     def __init__(self, mongo_uri: str, db_name: str):
-        """Initialise the ingestion service with MongoDB connection"""
-        import certifi
-        
-        self.client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
+        """Initialize with Motor async client"""
+        self.client = motor.motor_asyncio.AsyncIOMotorClient(
+            mongo_uri, 
+            tlsCAFile=certifi.where(),
+            maxPoolSize=50,
+            minPoolSize=10
+        )
         self.db = self.client[db_name]
         self.articles_collection = self.db["articles"]
         self.categories_collection = self.db["categories"]
         
-        # Create indexes for efficient lookups
-        self.articles_collection.create_index("content_hash", unique=True)
-        self.articles_collection.create_index("url", unique=True)
-        self.articles_collection.create_index("published_date")
-        
-    def fetch_feed(self, feed_url: str) -> List[Dict]:
-        """Fetch and parse an RSS feed"""
+        # Create indexes on initialization
+        asyncio.create_task(self._ensure_indexes())
+    
+    async def _ensure_indexes(self):
+        """Create indexes for efficient lookups"""
         try:
-            # Create SSL context with certifi certificates
+            await self.articles_collection.create_index("content_hash", unique=True)
+            await self.articles_collection.create_index("url", unique=True)
+            await self.articles_collection.create_index("published_date")
+            await self.articles_collection.create_index("status")
+            logger.info("Database indexes verified")
+        except Exception as e:
+            logger.error(f"Error creating indexes: {e}")
+    
+    def _fetch_feed_sync(self, feed_url: str) -> List[Dict]:
+        """Fetch and parse an RSS feed (sync - feedparser isn't async)"""
+        try:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
-            
-            # Parse feed with SSL context
             feed = feedparser.parse(feed_url, handlers=[
                 urllib.request.HTTPSHandler(context=ssl_context)
             ])
-            
             return feed.entries
         except Exception as e:
-            print(f"Error fetching feed {feed_url}: {str(e)}")
+            logger.error(f"Error fetching feed {feed_url}: {str(e)}")
             return []
     
-    def extract_full_content(self, url: str) -> Optional[str]:
-        """Attempt to extract full article content from URL"""
+    async def fetch_feed(self, feed_url: str) -> List[Dict]:
+        """Async wrapper for feed fetching"""
+        return await asyncio.to_thread(self._fetch_feed_sync, feed_url)
+    
+    async def extract_full_content(self, url: str) -> Optional[str]:
+        """Extract full article content from URL using aiohttp"""
         try:
-            response = requests.get(url, timeout=10, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
-            soup = BeautifulSoup(response.content, 'html.parser')
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }) as response:
+                    if response.status != 200:
+                        return None
+                    html = await response.text()
+            
+            soup = BeautifulSoup(html, 'html.parser')
             
             # Remove script and style elements
-            for script in soup(["script", "style", "nav", "footer", "header"]):
+            for script in soup(["script", "style", "nav", "footer", "header", "aside"]):
                 script.decompose()
             
             # Try to find main content area
             content = None
-            for selector in ['article', '.article-body', '.content', 'main']:
+            for selector in ['article', '.article-body', '.content', 'main', '.post-content', '.story-body']:
                 content = soup.select_one(selector)
                 if content:
                     break
@@ -81,8 +105,11 @@ class ArticleIngestionService:
             text = re.sub(r'\s+', ' ', text).strip()
             return text
             
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout extracting content from {url}")
+            return None
         except Exception as e:
-            print(f"Error extracting content from {url}: {str(e)}")
+            logger.error(f"Error extracting content from {url}: {str(e)}")
             return None
     
     def extract_image_from_entry(self, entry: Dict, url: str) -> Optional[str]:
@@ -91,7 +118,10 @@ class ArticleIngestionService:
         
         # Method 1: Check RSS feed media content
         if hasattr(entry, 'media_content') and entry.media_content:
-            image_url = entry.media_content[0].get('url')
+            for media in entry.media_content:
+                if media.get('url'):
+                    image_url = media['url']
+                    break
         
         # Method 2: Check RSS enclosures
         elif hasattr(entry, 'enclosures') and entry.enclosures:
@@ -109,7 +139,7 @@ class ArticleIngestionService:
             content_html = entry.content[0].get('value', '')
             image_url = self._extract_image_from_html(content_html)
         
-        elif hasattr(entry, 'summary'):
+        elif hasattr(entry, 'summary') and entry.summary:
             image_url = self._extract_image_from_html(entry.summary)
         
         # Clean and validate URL
@@ -131,8 +161,8 @@ class ArticleIngestionService:
             img = soup.find('img')
             if img:
                 return img.get('src') or img.get('data-src')
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Error extracting image from HTML: {e}")
         return None
     
     def generate_content_hash(self, text: str) -> str:
@@ -151,8 +181,9 @@ class ArticleIngestionService:
     def detect_language(self, text: str) -> str:
         """Detect text language"""
         try:
-            return detect(text)
-        except:
+            return detect(text[:500])
+        except Exception as e:
+            logger.error(f"Language detection error: {e}")
             return "unknown"
     
     def is_newsworthy(self, title: str, content: str, category: str) -> bool:
@@ -168,7 +199,7 @@ class ArticleIngestionService:
         
         return has_important_keyword and not has_noise_keyword
     
-    def filter_article(self, article_data: Dict) -> bool:
+    def filter_article(self, article_data: Dict[str, Any]) -> bool:
         """
         Apply quality filters to determine if article should be ingested
         Returns True if article passes all filters
@@ -180,35 +211,35 @@ class ArticleIngestionService:
         # Filter 1: Content length - must be substantial
         word_count = self.count_words(content)
         if word_count < MIN_WORD_COUNT or word_count > MAX_WORD_COUNT:
-            print(f"  [REJECTED] {title[:60]} - Word count: {word_count}")
+            logger.info(f"  [REJECTED] {title[:60]} - Word count: {word_count}")
             return False
         
         # Filter 2: Language check
         language = self.detect_language(content[:500])
         if language != "en":
-            print(f"  [REJECTED] {title[:60]} - Language: {language}")
+            logger.info(f"  [REJECTED] {title[:60]} - Language: {language}")
             return False
         
         # Filter 3: Recency - only very recent news
         if not self.is_recent(article_data["published_date"]):
-            print(f"  [REJECTED] {title[:60]} - Too old")
+            logger.info(f"  [REJECTED] {title[:60]} - Too old")
             return False
         
         # Filter 4: Minimum content quality
         if "read more" in content.lower()[:200] and word_count < 500:
-            print(f"  [REJECTED] {title[:60]} - Placeholder content")
+            logger.info(f"  [REJECTED] {title[:60]} - Placeholder content")
             return False
         
         # Filter 5: Newsworthiness - must be important/relevant
         if not self.is_newsworthy(title, content, category):
-            print(f"  [REJECTED] {title[:60]} - Not newsworthy enough")
+            logger.info(f"  [REJECTED] {title[:60]} - Not newsworthy enough")
             return False
         
         return True
     
-    def article_exists(self, url: str, content_hash: str) -> bool:
+    async def article_exists(self, url: str, content_hash: str) -> bool:
         """Check if article already exists in database"""
-        existing = self.articles_collection.find_one({
+        existing = await self.articles_collection.find_one({
             "$or": [
                 {"url": url},
                 {"content_hash": content_hash}
@@ -216,12 +247,15 @@ class ArticleIngestionService:
         })
         return existing is not None
     
-    def parse_article(self, entry: Dict, feed_info: Dict, category: str) -> Optional[Dict]:
+    def parse_article(self, entry: Dict, feed_info: Dict, category: str) -> Optional[Dict[str, Any]]:
         """Parse RSS entry into article document"""
         try:
             # Extract basic info from RSS
             title = entry.get('title', '').strip()
             url = entry.get('link', '').strip()
+            
+            if not title or not url:
+                return None
             
             # Get publication date
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
@@ -232,18 +266,12 @@ class ArticleIngestionService:
             # Get description/summary from RSS
             description = entry.get('summary', '') or entry.get('description', '')
             
-            # Try to extract full content
-            full_content = self.extract_full_content(url)
+            # Clean description
+            description = BeautifulSoup(description, 'html.parser').get_text(separator=' ', strip=True)
+            description = re.sub(r'\s+', ' ', description).strip()
             
-            # Use full content if available, otherwise use RSS description
-            content = full_content if full_content else description
-            
-            # Clean HTML tags from content
-            content = BeautifulSoup(content, 'html.parser').get_text(separator=' ', strip=True)
-            content = re.sub(r'\s+', ' ', content).strip()
-            
-            if not content or not title or not url:
-                return None
+            # For now, use description as content (full content extraction is optional)
+            content = description
             
             # Extract image URL
             image_url = self.extract_image_from_entry(entry, url)
@@ -255,7 +283,7 @@ class ArticleIngestionService:
                 "title": title,
                 "url": url,
                 "content": content,
-                "description": BeautifulSoup(description, 'html.parser').get_text(separator=' ', strip=True),
+                "description": description,
                 "content_hash": content_hash,
                 "published_date": pub_date,
                 "category": category,
@@ -270,15 +298,15 @@ class ArticleIngestionService:
             return article_data
             
         except Exception as e:
-            print(f"Error parsing article: {str(e)}")
+            logger.error(f"Error parsing article: {str(e)}")
             return None
     
-    def ingest_from_feed(self, feed_info: Dict, category: str) -> int:
+    async def ingest_from_feed(self, feed_info: Dict, category: str) -> int:
         """Ingest articles from a single RSS feed"""
-        print(f"\nFetching from {feed_info['name']} ({category})...")
+        logger.info(f"\nFetching from {feed_info['name']} ({category})...")
         
-        entries = self.fetch_feed(feed_info['url'])
-        print(f"  Found {len(entries)} entries in feed")
+        entries = await self.fetch_feed(feed_info['url'])
+        logger.info(f"  Found {len(entries)} entries in feed")
         
         ingested_count = 0
         
@@ -289,8 +317,8 @@ class ArticleIngestionService:
                 continue
             
             # Check if already exists
-            if self.article_exists(article_data['url'], article_data['content_hash']):
-                print(f"  [SKIPPED] {article_data['title'][:60]} - Already exists")
+            if await self.article_exists(article_data['url'], article_data['content_hash']):
+                logger.info(f"  [SKIPPED] {article_data['title'][:60]} - Already exists")
                 continue
             
             # Apply quality filters
@@ -299,21 +327,21 @@ class ArticleIngestionService:
             
             # Insert into MongoDB
             try:
-                self.articles_collection.insert_one(article_data)
+                await self.articles_collection.insert_one(article_data)
                 ingested_count += 1
                 img_status = "📷" if article_data.get('image_url') else "  "
-                print(f"  [INGESTED] {img_status} {article_data['title'][:60]} ({article_data['word_count']} words)")
+                logger.info(f"  [INGESTED] {img_status} {article_data['title'][:60]} ({article_data['word_count']} words)")
             except Exception as e:
-                print(f"  [ERROR] Failed to insert: {str(e)}")
+                logger.error(f"  [ERROR] Failed to insert: {str(e)}")
         
         return ingested_count
     
-    def run_ingestion(self) -> Dict:
+    async def run_ingestion(self) -> Dict[str, Any]:
         """Run full ingestion cycle across all feeds"""
-        print("=" * 80)
-        print("Starting PodNova Article Ingestion")
-        print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("Starting PodNova Article Ingestion")
+        logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 80)
         
         stats = {
             "total_ingested": 0,
@@ -324,7 +352,7 @@ class ArticleIngestionService:
         for category, feeds in RSS_FEEDS.items():
             category_count = 0
             for feed in feeds:
-                count = self.ingest_from_feed(feed, category)
+                count = await self.ingest_from_feed(feed, category)
                 category_count += count
             
             stats["by_category"][category] = category_count
@@ -333,23 +361,36 @@ class ArticleIngestionService:
         stats["end_time"] = datetime.now()
         stats["duration_seconds"] = (stats["end_time"] - stats["start_time"]).total_seconds()
         
-        print("\n" + "=" * 80)
-        print("Ingestion Summary")
-        print("=" * 80)
-        print(f"Total articles ingested: {stats['total_ingested']}")
+        logger.info("\n" + "=" * 80)
+        logger.info("Ingestion Summary")
+        logger.info("=" * 80)
+        logger.info(f"Total articles ingested: {stats['total_ingested']}")
         for cat, count in stats["by_category"].items():
-            print(f"  {cat.capitalize()}: {count}")
-        print(f"Duration: {stats['duration_seconds']:.2f} seconds")
-        print("=" * 80)
+            logger.info(f"  {cat.capitalize()}: {count}")
+        logger.info(f"Duration: {stats['duration_seconds']:.2f} seconds")
+        logger.info("=" * 80)
         
         return stats
+    
+    async def close(self):
+        """Close database connection"""
+        self.client.close()
+        logger.info("MongoDB connection closed")
 
 
-def main():
-    """Main entry point for manual execution or scheduling"""
-    service = ArticleIngestionService(MONGODB_URI, MONGODB_DB_NAME)
-    service.run_ingestion()
+async def main():
+    """Main entry point"""
+    service = None
+    try:
+        service = ArticleIngestionService(MONGODB_URI, MONGODB_DB_NAME)
+        await service.run_ingestion()
+    except Exception as e:
+        logger.error(f"Ingestion failed: {e}")
+        raise
+    finally:
+        if service:
+            await service.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

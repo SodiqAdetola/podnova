@@ -14,9 +14,22 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { auth } from "../firebase/config";
-import { minimum } from "firebase/firestore/pipelines";
 
 const { height } = Dimensions.get("window");
+const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+
+const TONE_TO_STYLE: Record<string, string> = {
+  casual: "casual",
+  factual: "standard",
+  analytical: "advanced",
+  expert: "expert",
+};
+
+const LENGTH_TO_MINUTES: Record<string, number> = {
+  short: 5,
+  medium: 10,
+  long: 20,
+};
 
 interface PodcastGenModalProps {
   visible: boolean;
@@ -25,11 +38,6 @@ interface PodcastGenModalProps {
     id: string;
     title: string;
     article_count: number;
-  };
-  userSettings?: {
-    defaultVoice: string;
-    defaultStyle: string;
-    defaultLength: number;
   };
 }
 
@@ -53,68 +61,82 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   visible,
   onClose,
   topic,
-  userSettings,
 }) => {
-  // Initialize with user defaults or fallback defaults
-  const [selectedVoice, setSelectedVoice] = useState(
-    userSettings?.defaultVoice || "calm_female"
-  );
-  const [selectedStyle, setSelectedStyle] = useState(
-    userSettings?.defaultStyle || "standard"
-  );
-  const [lengthMinutes, setLengthMinutes] = useState(
-    userSettings?.defaultLength || 5
-  );
+  const [loadingPreferences, setLoadingPreferences] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState("calm_female");
+  const [selectedStyle, setSelectedStyle] = useState("standard");
+  const [lengthMinutes, setLengthMinutes] = useState(10);
   const [customPrompt, setCustomPrompt] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generationStarted, setGenerationStarted] = useState(false);
 
-  // Reset when modal opens
+  // Load preferences when modal opens
   useEffect(() => {
     if (visible) {
       setGenerationStarted(false);
       setGenerating(false);
+      setCustomPrompt("");
+      setShowAdvanced(false);
+      loadUserPreferences();
     }
   }, [visible]);
 
-  const estimatedTime = lengthMinutes * 12; // ~12 seconds per minute
-  const estimatedCredits = lengthMinutes;
+  const loadUserPreferences = async () => {
+    try {
+      setLoadingPreferences(true);
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const profile = await response.json();
+        const prefs = profile.preferences;
+
+        // Always set values from preferences
+        setSelectedVoice(prefs.default_voice || "calm_female");
+        setSelectedStyle(TONE_TO_STYLE[prefs.default_tone] || "standard");
+        setLengthMinutes(LENGTH_TO_MINUTES[prefs.default_podcast_length] || 5);
+      }
+    } catch (error) {
+      console.error("Error loading preferences:", error);
+    } finally {
+      setLoadingPreferences(false);
+    }
+  };
+
+  const estimatedTime = lengthMinutes * 12;
 
   const handleGenerate = async () => {
     setGenerating(true);
 
     try {
-        const token = await auth.currentUser?.getIdToken(true);
-        if (!token) {
-            throw new Error("User not authenticated");
-        }
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) throw new Error("User not authenticated");
 
-        const response = await fetch(
-        "https://podnova-backend-r8yz.onrender.com/podcasts/generate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            topic_id: topic.id,
-            voice: selectedVoice,
-            style: selectedStyle,
-            length_minutes: lengthMinutes,
-            custom_prompt: customPrompt || null,
-          }),
-        }
-      );
-
-      const data = await response.json();
+      const response = await fetch(`${API_BASE_URL}/podcasts/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          topic_id: topic.id,
+          voice: selectedVoice,
+          style: selectedStyle,
+          length_minutes: lengthMinutes,
+          custom_prompt: customPrompt || null,
+        }),
+      });
 
       if (response.ok) {
         setGenerationStarted(true);
-        // Don't close modal yet - show success message
       } else {
-        alert("Failed to start podcast generation. Please try again.");
+        const error = await response.json();
+        alert(`Failed: ${error.detail || "Unknown error"}`);
         setGenerating(false);
       }
     } catch (error) {
@@ -126,6 +148,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
 
   const handleClose = () => {
     setCustomPrompt("");
+    setShowAdvanced(false);
     onClose();
   };
 
@@ -249,22 +272,20 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
           <Text style={styles.advancedToggleText}>Advanced Controls</Text>
           <Ionicons name="chevron-up" size={20} color="#6366F1" />
         </TouchableOpacity>
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Custom Instructions (Optional)</Text>
           <TextInput
             style={styles.textInput}
-            placeholder="E.g., Focus on economic impacts, include expert opinions..."
+            placeholder="E.g., Focus on economic impacts..."
             placeholderTextColor="#9CA3AF"
             value={customPrompt}
-            onChangeText={setCustomPrompt}
+            onChangeText={(text) => setCustomPrompt(text.slice(0, 500))}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
+            maxLength={500}
           />
-          <Text style={styles.inputHint}>
-            {customPrompt.length}/500 characters
-          </Text>
+          <Text style={styles.inputHint}>{customPrompt.length}/500 characters</Text>
         </View>
       </View>
     );
@@ -285,16 +306,13 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             </View>
             <Text style={styles.successTitle}>Podcast Generation Started!</Text>
             <Text style={styles.successMessage}>
-              Your podcast is being generated in the background. Estimated time: {estimatedTime}-{estimatedTime + 30} seconds.
+              Your podcast is being generated. Estimated time: {estimatedTime}s.
             </Text>
             <Text style={styles.successInstruction}>
               Navigate to the <Text style={styles.bold}>Library</Text> tab to track
-              progress and listen when ready.
+              progress.
             </Text>
-            <TouchableOpacity
-              style={styles.successButton}
-              onPress={handleClose}
-            >
+            <TouchableOpacity style={styles.successButton} onPress={handleClose}>
               <Text style={styles.successButtonText}>Got it!</Text>
             </TouchableOpacity>
           </View>
@@ -321,49 +339,61 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             <View style={styles.placeholder} />
           </View>
 
-          {/* Content */}
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Topic Info */}
-            <View style={styles.topicInfo}>
-              <Text style={styles.topicLabel}>Topic</Text>
-              <Text style={styles.topicTitle}>{topic.title}</Text>
-              <Text style={styles.topicMeta}>{topic.article_count} Sources</Text>
+          {/* Loading State */}
+          {loadingPreferences ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366F1" />
+              <Text style={styles.loadingText}>Loading preferences...</Text>
             </View>
+          ) : (
+            <>
+              {/* Content */}
+              <ScrollView
+                style={styles.content}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Topic Info */}
+                <View style={styles.topicInfo}>
+                  <Text style={styles.topicLabel}>Topic</Text>
+                  <Text style={styles.topicTitle}>{topic.title}</Text>
+                  <Text style={styles.topicMeta}>{topic.article_count} Sources</Text>
+                </View>
 
-            {renderVoiceSelector()}
-            {renderStyleSelector()}
-            {renderLengthSlider()}
-            {renderAdvancedControls()}
+                {renderVoiceSelector()}
+                {renderStyleSelector()}
+                {renderLengthSlider()}
+                {renderAdvancedControls()}
 
-            {/* Estimate */}
-            <View style={styles.estimate}>
-              <Text style={styles.estimateText}>
-                Estimated time: {estimatedTime}s • Cost: {estimatedCredits}{" "}
-                credits
-              </Text>
-            </View>
-          </ScrollView>
+                {/* Estimate */}
+                <View style={styles.estimate}>
+                  <Text style={styles.estimateText}>
+                    Estimated time: {estimatedTime}s
+                  </Text>
+                </View>
+              </ScrollView>
 
-          {/* Generate Button */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[
-                styles.generateButton,
-                generating && styles.generateButtonDisabled,
-              ]}
-              onPress={handleGenerate}
-              disabled={generating}
-            >
-              {generating ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-                  <Text style={styles.generateButtonText}>Generate Podcast</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+              {/* Generate Button */}
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={[
+                    styles.generateButton,
+                    generating && styles.generateButtonDisabled,
+                  ]}
+                  onPress={handleGenerate}
+                  disabled={generating}
+                >
+                  {generating ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="sparkles" size={20} color="#FFFFFF" />
+                      <Text style={styles.generateButtonText}>Generate Podcast</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -404,6 +434,15 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+  },
+  loadingContainer: {
+    padding: 60,
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: "#6B7280",
   },
   content: {
     paddingHorizontal: 20,
@@ -447,14 +486,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   voiceCard: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     marginRight: 12,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: "#E5E7EB",
     backgroundColor: "#FFFFFF",
     alignItems: "center",
+    minWidth: 100,
   },
   voiceCardActive: {
     borderColor: "#6366F1",
@@ -464,7 +504,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: "#6B7280",
-    marginTop: 5,
+    marginTop: 8,
     textAlign: "center",
   },
   voiceNameActive: {
@@ -478,12 +518,12 @@ const styles = StyleSheet.create({
   },
   styleGrid: {
     flexDirection: "row",
-    alignSelf: "stretch",
+    flexWrap: "wrap",
     gap: 8,
   },
   styleButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#E5E7EB",

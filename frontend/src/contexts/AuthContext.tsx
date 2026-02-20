@@ -1,43 +1,58 @@
-import react, { createContext, useContext, useState, useEffect } from 'react';
+// frontend/src/contexts/AuthContext.tsx
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { View, ActivityIndicator } from 'react-native';
 
-//Authentication context interface set to being User or null
 type AuthContextProps = {
     user: User | null;
+    loading: boolean; // Export loading state
 }
 
-// Default value for authentication context as null
-const AuthContext = createContext<AuthContextProps>({ user: null });
+const AuthContext = createContext<AuthContextProps>({ user: null, loading: true });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-        setUser(firebaseUser);
-        setLoading(false);
-    });
+    useEffect(() => {
+        console.log("Setting up auth state listener");
+        
+        const unsubscribe = onAuthStateChanged(auth, 
+            (firebaseUser) => {
+                console.log("Auth state changed:", firebaseUser ? `User ${firebaseUser.email} logged in` : "No user");
+                setUser(firebaseUser);
+                setLoading(false);
+            },
+            (error) => {
+                console.error("Auth state change error:", error);
+                setLoading(false);
+            }
+        );
 
-    return () => unsubscribe();
-  }, []);
+        // Check current user immediately
+        const currentUser = auth.currentUser;
+        console.log("Current user on mount:", currentUser?.email);
 
-  if (loading) {
+        return () => {
+            console.log("Cleaning up auth listener");
+            unsubscribe();
+        };
+    }, []);
+
+    if (loading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+                <ActivityIndicator size="large" color="#6366F1" />
+            </View>
+        );
+    }
+
     return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
+        <AuthContext.Provider value={{ user, loading }}>
+            {children}
+        </AuthContext.Provider>
     );
-  }
-
-  return (
-    // make user state available throughout the app
-    <AuthContext.Provider value={{ user }}>
-        {children}
-    </AuthContext.Provider>);
 };
 
 export const useAuth = () => useContext(AuthContext);

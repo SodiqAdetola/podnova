@@ -1,4 +1,4 @@
-// frontend/src/screens/TopicDetail.tsx - UPDATED VERSION
+// frontend/src/screens/TopicDetail.tsx - WITH HISTORY TIMELINE
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -16,6 +16,7 @@ import { MainStackParamList } from "../Navigator";
 import { TopicDetail } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
 import PodcastGeneratorModal from "../components/PodcastGenModal";
+import TopicHistoryModal from "../components/TopicHistoryModal"; 
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
@@ -32,6 +33,7 @@ const TopicDetailScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [heroImageError, setHeroImageError] = useState(false);
   const [showPodcastModal, setShowPodcastModal] = useState(false);
+  const [showHistoryTimeline, setShowHistoryTimeline] = useState(false);
 
   useEffect(() => {
     loadTopic();
@@ -57,6 +59,10 @@ const TopicDetailScreen: React.FC = () => {
     setShowPodcastModal(true);
   };
 
+  const handleOpenTimeline = () => {
+    setShowHistoryTimeline(true);
+  };
+
   const renderHeroImage = () => {
     if (!topic?.image_url || heroImageError) {
       return (
@@ -80,6 +86,9 @@ const TopicDetailScreen: React.FC = () => {
   const renderOverviewTab = () => {
     if (!topic) return null;
 
+    // Check if topic has history
+    const hasHistory = topic.history_point_count && topic.history_point_count > 1;
+
     return (
       <View>
         {renderHeroImage()}
@@ -94,9 +103,43 @@ const TopicDetailScreen: React.FC = () => {
           <View style={styles.confidenceBadge}>
             <Text style={styles.confidenceText}>Confidence {Math.round(topic.confidence * 100)}%</Text>
           </View>
+
+          {/* Development note badge (if story has evolved) */}
+          {hasHistory && topic.development_note && (
+            <View style={styles.developingStoryBadge}>
+              <Ionicons name="git-branch" size={14} color="#8B5CF6" />
+              <Text style={styles.developingStoryText}>Developing Story</Text>
+            </View>
+          )}
         </View>
 
-        {/* UPDATED: Podcast button now opens modal */}
+        {/* Story Timeline Button (only show if has history) */}
+        {hasHistory && (
+          <TouchableOpacity 
+            style={styles.timelineButton}
+            onPress={handleOpenTimeline}
+          >
+            <View style={styles.timelineButtonContent}>
+              <View style={styles.timelineIconContainer}>
+                <Ionicons name="git-branch" size={20} color="#8B5CF6" />
+              </View>
+              <View style={styles.timelineTextContainer}>
+                <View style={styles.timelineHeader}>
+                  <Text style={styles.timelineTitle}>Story Timeline</Text>
+                  <View style={styles.timelineCountBadge}>
+                    <Text style={styles.timelineCountText}>{topic.history_point_count}</Text>
+                  </View>
+                </View>
+                <Text style={styles.timelineSubtitle}>
+                  See how this story has evolved over time with {topic.history_point_count} major updates
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Podcast Button */}
         <TouchableOpacity 
           style={styles.podcastButton}
           onPress={handleGeneratePodcast}
@@ -239,17 +282,27 @@ const TopicDetailScreen: React.FC = () => {
         {activeTab === "overview" ? renderOverviewTab() : renderDiscussionTab()}
       </ScrollView>
 
-      {/*Podcast Generator Modal */}
+      {/* Modals */}
       {topic && (
-        <PodcastGeneratorModal
-          visible={showPodcastModal}
-          onClose={() => setShowPodcastModal(false)}
-          topic={{
-            id: topic.id,
-            title: topic.title,
-            article_count: topic.article_count,
-          }}
-        />
+        <>
+          <PodcastGeneratorModal
+            visible={showPodcastModal}
+            onClose={() => setShowPodcastModal(false)}
+            topic={{
+              id: topic.id,
+              title: topic.title,
+              article_count: topic.article_count,
+            }}
+          />
+
+          {/* History Timeline Modal */}
+          <TopicHistoryModal
+            visible={showHistoryTimeline}
+            onClose={() => setShowHistoryTimeline(false)}
+            topicId={topic.id}
+            topicTitle={topic.title}
+          />
+        </>
       )}
     </View>
   );
@@ -257,7 +310,6 @@ const TopicDetailScreen: React.FC = () => {
 
 export default TopicDetailScreen;
 
-// Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -436,15 +488,90 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: "#D1FAE5",
+    marginBottom: 8,
   },
   confidenceText: {
     fontSize: 12,
     color: "#047857",
     fontWeight: "600",
   },
+  developingStoryBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "#F3E8FF",
+    gap: 6,
+  },
+  developingStoryText: {
+    fontSize: 12,
+    color: "#7C3AED",
+    fontWeight: "600",
+  },
+  timelineButton: {
+    margin: 20,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#8B5CF6",
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  timelineButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  timelineIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F3E8FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  timelineTextContainer: {
+    flex: 1,
+  },
+  timelineHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 8,
+  },
+  timelineTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#7C3AED",
+  },
+  timelineCountBadge: {
+    backgroundColor: "#8B5CF6",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: "center",
+  },
+  timelineCountText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  timelineSubtitle: {
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 18,
+  },
   podcastButton: {
     margin: 20,
-    marginTop: 0,
+    marginTop: 8,
     padding: 16,
     borderRadius: 12,
     backgroundColor: "#FFFFFF",

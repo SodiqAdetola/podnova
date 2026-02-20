@@ -3,16 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface Podcast {
-  id: string;
-  topic_title: string;
-  category: string;
-  duration_seconds?: number;
-  audio_url?: string;
-  script?: string;
-  created_at: string;
-}
+import { Podcast } from '../types/podcasts';
 
 interface AudioContextType {
   currentPodcast: Podcast | null;

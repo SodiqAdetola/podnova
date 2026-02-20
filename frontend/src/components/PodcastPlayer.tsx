@@ -17,24 +17,10 @@ import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAudio } from "../contexts/AudioContext";
+import { Podcast } from "../types/podcasts";
+import { PodcastPlayerProps } from "../types/podcasts";
 
-interface Podcast {
-  id: string;
-  topic_title: string;
-  category: string;
-  duration_seconds?: number;
-  audio_url?: string;
-  script?: string;
-  created_at: string;
-}
 
-interface PodcastPlayerProps {
-  visible: boolean;
-  podcast: Podcast | null;
-  onClose: () => void;
-  isSaved: boolean;
-  onToggleSave: () => void;
-}
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -50,7 +36,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   const insets = useSafeAreaInsets();
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   
-  // ✅ USE GLOBAL AUDIO CONTEXT - No local sound state!
+  // GLOBAL AUDIO CONTEXT - No local sound state!
   const {
     isPlaying,
     position,
@@ -202,6 +188,8 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             <Text style={styles.podcastCategory}>
               {podcast.category.toUpperCase()}
             </Text>
+            <Text style={styles.podcastVoice}>Style: {podcast.style}</Text>
+            <Text style={styles.podcastVoice}>Voice Selection: {podcast.voice}</Text>
           </View>
 
           {/* Transcript */}
@@ -414,6 +402,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 15,
   },
+  podcastVoice: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "rgba(255, 255, 255, 0.7)",
+    textAlign: "left",
+    alignSelf: "flex-start",
+    top: 40,
+  },
   progressContainer: {
     marginBottom: 24,
     marginTop: 16,
@@ -538,7 +534,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   speedMenuContainer: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#5d5d5dd8",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 20,
@@ -548,7 +544,7 @@ const styles = StyleSheet.create({
   speedMenuTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
+    color: "#251b3c",
     marginBottom: 16,
     textAlign: "center",
   },
@@ -560,10 +556,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#00000080",
   },
   speedMenuItemActive: {
-    backgroundColor: "#EDE9FE",
+    backgroundColor: "#000000ad",
   },
   speedMenuItemText: {
     fontSize: 16,

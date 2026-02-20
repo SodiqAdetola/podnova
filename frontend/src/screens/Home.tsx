@@ -51,7 +51,7 @@ const HomeScreen: React.FC = () => {
 
       if (categoriesList.length > 0) {
         const topicsPromises = categoriesList.map((cat: Category) =>
-          fetch(`${API_BASE_URL}/topics/category/${cat.name}?sort_by=latest`)
+          fetch(`${API_BASE_URL}/topics/categories/${cat.name}?sort_by=latest`)
             .then((res) => res.json())
             .then((data) => {
               console.log(`Topics for ${cat.name}:`, data);

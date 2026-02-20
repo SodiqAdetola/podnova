@@ -427,8 +427,9 @@ const LibraryScreen: React.FC = () => {
 
               <View style={styles.metaRow}>
                 <Text style={styles.duration}>
-                  {formatDuration(item.duration_seconds)}
+                  Length: {item.length_minutes} mins
                 </Text>
+                
                 <Text style={styles.metaDivider}>•</Text>
                 <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
               </View>
@@ -558,7 +559,7 @@ const LibraryScreen: React.FC = () => {
 
       {hasGenerating && (
         <View style={styles.generatingBanner}>
-          <ActivityIndicator size="small" color="#8B5CF6" />
+          <ActivityIndicator size="small" color="#6366F1" />
           <Text style={styles.generatingText}>Generating podcast...</Text>
         </View>
       )}
@@ -677,7 +678,7 @@ const styles = StyleSheet.create({
   generatingText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#6B21A8",
+    color: "#6366F1",
   },
   listContent: {
     padding: 16,
@@ -728,16 +729,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   duration: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#6B7280",
   },
   metaDivider: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#D1D5DB",
-    marginHorizontal: 6,
+    marginHorizontal: 2,
   },
   dateText: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#6B7280",
   },
   tagsRow: {

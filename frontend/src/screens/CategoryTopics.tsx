@@ -41,7 +41,7 @@ const CategoryTopicsScreen: React.FC = () => {
   const loadTopics = async () => {
     try {
       const response = await fetch(
-        `${API_BASE_URL}/topics/category/${category}?sort_by=${sortBy}`
+        `${API_BASE_URL}/topics/categories/${category}?sort_by=${sortBy}`
       );
       const data = await response.json();
       setTopics(data.topics || []);

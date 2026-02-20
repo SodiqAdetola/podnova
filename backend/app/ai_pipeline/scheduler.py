@@ -39,8 +39,8 @@ class PodNovaScheduler:
         
         # Schedule intervals (in seconds)
         self.INGESTION_INTERVAL = 4 * 3600  # 4 hours
-        self.CLUSTERING_INTERVAL = 2 * 3600  # 2 hours
-        self.HISTORY_INTERVAL = 3 * 3600  # 3 hours
+        self.CLUSTERING_INTERVAL = 4 * 3600  # 4 hours
+        self.HISTORY_INTERVAL = 4 * 3600  # 4 hours
         self.LIGHT_MAINTENANCE_INTERVAL = 6 * 3600  # 6 hours
         
         # Track last run times

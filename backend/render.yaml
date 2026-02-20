@@ -1,0 +1,75 @@
+# render.yaml - Production configuration for PodNova (Mobile App Backend)
+services:
+  # Main web service
+  - type: web
+    name: podnova
+    runtime: python
+    repo: https://github.com/SodiqAdetola/podnova.git
+    branch: main
+    rootDir: backend
+    plan: starter  
+    
+    # Build and start commands with Rust/Cargo fixes
+    buildCommand: |
+      echo "🔧 Setting up writable Cargo directory..."
+      export CARGO_HOME=/opt/render/project/.cargo
+      mkdir -p $CARGO_HOME
+      echo "📦 Installing Python dependencies..."
+      pip install -r requirements.txt
+      echo "✅ Build complete"
+    
+    # FastAPI start command
+    startCommand: |
+      echo "🚀 Starting PodNova FastAPI application..."
+      echo "Current directory: $(pwd)"
+      echo "Directory contents: $(ls -la)"
+      echo "MongoDB URI set: $(if [ -n \"$MONGODB_URI\" ]; then echo 'YES'; else echo 'NO'; fi)"
+      echo "Firebase configured: $(if [ -n \"$FIREBASE_SERVICE_ACCOUNT_KEY\" ]; then echo 'YES'; else echo 'NO'; fi)"
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4
+    
+    # Environment variables
+    envVars:
+      - key: CARGO_HOME
+        value: /opt/render/project/.cargo
+      - key: PYTHONPATH
+        value: /opt/render/project/src/backend
+      - key: PYTHON_VERSION
+        value: 3.14.0
+      # MongoDB Atlas variables (set in Render dashboard)
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        sync: false
+      # Firebase variables
+      - key: FIREBASE_SERVICE_ACCOUNT_KEY
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      # CORS - Allow all origins for mobile app
+      - key: CORS_ORIGINS
+        value: "*"
+    
+    # Health check endpoint
+    healthCheckPath: /health
+    
+    # Auto-deploy configuration
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - backend/**/*.py
+        - backend/requirements.txt
+        - render.yaml
+      ignoredPaths:
+        - frontend/**
+        - README.md
+        - .gitignore
+    
+    # Persistent disk for any file uploads
+    disk:
+      name: podnova-data
+      mountPath: /opt/render/project/src/backend/uploads
+      sizeGB: 1

@@ -1148,3 +1148,5 @@ Scheduler running. Press Ctrl+C to stop.
 2026-02-20 00:46:00,386 - INFO - SCHEDULED JOB: Article Clustering
 2026-02-20 00:46:00,387 - INFO - ================================================================================
 2026-02-20 00:46:00,462 - INFO - Clustering completed: 0 articles processed
+2026-02-20 01:53:54,035 - INFO - 
+Scheduler stopped by user

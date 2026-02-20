@@ -1,27 +1,26 @@
-# app/controllers/topics_controller.py - UPDATED WITH HISTORY
+# app/controllers/topics_controller.py
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from bson import ObjectId
 from app.db import db
-from app.ai_pipeline.topic_history import TopicHistoryService
-from app.config import MONGODB_URI, MONGODB_DB_NAME
-
-# Initialize history service
-history_service = TopicHistoryService(MONGODB_URI, MONGODB_DB_NAME)
 
 
 async def get_all_categories() -> List[Dict]:
-    """Get all categories with their active topic counts and trending info"""
+    """
+    Get all categories with their active topic counts and trending info
+    """
     categories = ["technology", "finance", "politics"]
     result = []
     
     for category in categories:
+        # Count active topics
         topic_count = await db["topics"].count_documents({
             "category": category,
             "status": "active",
             "has_title": True
         })
         
+        # Get most recent topic for trending info
         recent_topic = await db["topics"].find_one(
             {
                 "category": category,
@@ -46,13 +45,21 @@ async def get_all_categories() -> List[Dict]:
 
 
 async def get_topics_by_category(category: str, sort_by: str = "latest") -> List[Dict]:
-    """Get topics for a specific category with sorting"""
+    """
+    Get topics for a specific category with sorting
+    
+    Args:
+        category: Category name
+        sort_by: Sorting option (latest, reliable, most_discussed)
+    """
+    # Base query
     query = {
         "category": category,
         "status": "active",
         "has_title": True
     }
     
+    # Determine sort order
     if sort_by == "latest":
         sort = [("last_updated", -1)]
     elif sort_by == "reliable":
@@ -62,10 +69,12 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
     else:
         sort = [("last_updated", -1)]
     
+    # Fetch topics
     cursor = db["topics"].find(query).sort(sort).limit(50)
     topics = []
     
     async for topic in cursor:
+        # Calculate time ago
         time_ago = _format_time_ago(topic["last_updated"])
         
         topics.append({
@@ -78,16 +87,20 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
             "last_updated": topic["last_updated"].isoformat(),
             "time_ago": time_ago,
             "category": topic["category"],
-            "image_url": topic.get("image_url"),
-            "history_point_count": topic.get("history_point_count", 0),  # ✅ NEW
-            "development_note": topic.get("development_note")  # ✅ NEW
+            "image_url": topic.get("image_url")
+
         })
     
     return topics
 
 
 async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
-    """Get full topic details including articles and history"""
+    """
+    Get full topic details including articles
+    
+    Args:
+        topic_id: Topic ID
+    """
     try:
         topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
     except:
@@ -111,14 +124,15 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
             "source": article["source"],
             "published_date": article["published_date"].isoformat(),
             "word_count": article.get("word_count", 0),
-            "image_url": article.get("image_url")
+            "image_url": topic.get("image_url")
+
         })
     
+    # Format time ago
     time_ago = _format_time_ago(topic["last_updated"])
-    tags = _extract_tags(topic)
     
-    # ✅ NEW: Get history timeline (limit to last 10 points)
-    history_timeline = await history_service.get_topic_timeline(topic_id)
+    # Extract tags from key insights (simple approach)
+    tags = _extract_tags(topic)
     
     return {
         "id": str(topic["_id"]),
@@ -136,24 +150,9 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
         "articles": articles,
         "tags": tags,
         "has_podcast": False,
-        "image_url": topic.get("image_url"),
-        "history_point_count": topic.get("history_point_count", 0),  # ✅ NEW
-        "history_timeline": history_timeline[:10] if history_timeline else [],  # ✅ NEW: Last 10 points
-        "development_note": topic.get("development_note")  # ✅ NEW
+        "image_url": topic.get("image_url")
+
     }
-
-
-async def get_topic_history(topic_id: str, limit: int = 20) -> List[Dict]:
-    """Get full history timeline for a topic"""
-    return await history_service.get_topic_timeline(topic_id)
-
-
-async def force_history_check(topic_id: str) -> Dict:
-    """Manually trigger history check for a topic (admin function)"""
-    result = await history_service.check_and_create_history(topic_id)
-    if not result:
-        return {"error": "Topic not found or not active"}
-    return result
 
 
 def _format_time_ago(dt: datetime) -> str:
@@ -182,7 +181,9 @@ def _format_time_ago(dt: datetime) -> str:
 
 
 def _extract_tags(topic: Dict) -> List[str]:
-    """Extract relevant tags from topic"""
+    """Extract relevant tags from topic - will be enhanced with AI later"""
+    # TODO: Implement AI-based tag extraction
+    # For now, return basic tags based on category
     tags = []
     
     category = topic.get("category", "")
@@ -193,10 +194,8 @@ def _extract_tags(topic: Dict) -> List[str]:
     elif category == "politics":
         tags.append("politics")
     
+    # Add multi-source tag if applicable
     if len(topic.get("sources", [])) >= 3:
         tags.append("multi-source")
-    
-    if topic.get("history_point_count", 0) >= 3:
-        tags.append("developing-story")
     
     return tags

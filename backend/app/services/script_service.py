@@ -4,7 +4,6 @@ Script generation service for podcasts
 Handles AI-powered script generation using Gemini
 """
 from typing import Dict, List
-from click import prompt
 from google import genai
 from app.config import GEMINI_API_KEY
 from app.db import db
@@ -123,29 +122,32 @@ class ScriptService:
         if podcast.get("custom_prompt"):
             custom_text = f"\n\nCUSTOM INSTRUCTIONS: {podcast['custom_prompt']}"
         
-        prompt = f"""You are a seasoned news narrator creating a spoken monologue for a PodNova podcast. Your script will be read aloud, so it must sound natural, fluid, and engaging—like a thoughtful friend explaining a complex topic. Write ONLY the words to be spoken; no stage directions, sound cues, formatting marks, or meta-commentary.
+        prompt = f"""You are creating a podcast script about this news topic. This will be converted to natural speech, so write ONLY the spoken words - no stage directions, sound effects, formatting, or meta-commentary.
+
+Write a spoken monologue intended to be read aloud by a human. Insert natural pauses using ellipses (...) or line breaks, occasional light fillers and light rhetorical phrases all sparingly. Avoid polished transitions. Prefer thinking-aloud style.
 
 TOPIC: {topic['title']}
 CATEGORY: {topic['category'].upper()}
-TARGET LENGTH: {podcast['length_minutes']} minutes
-TARGET WORD COUNT: approximately {podcast['length_minutes'] * 150} words (spoken at ~150 words per minute)
+TARGET LENGTH: {podcast['length_minutes']} minutes (~{podcast['length_minutes'] * 150} words)
 COMPREHENSION LEVEL: {podcast['style'].upper()}
 
-STYLE PROFILE:
-- Audience: {style_config['audience']}
+AUDIENCE & APPROACH:
+- Target Audience: {style_config['audience']}
 - Approach: {style_config['approach']}
 - Depth Required: {style_config['depth']}
 - Analysis Style: {style_config['analysis']}
 - Language Guidelines: {style_config['language']}
 
-SOURCE MATERIALS:
-You have {len(articles)} articles covering this topic. Synthesize information from ALL sources, not just one. When sources differ, acknowledge the nuance naturally (e.g., "While some outlets report X, others point to Y...").
+CRITICAL INSTRUCTION FOR {podcast['style'].upper()} LEVEL:
+{style_config['analysis']}
 
+SOURCE ARTICLES ({len(articles)} total):
 {articles_text}
 
 {focus_text}{custom_text}
 
-CONSISTENT INTRO & OUTRO PATTERN:
+SCRIPT STRUCTURE:
+1. **Opening Hook** (15 seconds): Lead with the most compelling angle. Make them want to keep listening.
 
 **Intro Pattern (10–15 seconds)**  
 - Must mention "PodNova" and "I'm your host" (or similar phrasing).  
@@ -169,52 +171,38 @@ CONSISTENT INTRO & OUTRO PATTERN:
 - "To wrap it up: [key takeaway]. Thanks for tuning in to PodNova. I'm your host, see you next time."  
 - "That's your PodNova update on [key takeaway]. Appreciate you listening. I'm your host, until next time."
 
-IMPORTANT:  
-- Do not copy the example phrases verbatim; instead, use them as a guide to create your own natural-sounding intro and outro that fit the flow of this specific script.  
-- The core elements (PodNova, host mention, teaser, thanks, sign-off) must always be present, but the exact wording can vary.  
-- Keep both intro and outro brief (10–15 seconds each).
-
-SCRIPT STRUCTURE (between intro and outro, follow approximate timing):
-
-1. **Opening Hook** (next 15 seconds after intro) – Grab the listener with the most compelling angle: a surprising fact, a provocative question, or a vivid scene.
-
-2. **Context & Background** (~20% of total time)  
-   - Set the stage: What's happening and why does it matter now?  
-   - Provide essential background for the target audience (avoid over-explaining basics for Advanced/Expert levels).  
+2. **Context Setting** (20%): 
+   - What's happening and why does it matter?
+   - Essential background
    - {style_config['depth']}
 
-3. **Core Analysis** (~50% of total time)  
-   - Synthesize the main developments from multiple sources.  
-   - Go beyond surface facts: {style_config['analysis']}  
-   - For ADVANCED/EXPERT levels, explore the "why behind the why"—uncover underlying causes, conflicting interpretations, and systemic implications.  
-   - Use specific facts, figures, quotes, and attributions (e.g., "According to Reuters...") to build credibility.  
-   - Weave in analogies, examples, or historical parallels if they illuminate the story.
+3. **Core Analysis** (50%): 
+   - Main developments synthesized from multiple sources
+   - {style_config['analysis']}
+   - For {podcast['style'].upper()} level: Go deeper than surface facts. Explore the 'why behind the why.'
 
-4. **Implications & What's Next** (~20% of total time)  
-   - Who is affected and how?  
-   - What are the broader consequences—economic, political, social?  
-   - For ADVANCED/EXPERT, discuss competing future scenarios or strategic considerations.  
-   - Connect the dots to related issues or trends.
+4. **Implications & Significance** (20%):
+   - Who's affected and how?
+   - Broader consequences
+   - What might happen next?
+   - For ADVANCED/EXPERT: Discuss competing scenarios
 
-5. **Outro** – Use the pattern described above, varying the wording but always including the key takeaway, thanks, PodNova mention, and sign-off.
+5. **Closing** (10 seconds): 
+   - Memorable synthesis or thought-provoking question
 
-CRITICAL GUIDELINES:
+CRITICAL REQUIREMENTS:
+- Write ONLY spoken words (no [music], stage directions, or "In this podcast...")
+- Natural speech with conversational flow
+- Synthesize information from MULTIPLE sources
+- Include specific facts, figures, and quotes
+- Attribute information naturally ("According to Reuters...")
+- For {podcast['style'].upper()} level: DEPTH OF INSIGHT matters more than vocabulary complexity
+- Avoid unnecessary jargon
+- Avoid using the character '*'
+- Stay objective and balanced
+- End with a clear conclusion
 
-✅ DO:
-- Write in a conversational, thinking-aloud style. Use natural pauses (ellipses … or line breaks), occasional light fillers ("well," "you know," "the thing is…"), and rhetorical questions.
-- Synthesize across sources—your script should reflect the full range of reporting.
-- Attribute information naturally ("Bloomberg reports that…", "Experts quoted by the BBC suggest…").
-- Use concrete details: numbers, dates, names, quotes.
-- Keep sentences varied in length—mix short punchy statements with longer explanatory ones.
-- Match the depth and language to the comprehension level:  
-  *Casual*: simple words, explain terms, focus on the big picture.  
-  *Standard*: clear professional tone, balanced.  
-  *Advanced*: critical analysis, industry terms used purposefully.  
-  *Expert*: deep multi‑factor analysis, nuanced, precise.
-- Stay objective and balanced; avoid editorializing.
-- Ensure the intro and outro follow the consistent pattern (core elements present) but vary the wording naturally.
-
-❌ DO NOT:
+DO NOT:
 - Include any stage directions, sound effects, or music cues (e.g., [intro music], [pause]).
 - Use markdown formatting like asterisks, underscores, or bullet lists.
 - Write numbered lists or bullet points—everything must flow as continuous prose.
@@ -223,14 +211,9 @@ CRITICAL GUIDELINES:
 - Exceed the target word count significantly; be concise but rich.
 - Copy the example intros/outros verbatim—create your own variations.
 
-STYLE EXAMPLES (illustrative only—match your level):
-- Casual: "So, have you been following the news about the big tech hearing? It's kind of a mess, honestly. Here's what's going on…"
-- Standard: "This week's antitrust hearing brought the CEOs of four major tech companies before Congress. The core issue? Whether these firms have become too powerful…"
-- Advanced: "The hearing revealed a fundamental tension in how we regulate digital monopolies. On one hand, there's bipartisan appetite for reform; on the other, the legal frameworks from the 20th century may be ill-equipped…"
-- Expert: "Examining the testimonies, one sees a clash between two competing antitrust philosophies: the Chicago School's consumer welfare standard versus the Neo-Brandeisian focus on market structure and democracy…"
+Remember: {podcast['style'].upper()} level means deeper THINKING and ANALYSIS, not just fancier words.
 
-Now, generate the podcast script. Remember: for {podcast['style'].upper()} level, depth of insight matters more than vocabulary complexity. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
-"""
+Generate the podcast script now:"""
 
         return prompt
     

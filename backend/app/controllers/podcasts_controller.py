@@ -239,7 +239,7 @@ async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[byt
     
     # Get user's speaking rate preference
     user_profile = await user_service.get_user_profile(podcast["user_id"])
-    speaking_rate = user_service.calculate_speaking_rate(user_profile)
+    speaking_rate = 1.0  # Default speaking rate
     
     # Generate audio
     return await audio_service.generate_audio(script, voice_name, speaking_rate)

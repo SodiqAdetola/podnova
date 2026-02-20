@@ -39,7 +39,7 @@ class UserService:
             print(f"Error fetching user profile: {str(e)}")
             return None
     
-    def calculate_speaking_rate(
+'''    def calculate_speaking_rate(
         self,
         user_profile: Optional[UserProfile],
         base_rate: float = 1.0
@@ -62,4 +62,4 @@ class UserService:
         adjusted_rate = base_rate + adjustment
         
         # Clamp to valid range
-        return max(0.8, min(1.25, adjusted_rate))
+        return max(0.8, min(1.25, adjusted_rate))'''

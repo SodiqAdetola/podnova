@@ -7,6 +7,7 @@ from app.controllers.discussion_controller import (
     get_discussions,
     get_discussion_by_id,
     create_reply,
+    delete_reply,
     upvote_discussion,
     upvote_reply,
     get_notifications,
@@ -205,6 +206,46 @@ async def create_reply_endpoint(
         
     except Exception as e:
         print(f"❌ Error in create_reply_endpoint: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.delete("/replies/{reply_id}")
+async def delete_reply_endpoint(
+    reply_id: str,
+    firebase_user: dict = Depends(require_firebase_token)
+):
+    """
+    Delete a reply
+    
+    Users can only delete their own replies.
+    This is a soft delete - content is replaced with [deleted].
+    """
+    try:
+        print(f"\n📥 DELETE /replies/{reply_id} called")
+        
+        result = await delete_reply(
+            reply_id=reply_id,
+            user_id=firebase_user["uid"]
+        )
+        
+        if result["success"]:
+            print(f"  ✅ Reply deleted\n")
+            return result
+        else:
+            print(f"  ❌ Failed to delete reply\n")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=result["message"]
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in delete_reply_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

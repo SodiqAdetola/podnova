@@ -83,7 +83,7 @@ class DiscussionService:
                 "title": title,
                 "description": description,
                 "discussion_type": "community",
-                "topic_id": None,  # Community discussions have no topic
+                "topic_id": None,
                 "category": None,
                 "tags": tags or [],
                 "user_id": user_id,
@@ -117,7 +117,7 @@ class DiscussionService:
         sort_by: str = "latest",
         limit: int = 20,
         skip: int = 0,
-        user_id: Optional[str] = None  # 👈 Added user_id parameter
+        user_id: Optional[str] = None
     ) -> List[Dict]:
         """Get discussions with filtering and sorting"""
         try:
@@ -127,15 +127,12 @@ class DiscussionService:
             
             if discussion_type:
                 query["discussion_type"] = discussion_type
-                print(f"  ✅ Added discussion_type filter: {discussion_type}")
             
             if topic_id:
                 query["topic_id"] = topic_id
-                print(f"  ✅ Added topic_id filter: {topic_id}")
             
             if category:
                 query["category"] = category
-                print(f"  ✅ Added category filter: {category}")
             
             # Sorting
             if sort_by == "latest":
@@ -144,8 +141,6 @@ class DiscussionService:
                 sort = [("reply_count", -1)]
             else:
                 sort = [("created_at", -1)]
-            
-            print(f"  📊 Sort order: {sort}")
             
             cursor = db["discussions"].find(query).sort(sort).skip(skip).limit(limit)
             
@@ -179,7 +174,7 @@ class DiscussionService:
                         "is_pinned": disc.get("is_pinned", False),
                         "is_auto_created": disc.get("is_auto_created", False),
                         "time_ago": self._format_time_ago(disc["created_at"]),
-                        "user_has_upvoted": user_has_upvoted  # 👈 Add upvote status
+                        "user_has_upvoted": user_has_upvoted
                     })
                 except Exception as e:
                     print(f"  ❌ Error processing discussion {disc.get('_id')}: {e}")
@@ -202,7 +197,6 @@ class DiscussionService:
         try:
             print(f"🔍 Getting discussion by id: {discussion_id}")
             
-            # Validate ObjectId
             if not ObjectId.is_valid(discussion_id):
                 print(f"  ❌ Invalid ObjectId: {discussion_id}")
                 return None
@@ -212,8 +206,6 @@ class DiscussionService:
             if not disc:
                 print(f"  ❌ Discussion not found: {discussion_id}")
                 return None
-            
-            print(f"  ✅ Found discussion: {disc.get('title', 'Untitled')}")
             
             # Increment view count
             await db["discussions"].update_one(
@@ -272,7 +264,6 @@ class DiscussionService:
         try:
             print(f"📝 Creating reply for discussion: {discussion_id}")
             
-            # Validate discussion exists
             if not ObjectId.is_valid(discussion_id):
                 raise ValueError(f"Invalid discussion_id: {discussion_id}")
             
@@ -344,6 +335,61 @@ class DiscussionService:
             traceback.print_exc()
             raise
     
+    async def delete_reply(
+        self,
+        reply_id: str,
+        user_id: str
+    ) -> bool:
+        """Delete a reply (soft delete) - only if user owns it"""
+        try:
+            print(f"🗑️ Deleting reply: {reply_id}")
+            
+            if not ObjectId.is_valid(reply_id):
+                print(f"  ❌ Invalid reply_id: {reply_id}")
+                return False
+            
+            # Find the reply
+            reply = await db["replies"].find_one({"_id": ObjectId(reply_id)})
+            
+            if not reply:
+                print(f"  ❌ Reply not found: {reply_id}")
+                return False
+            
+            # Check if user owns this reply
+            if reply["user_id"] != user_id:
+                print(f"  ❌ User {user_id} does not own reply {reply_id}")
+                return False
+            
+            # Soft delete - mark as deleted instead of removing
+            result = await db["replies"].update_one(
+                {"_id": ObjectId(reply_id)},
+                {
+                    "$set": {
+                        "is_deleted": True,
+                        "content": "[deleted]",
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                # Decrement reply count in discussion
+                discussion_id = reply["discussion_id"]
+                await db["discussions"].update_one(
+                    {"_id": ObjectId(discussion_id)},
+                    {"$inc": {"reply_count": -1}}
+                )
+                
+                print(f"  ✅ Reply deleted successfully")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ Error in delete_reply: {e}")
+            traceback.print_exc()
+            return False
+    
     async def get_replies(
         self,
         discussion_id: str,
@@ -382,7 +428,7 @@ class DiscussionService:
                         "discussion_id": reply["discussion_id"],
                         "parent_reply_id": reply.get("parent_reply_id"),
                         "content": reply["content"],
-                        "analysis": analysis,  # Includes factual_score, confidence, disclaimer
+                        "analysis": analysis,
                         "user_id": reply["user_id"],
                         "username": reply["username"],
                         "upvote_count": reply.get("upvote_count", 0),
@@ -413,7 +459,6 @@ class DiscussionService:
         try:
             print(f"👍 Toggling upvote for discussion: {discussion_id}")
             
-            # Validate ObjectId
             if not ObjectId.is_valid(discussion_id):
                 raise ValueError(f"Invalid discussion_id: {discussion_id}")
             
@@ -459,7 +504,6 @@ class DiscussionService:
         try:
             print(f"👍 Toggling upvote for reply: {reply_id}")
             
-            # Validate ObjectId
             if not ObjectId.is_valid(reply_id):
                 raise ValueError(f"Invalid reply_id: {reply_id}")
             
@@ -662,7 +706,6 @@ class DiscussionService:
         """Format datetime as relative time"""
         try:
             if isinstance(dt, str):
-                # Try to parse string to datetime
                 dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
             
             now = datetime.utcnow()

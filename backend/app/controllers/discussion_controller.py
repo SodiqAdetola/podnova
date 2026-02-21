@@ -94,6 +94,23 @@ async def create_reply(
     return reply.dict() if hasattr(reply, 'dict') else reply
 
 
+async def delete_reply(
+    reply_id: str,
+    user_id: str
+) -> Dict:
+    """Delete a reply (only if user owns it)"""
+    
+    success = await discussion_service.delete_reply(
+        reply_id=reply_id,
+        user_id=user_id
+    )
+    
+    if success:
+        return {"success": True, "message": "Reply deleted successfully"}
+    else:
+        return {"success": False, "message": "Failed to delete reply or unauthorized"}
+
+
 async def upvote_discussion(
     discussion_id: str,
     user_id: str

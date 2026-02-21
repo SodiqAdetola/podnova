@@ -46,7 +46,8 @@ async def get_discussions(
     category: Optional[str] = None,
     sort_by: str = "latest",
     limit: int = 20,
-    skip: int = 0
+    skip: int = 0,
+    user_id: Optional[str] = None  # Added optional user_id
 ) -> List[Dict]:
     """Get discussions with filters"""
     
@@ -56,7 +57,8 @@ async def get_discussions(
         category=category,
         sort_by=sort_by,
         limit=limit,
-        skip=skip
+        skip=skip,
+        user_id=user_id  # Pass to service
     )
 
 

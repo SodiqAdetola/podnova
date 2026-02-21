@@ -1,7 +1,7 @@
 # app/routes/discussion_routes.py
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import Optional
-from app.middleware.firebase_auth import verify_firebase_token
+from app.middleware.firebase_auth import verify_firebase_token, require_firebase_token
 from app.controllers.discussion_controller import (
     create_community_discussion,
     get_discussions,
@@ -18,10 +18,101 @@ from app.models.discussion import CreateDiscussionRequest
 router = APIRouter()
 
 
+# PUBLIC GET ENDPOINTS - auth optional
+@router.get("/")
+async def list_discussions(
+    discussion_type: Optional[str] = Query(None, description="topic or community"),
+    topic_id: Optional[str] = Query(None, description="Filter by specific topic"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    sort_by: str = Query("latest", regex="^(latest|most_discussed)$"),
+    limit: int = Query(20, ge=1, le=50),
+    skip: int = Query(0, ge=0),
+    firebase_user: Optional[dict] = Depends(verify_firebase_token)  # Optional auth
+):
+    """
+    Get discussions with filtering
+    
+    Discussion types:
+    - topic: Auto-created for each news topic (one per topic)
+    - community: User-created general discussions
+    
+    Sort options:
+    - latest: By last activity
+    - most_discussed: By reply count
+    """
+    try:
+        user_id = firebase_user.get("uid") if firebase_user else None
+        
+        discussions = await get_discussions(
+            discussion_type=discussion_type,
+            topic_id=topic_id,
+            category=category,
+            sort_by=sort_by,
+            limit=limit,
+            skip=skip,
+            user_id=user_id  # Pass user_id to check user-specific data
+        )
+        
+        return {
+            "discussions": discussions,
+            "count": len(discussions)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/{discussion_id}")
+async def get_discussion(
+    discussion_id: str,
+    firebase_user: Optional[dict] = Depends(verify_firebase_token)  # Optional auth
+):
+    """
+    Get single discussion with all replies
+    
+    Includes:
+    - Discussion details
+    - All replies with AI analysis (factual vs opinion scoring)
+    - User's upvote status (if authenticated)
+    - Nested reply structure
+    
+    AI Analysis Disclaimer:
+    The factual/opinion scores are AI-generated estimates and should not be 
+    considered definitive fact-checks. Users should verify information independently.
+    """
+    try:
+        user_id = firebase_user.get("uid") if firebase_user else None
+        
+        discussion = await get_discussion_by_id(
+            discussion_id=discussion_id,
+            user_id=user_id  # Pass user_id to check user-specific data
+        )
+        
+        if not discussion:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discussion not found"
+            )
+        
+        return discussion
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# PROTECTED POST ENDPOINTS - require auth
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_discussion_endpoint(
     request: CreateDiscussionRequest,
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """
     Create a new community discussion
@@ -50,95 +141,12 @@ async def create_discussion_endpoint(
         )
 
 
-@router.get("/")
-async def list_discussions(
-    discussion_type: Optional[str] = Query(None, description="topic or community"),
-    topic_id: Optional[str] = Query(None, description="Filter by specific topic"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    sort_by: str = Query("latest", regex="^(latest|most_discussed)$"),
-    limit: int = Query(20, ge=1, le=50),
-    skip: int = Query(0, ge=0)
-):
-    """
-    Get discussions with filtering
-    
-    Discussion types:
-    - topic: Auto-created for each news topic (one per topic)
-    - community: User-created general discussions
-    
-    Sort options:
-    - latest: By last activity
-    - most_discussed: By reply count
-    """
-    try:
-        discussions = await get_discussions(
-            discussion_type=discussion_type,
-            topic_id=topic_id,
-            category=category,
-            sort_by=sort_by,
-            limit=limit,
-            skip=skip
-        )
-        
-        return {
-            "discussions": discussions,
-            "count": len(discussions)
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.get("/{discussion_id}")
-async def get_discussion(
-    discussion_id: str,
-    firebase_user=Depends(verify_firebase_token)
-):
-    """
-    Get single discussion with all replies
-    
-    Includes:
-    - Discussion details
-    - All replies with AI analysis (factual vs opinion scoring)
-    - User's upvote status
-    - Nested reply structure
-    
-    AI Analysis Disclaimer:
-    The factual/opinion scores are AI-generated estimates and should not be 
-    considered definitive fact-checks. Users should verify information independently.
-    """
-    try:
-        discussion = await get_discussion_by_id(
-            discussion_id=discussion_id,
-            user_id=firebase_user["uid"]
-        )
-        
-        if not discussion:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Discussion not found"
-            )
-        
-        return discussion
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
 @router.post("/{discussion_id}/replies", status_code=status.HTTP_201_CREATED)
 async def create_reply_endpoint(
     discussion_id: str,
-    content: str,
-    parent_reply_id: Optional[str] = None,
-    firebase_user=Depends(verify_firebase_token)
+    content: str = Query(..., description="Reply content"),
+    parent_reply_id: Optional[str] = Query(None, description="Parent reply ID for nested replies"),
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """
     Create a reply to a discussion
@@ -179,7 +187,7 @@ async def create_reply_endpoint(
 @router.post("/{discussion_id}/upvote")
 async def upvote_discussion_endpoint(
     discussion_id: str,
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """Toggle upvote on discussion"""
     try:
@@ -198,7 +206,7 @@ async def upvote_discussion_endpoint(
 @router.post("/replies/{reply_id}/upvote")
 async def upvote_reply_endpoint(
     reply_id: str,
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """Toggle upvote on reply"""
     try:
@@ -218,7 +226,7 @@ async def upvote_reply_endpoint(
 async def list_notifications(
     unread_only: bool = Query(False),
     limit: int = Query(20, ge=1, le=50),
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """Get user notifications"""
     try:
@@ -245,7 +253,7 @@ async def list_notifications(
 @router.post("/notifications/{notification_id}/read")
 async def mark_notification_read_endpoint(
     notification_id: str,
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """Mark a notification as read"""
     try:
@@ -267,7 +275,7 @@ async def mark_notification_read_endpoint(
 
 @router.post("/notifications/read-all")
 async def mark_all_read_endpoint(
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user: dict = Depends(require_firebase_token)  # Strict auth required
 ):
     """Mark all notifications as read"""
     try:

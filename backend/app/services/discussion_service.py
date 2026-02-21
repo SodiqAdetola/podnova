@@ -51,6 +51,8 @@ class DiscussionService:
                 "reply_count": 0,
                 "upvote_count": 0,
                 "view_count": 0,
+                "unique_view_count": 0,  # Add unique view count
+                "viewed_by": [],  # Track users who viewed
                 "created_at": datetime.utcnow(),
                 "last_activity": datetime.utcnow(),
                 "is_active": True,
@@ -91,6 +93,8 @@ class DiscussionService:
                 "reply_count": 0,
                 "upvote_count": 0,
                 "view_count": 0,
+                "unique_view_count": 0,  # Add unique view count
+                "viewed_by": [],  # Track users who viewed
                 "created_at": datetime.utcnow(),
                 "last_activity": datetime.utcnow(),
                 "is_active": True,
@@ -139,6 +143,8 @@ class DiscussionService:
                 sort = [("last_activity", -1)]
             elif sort_by == "most_discussed":
                 sort = [("reply_count", -1)]
+            elif sort_by == "most_viewed":
+                sort = [("unique_view_count", -1)]  # Sort by unique views
             else:
                 sort = [("created_at", -1)]
             
@@ -168,7 +174,7 @@ class DiscussionService:
                         "username": disc.get("username", "PodNova AI"),
                         "reply_count": disc.get("reply_count", 0),
                         "upvote_count": disc.get("upvote_count", 0),
-                        "view_count": disc.get("view_count", 0),
+                        "view_count": disc.get("unique_view_count", 0),  # Return unique view count
                         "created_at": disc["created_at"].isoformat() if isinstance(disc["created_at"], datetime) else disc["created_at"],
                         "last_activity": disc["last_activity"].isoformat() if isinstance(disc["last_activity"], datetime) else disc["last_activity"],
                         "is_pinned": disc.get("is_pinned", False),
@@ -207,11 +213,36 @@ class DiscussionService:
                 print(f"  ❌ Discussion not found: {discussion_id}")
                 return None
             
-            # Increment view count
-            await db["discussions"].update_one(
-                {"_id": ObjectId(discussion_id)},
-                {"$inc": {"view_count": 1}}
-            )
+            # Increment view count ONLY if user hasn't viewed before and user is authenticated
+            if user_id:
+                # Check if user has already viewed
+                viewed = await db["discussion_views"].find_one({
+                    "discussion_id": discussion_id,
+                    "user_id": user_id
+                })
+                
+                if not viewed:
+                    # Record this view
+                    await db["discussion_views"].insert_one({
+                        "discussion_id": discussion_id,
+                        "user_id": user_id,
+                        "viewed_at": datetime.utcnow()
+                    })
+                    
+                    # Increment unique view count
+                    await db["discussions"].update_one(
+                        {"_id": ObjectId(discussion_id)},
+                        {
+                            "$inc": {"unique_view_count": 1},
+                            "$push": {"viewed_by": user_id}
+                        }
+                    )
+                    
+                    # Also update total views for backward compatibility
+                    await db["discussions"].update_one(
+                        {"_id": ObjectId(discussion_id)},
+                        {"$inc": {"view_count": 1}}
+                    )
             
             # Get all replies
             replies = await self.get_replies(discussion_id, user_id)
@@ -237,7 +268,7 @@ class DiscussionService:
                 "username": disc.get("username", "PodNova AI"),
                 "reply_count": disc.get("reply_count", 0),
                 "upvote_count": disc.get("upvote_count", 0),
-                "view_count": disc.get("view_count", 0),
+                "view_count": disc.get("unique_view_count", 0),  # Return unique view count
                 "created_at": disc["created_at"].isoformat() if isinstance(disc["created_at"], datetime) else disc["created_at"],
                 "last_activity": disc["last_activity"].isoformat() if isinstance(disc["last_activity"], datetime) else disc["last_activity"],
                 "time_ago": self._format_time_ago(disc["created_at"]),
@@ -281,7 +312,7 @@ class DiscussionService:
                 "discussion_id": discussion_id,
                 "parent_reply_id": parent_reply_id,
                 "content": content,
-                "analysis": analysis,  # AI factual/opinion analysis
+                "analysis": analysis,
                 "user_id": user_id,
                 "username": username,
                 "upvote_count": 0,

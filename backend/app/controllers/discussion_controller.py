@@ -37,7 +37,7 @@ async def create_community_discussion(
         tags=request.tags
     )
     
-    return discussion.dict()
+    return discussion.dict() if hasattr(discussion, 'dict') else discussion
 
 
 async def get_discussions(
@@ -47,7 +47,7 @@ async def get_discussions(
     sort_by: str = "latest",
     limit: int = 20,
     skip: int = 0,
-    user_id: Optional[str] = None  # Added optional user_id
+    user_id: Optional[str] = None
 ) -> List[Dict]:
     """Get discussions with filters"""
     
@@ -58,7 +58,7 @@ async def get_discussions(
         sort_by=sort_by,
         limit=limit,
         skip=skip,
-        user_id=user_id  # Pass to service
+        user_id=user_id
     )
 
 
@@ -91,7 +91,7 @@ async def create_reply(
         parent_reply_id=parent_reply_id
     )
     
-    return reply.dict()
+    return reply.dict() if hasattr(reply, 'dict') else reply
 
 
 async def upvote_discussion(

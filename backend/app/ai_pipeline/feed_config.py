@@ -1,4 +1,3 @@
-# backend/app/ai_pipeline/feed_config.py
 """
 RSS Feed Configuration for PodNova
 High-quality, reputable sources only for impactful news
@@ -43,14 +42,8 @@ RSS_FEEDS = {
             "name": "The Verge",
             "url": "https://www.theverge.com/rss/index.xml",
         },
-        {
-            "name": "Wired",
-            "url": "https://www.wired.com/feed/rss",
-        },
-        {
-            "name": "Ars Technica",
-            "url": "http://feeds.arstechnica.com/arstechnica/index",
-        },
+        # REMOVED: Wired - too much general news/culture
+        # REMOVED: Ars Technica - too much science/politics crossover
         
         # Tier 3: Deep Tech & Research
         {

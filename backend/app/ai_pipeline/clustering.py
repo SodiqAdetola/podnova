@@ -1,8 +1,7 @@
-# backend/app/ai_pipeline/clustering.py
 """
 PodNova Clustering Module
 FULLY ASYNC VERSION with Motor
-NOW WITH INTEGRATED TOPIC HISTORY TRACKING
+NOW WITH INTEGRATED TOPIC HISTORY TRACKING AND AUTOMATIC DISCUSSIONS
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
@@ -20,6 +19,7 @@ import logging
 # Import services
 from app.ai_pipeline.article_maintenance import MaintenanceService
 from app.ai_pipeline.topic_history import TopicHistoryService
+from app.controllers.discussion_controller import create_or_get_topic_discussion
 
 # Configuration
 SIMILARITY_THRESHOLD = 0.70
@@ -202,7 +202,8 @@ class ClusteringService:
             "key_insights": None,
             "image_url": article_doc.get("image_url"),
             "history_point_count": 0,
-            "last_history_point": None
+            "last_history_point": None,
+            "discussion_id": None  # Will be added when title is generated
         }
         
         result = await self.topics_collection.insert_one(topic_doc)
@@ -214,8 +215,6 @@ class ClusteringService:
             {"_id": article_doc["_id"]},
             {"$set": {"topic_id": topic_id, "status": "clustered"}}
         )
-        
-        # ❌ REMOVED: Don't create history point for new topics with just 1 article
         
         return topic_id
     
@@ -293,8 +292,38 @@ class ClusteringService:
         if should_generate_title:
             logger.info(f"  Topic ready for title generation")
     
+    async def create_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str) -> Optional[str]:
+        """
+        Automatically create a discussion for a topic when it becomes active.
+        Returns the discussion_id if created, None otherwise.
+        """
+        try:
+            discussion_id = await create_or_get_topic_discussion(
+                topic_id=str(topic_id),
+                topic_title=topic_title,
+                topic_summary=topic_summary
+            )
+            
+            if discussion_id:
+                logger.info(f"  💬 Created discussion for topic {topic_id}: {discussion_id}")
+                
+                # Store the discussion_id in the topic for easy reference
+                await self.topics_collection.update_one(
+                    {"_id": topic_id},
+                    {"$set": {"discussion_id": discussion_id}}
+                )
+                
+                return discussion_id
+            else:
+                logger.warning(f"  Failed to create discussion for topic {topic_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"  Error creating discussion for topic {topic_id}: {e}")
+            return None
+    
     async def generate_topic_title(self, topic_id: str) -> bool:
-        """Generate title and summary for a topic using Gemini LLM"""
+        """Generate title and summary for a topic using Gemini LLM with improved prompt"""
         try:
             topic = await self.topics_collection.find_one({"_id": topic_id})
             if not topic:
@@ -313,29 +342,60 @@ class ClusteringService:
                 logger.error(f"  No articles found for topic {topic_id}")
                 return False
             
+            # Prepare article summaries
             article_texts = []
             for article in articles[:10]:  # Limit to 10 most recent
+                description = (
+                    article.get('description') or 
+                    article.get('content', '')[:300] or 
+                    "No description available"
+                )
                 article_texts.append(
                     f"Title: {article.get('title', 'Untitled')}\n"
                     f"Source: {article.get('source', 'Unknown')}\n"
-                    f"Summary: {article.get('description', 'No description')}\n"
+                    f"Summary: {description}\n"
                 )
             
             combined_articles = "\n---\n".join(article_texts)
             
-            prompt = f"""You are an AI news analyst creating a podcast topic from multiple news articles.
+            # IMPROVED PROMPT - Clear, straightforward headlines
+            prompt = f"""Write a clear, straightforward headline for a news podcast. Use simple words that everyone can understand.
 
-Category: {topic['category'].upper()}
+Category: {topic.get('category', 'general').upper()}
 Number of articles: {len(articles)}
 
 Articles:
 {combined_articles}
 
+RULES FOR THE HEADLINE:
+- MAX 10 WORDS
+- Say WHAT happened in plain English
+- Use everyday words, no jargon or slang
+- Be specific - include names, numbers, key details
+- Make it easy to understand in 2 seconds
+
+✅ GOOD EXAMPLES (clear, specific):
+• "Google fined €2.4 billion by EU regulators"
+• "Tesla delays Cybertruck production to 2025"
+• "AI software creates fake videos of UK streets"
+• "US Supreme Court blocks Trump trade tariffs"
+• "Microsoft bug exposes confidential emails"
+
+❌ BAD EXAMPLES (confusing, vague, jargon):
+• "AI slop costs threaten global economic reckoning" (uses slang, vague)
+• "Tech giant faces regulatory scrutiny" (too vague)
+• "The future of AI in question" (vague, says nothing)
+• "Paradigm shift in tech landscape" (jargon, meaningless)
+
 Generate a JSON object with:
-- **title** (string, max 10 words): Concise and basic newsworthy headline that is CLEAR and SELF-EXPLANATORY - someone should understand the core event WITHOUT reading the articles.
-- **summary** (string, 2-3 sentences): Synthesized overview
-- **key_insights** (array, 3-5 strings): Most important facts/developments
-- **confidence_score** (integer, 0-100): Reliability assessment
+
+- **title** (string, MAX 10 WORDS): Clear, straightforward headline following the rules above.
+
+- **summary** (string, 2-3 sentences): Clear overview of what happened and why it matters.
+
+- **key_insights** (array, 3-5 strings): Specific, concrete takeaways.
+
+- **confidence_score** (integer, 0-100): How reliable is this information? Be strict - only give high scores for well-known, reputable sources with clear facts.
 
 JSON only, no markdown:"""
 
@@ -348,24 +408,35 @@ JSON only, no markdown:"""
             response_text = response_text.replace("```json", "").replace("```", "").strip()
             result = json.loads(response_text)
             
+            # Validate required fields
+            title = result.get("title")
+            if not title:
+                logger.error(f"  No title in response")
+                return False
+            
+            # Check word count
+            word_count = len(title.split())
+            if word_count > 12:  # Allow slightly over but warn
+                logger.warning(f"    Title has {word_count} words, exceeds 10")
+            
+            # Update topic with new content
             await self.topics_collection.update_one(
                 {"_id": topic_id},
                 {
                     "$set": {
-                        "title": result["title"],
-                        "summary": result["summary"],
-                        "key_insights": result["key_insights"],
+                        "title": title,
+                        "summary": result.get("summary", ""),
+                        "key_insights": result.get("key_insights", []),
                         "has_title": True,
                         "title_generated_at": datetime.now(),
-                        "confidence": result["confidence_score"] / 100.0
+                        "confidence": result.get("confidence_score", 70) / 100.0
                     }
                 }
             )
             
-            logger.info(f"  Generated title: {result['title']}")
+            logger.info(f"  Generated title ({word_count} words): {title}")
             
-            # ✅ Create initial history point ONLY when title is first generated
-            # This ensures topics only get history points when they're mature enough to display
+            # ✅ Create initial history point
             await self.history_service.create_history_point(
                 str(topic_id),
                 "initial",
@@ -373,6 +444,13 @@ JSON only, no markdown:"""
                 result
             )
             logger.info(f"  📜 Created initial history point for topic with title")
+            
+            # ✅ Create discussion for this topic now that it's active
+            discussion_id = await self.create_topic_discussion(
+                topic_id=topic_id,
+                topic_title=title,
+                topic_summary=result.get("summary", "")
+            )
             
             return True
             
@@ -428,6 +506,7 @@ JSON only, no markdown:"""
             "updated_topics": 0,
             "titles_generated": 0,
             "history_points_created": 0,
+            "discussions_created": 0,
             "failed": 0,
             "start_time": datetime.now()
         }
@@ -477,7 +556,8 @@ JSON only, no markdown:"""
             
             if await self.generate_topic_title(topic["_id"]):
                 stats["titles_generated"] += 1
-                stats["history_points_created"] += 1  # Count the initial history point
+                stats["history_points_created"] += 1
+                stats["discussions_created"] += 1  # Each title generates a discussion
         
         stats["end_time"] = datetime.now()
         stats["duration_seconds"] = (stats["end_time"] - stats["start_time"]).total_seconds()
@@ -490,6 +570,7 @@ JSON only, no markdown:"""
         logger.info(f"Existing topics updated: {stats['updated_topics']}")
         logger.info(f"Titles generated: {stats['titles_generated']}")
         logger.info(f"History points created: {stats['history_points_created']}")
+        logger.info(f"Discussions created: {stats['discussions_created']}")
         logger.info(f"Failed: {stats['failed']}")
         logger.info(f"Duration: {stats['duration_seconds']:.2f} seconds")
         logger.info("=" * 80)

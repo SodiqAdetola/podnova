@@ -1,7 +1,5 @@
-# backend/app/ai_pipeline/article_maintenance.py
 """
 PodNova Article and Topic Maintenance Module
-FULLY ASYNC VERSION with Motor
 Manages article limits, cleanup, and topic lifecycle
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
@@ -37,14 +35,14 @@ class MaintenanceConfig:
     }
     
     # Topic lifecycle thresholds (days)
-    TOPIC_STALE_DAYS = 7
-    TOPIC_ARCHIVE_DAYS = 30
-    TOPIC_DELETE_DAYS = 90
+    TOPIC_STALE_DAYS = 14          # Topics become stale after 14 days of no activity
+    TOPIC_ARCHIVE_DAYS = 60        # Stale topics are archived after 60 days
+    TOPIC_DELETE_DAYS = 180        # Archived topics are deleted after 180 days
     
     # Cleanup settings
-    ORPHAN_ARTICLE_GRACE_DAYS = 3
-    MIN_TOPIC_ARTICLES = 2
-    ARCHIVED_ARTICLE_PURGE_DAYS = 30
+    ORPHAN_ARTICLE_GRACE_DAYS = 3   # Days before orphan articles are cleaned up
+    MIN_TOPIC_ARTICLES = 2          # Minimum articles needed to keep a topic
+    ARCHIVED_ARTICLE_PURGE_DAYS = 30 # Days before permanently deleting archived articles
     
     # Article ranking weights (must sum to 1.0)
     RANKING_WEIGHTS = {
@@ -348,7 +346,7 @@ class MaintenanceService:
             "deleted": 0
         }
         
-        # Active → Stale
+        # Active → Stale (after 14 days of no activity)
         stale_cutoff = now - timedelta(days=self.config.TOPIC_STALE_DAYS)
         result = await self.topics_collection.update_many(
             {
@@ -359,7 +357,7 @@ class MaintenanceService:
         )
         stats["marked_stale"] = result.modified_count
         
-        # Stale -> Archived
+        # Stale → Archived (after 60 days of being stale)
         archive_cutoff = now - timedelta(days=self.config.TOPIC_ARCHIVE_DAYS)
         result = await self.topics_collection.update_many(
             {
@@ -370,7 +368,7 @@ class MaintenanceService:
         )
         stats["marked_archived"] = result.modified_count
         
-        # Archived -> Deleted
+        # Archived → Deleted (after 180 days of being archived)
         delete_cutoff = now - timedelta(days=self.config.TOPIC_DELETE_DAYS)
         topics_to_delete = []
         cursor = self.topics_collection.find({

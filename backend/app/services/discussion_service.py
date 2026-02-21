@@ -75,7 +75,8 @@ class DiscussionService:
         description: str,
         user_id: str,
         username: str,
-        tags: List[str] = None
+        tags: List[str] = None,
+        category: Optional[str] = None 
     ) -> Discussion:
         """Create a user-created community discussion"""
         try:
@@ -86,7 +87,7 @@ class DiscussionService:
                 "description": description,
                 "discussion_type": "community",
                 "topic_id": None,
-                "category": None,
+                "category": category,
                 "tags": tags or [],
                 "user_id": user_id,
                 "username": username,

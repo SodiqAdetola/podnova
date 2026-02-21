@@ -59,6 +59,7 @@ class CreateDiscussionRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=1, max_length=2000)
     tags: List[str] = Field(default_factory=list, max_items=5)
+    category: Optional[str] = None
     
     # Community discussions only - no topic_id allowed
     # Topic discussions are auto-created by the system

@@ -29,12 +29,16 @@ async def create_community_discussion(
 ) -> Dict:
     """Create a user-created community discussion"""
     
+    # Extract category from request
+    category = getattr(request, 'category', None)
+    
     discussion = await discussion_service.create_community_discussion(
         title=request.title,
         description=request.description,
         user_id=user_id,
         username=username,
-        tags=request.tags
+        tags=request.tags,
+        category=category  
     )
     
     return discussion.dict() if hasattr(discussion, 'dict') else discussion

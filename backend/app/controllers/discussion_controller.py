@@ -7,7 +7,8 @@ from app.models.discussion import CreateDiscussionRequest
 async def create_or_get_topic_discussion(
     topic_id: str,
     topic_title: str,
-    topic_summary: str
+    topic_summary: str,
+    category: str
 ) -> str:
     """
     Auto-create or get existing discussion for a topic
@@ -18,7 +19,8 @@ async def create_or_get_topic_discussion(
     return await discussion_service.create_or_get_topic_discussion(
         topic_id=topic_id,
         topic_title=topic_title,
-        topic_summary=topic_summary
+        topic_summary=topic_summary,
+        category=category
     )
 
 

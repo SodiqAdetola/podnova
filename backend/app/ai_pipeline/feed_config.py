@@ -42,8 +42,7 @@ RSS_FEEDS = {
             "name": "The Verge",
             "url": "https://www.theverge.com/rss/index.xml",
         },
-        # REMOVED: Wired - too much general news/culture
-        # REMOVED: Ars Technica - too much science/politics crossover
+
         
         # Tier 3: Deep Tech & Research
         {
@@ -55,8 +54,7 @@ RSS_FEEDS = {
             "url": "https://spectrum.ieee.org/feeds/feed.rss",
         },
         {
-            "name": "Nature - Scientific Reports",
-            "url": "https://www.nature.com/srep.rss",
+
         },
         
         # Tier 4: Cybersecurity (Critical Infrastructure)

@@ -18,7 +18,7 @@ import traceback
 class DiscussionService:
     """Service for managing discussions, replies, and notifications"""
     
-    async def create_or_get_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str) -> str:
+    async def create_or_get_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str, category: str) -> str:
         """
         Get or create discussion for a topic
         Called automatically when a topic is created/viewed
@@ -26,7 +26,7 @@ class DiscussionService:
         Returns: discussion_id
         """
         try:
-            print(f"📝 Creating/getting topic discussion for topic: {topic_id}")
+            print(f"Creating/getting topic discussion for topic: {topic_id}")
             
             # Check if discussion already exists for this topic
             existing = await db["discussions"].find_one({
@@ -35,7 +35,7 @@ class DiscussionService:
             })
             
             if existing:
-                print(f"  ✅ Found existing discussion: {existing['_id']}")
+                print(f"Found existing discussion: {existing['_id']}")
                 return str(existing["_id"])
             
             # Create new topic discussion
@@ -44,7 +44,7 @@ class DiscussionService:
                 "description": f"Discuss this topic: {topic_summary[:200]}...",
                 "discussion_type": "topic",
                 "topic_id": topic_id,
-                "category": None,  # Inherit from topic
+                "category": category, 
                 "tags": [],
                 "user_id": None,  # System-created
                 "username": "PodNova AI",

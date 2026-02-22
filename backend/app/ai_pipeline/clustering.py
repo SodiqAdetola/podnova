@@ -501,7 +501,7 @@ RULES FOR THE HEADLINE:
 - Say WHAT happened in plain English
 - Use everyday words, no jargon or slang
 - Be specific - include names, numbers, key details
-- Make it easy to understand in 2 seconds
+- Make it easy to understand in 2 seconds and INCLUSIVE FOR ALL COMPREHENSION LEVELS
 
 ✅ GOOD EXAMPLES (clear, specific):
 • "Google fined €2.4 billion by EU regulators"
@@ -520,7 +520,7 @@ Generate a JSON object with:
 
 - **title** (string, MAX 10 WORDS): Clear, straightforward headline following the rules above.
 
-- **summary** (string, 2-3 sentences): Clear overview of what happened and why it matters.
+- **summary** (string, 2-3 sentences): Clear overview of what happened and why it matters (MAKE THIS INCLUSIVE FOR ALL COMPREHENSION LEVELS).
 
 - **key_insights** (array, 3-5 strings): Specific, concrete takeaways.
 

@@ -1,7 +1,7 @@
 """
 PodNova Clustering Module
 FULLY ASYNC VERSION with Motor
-NOW WITH INTEGRATED TOPIC HISTORY TRACKING AND AUTOMATIC DISCUSSIONS
+NOW WITH INTEGRATED TOPIC HISTORY TRACKING, AUTOMATIC DISCUSSIONS, AND NEAR-DUPLICATE DETECTION
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
@@ -22,7 +22,8 @@ from app.ai_pipeline.topic_history import TopicHistoryService
 from app.controllers.discussion_controller import create_or_get_topic_discussion
 
 # Configuration
-SIMILARITY_THRESHOLD = 0.70
+SIMILARITY_THRESHOLD = 0.68  # Lowered from 0.70 to catch more matches
+NEAR_DUPLICATE_THRESHOLD = 0.80  # Threshold for auto-merging very similar topics
 MIN_ARTICLES_FOR_TITLE = 2
 CONFIDENCE_THRESHOLD = 0.6
 TOPIC_INACTIVE_DAYS = 90
@@ -322,6 +323,134 @@ class ClusteringService:
             logger.error(f"  Error creating discussion for topic {topic_id}: {e}")
             return None
     
+    async def check_for_near_duplicates(self, new_topic_id: str, category: str):
+        """
+        After creating a new topic, check if it's very similar to any existing topic
+        If similarity is very high, automatically merge them
+        """
+        try:
+            # Small delay to ensure the new topic is fully saved
+            await asyncio.sleep(0.2)
+            
+            new_topic = await self.topics_collection.find_one({"_id": new_topic_id})
+            if not new_topic or "centroid_embedding" not in new_topic:
+                return
+            
+            new_embedding = np.array(new_topic["centroid_embedding"])
+            
+            # Check against other active topics in same category
+            cursor = self.topics_collection.find({
+                "_id": {"$ne": new_topic_id},
+                "category": category,
+                "status": "active",
+                "centroid_embedding": {"$exists": True}
+            })
+            
+            async for existing_topic in cursor:
+                existing_embedding = np.array(existing_topic["centroid_embedding"])
+                similarity = self.cosine_similarity(new_embedding, existing_embedding)
+                
+                # If similarity is above near-duplicate threshold, auto-merge
+                if similarity >= NEAR_DUPLICATE_THRESHOLD:
+                    logger.warning(f"⚠️  Near-duplicate topic detected with similarity {similarity:.3f}")
+                    logger.warning(f"  New topic: {new_topic.get('title', 'Untitled')} ({new_topic_id})")
+                    logger.warning(f"  Existing topic: {existing_topic.get('title', 'Untitled')} ({existing_topic['_id']})")
+                    
+                    # Auto-merge into the older topic
+                    if new_topic["created_at"] > existing_topic["created_at"]:
+                        # New topic is newer, merge into existing
+                        logger.info(f"  Automatically merging new topic into existing topic")
+                        await self.merge_topics(existing_topic["_id"], new_topic_id)
+                    else:
+                        # New topic is actually older (unlikely), merge existing into new
+                        logger.info(f"  Automatically merging existing topic into new topic")
+                        await self.merge_topics(new_topic_id, existing_topic["_id"])
+                    
+                    return True
+                
+                # Log near-misses for monitoring
+                elif similarity >= (SIMILARITY_THRESHOLD - 0.05) and similarity < SIMILARITY_THRESHOLD:
+                    logger.info(f"  Near-miss: similarity {similarity:.3f} with existing topic")
+                    
+        except Exception as e:
+            logger.error(f"Error checking for near-duplicates: {e}")
+            return False
+        
+        return False
+    
+    async def merge_topics(self, keep_topic_id, remove_topic_id):
+        """Merge two topics (use when near-duplicates are found)"""
+        try:
+            keep_topic = await self.topics_collection.find_one({"_id": keep_topic_id})
+            remove_topic = await self.topics_collection.find_one({"_id": remove_topic_id})
+            
+            if not keep_topic or not remove_topic:
+                logger.error(f"  Cannot merge - one or both topics not found")
+                return False
+            
+            # Combine article IDs
+            all_article_ids = list(set(
+                keep_topic.get("article_ids", []) + 
+                remove_topic.get("article_ids", [])
+            ))
+            
+            # Combine sources
+            all_sources = list(set(
+                keep_topic.get("sources", []) + 
+                remove_topic.get("sources", [])
+            ))
+            
+            # Recalculate confidence
+            new_confidence = min(1.0, keep_topic.get("confidence", 0.5) + 0.1)
+            
+            # Update all articles to point to kept topic
+            await self.articles_collection.update_many(
+                {"topic_id": str(remove_topic["_id"])},
+                {"$set": {"topic_id": str(keep_topic["_id"])}}
+            )
+            
+            # Update the kept topic
+            await self.topics_collection.update_one(
+                {"_id": keep_topic_id},
+                {
+                    "$set": {
+                        "article_ids": all_article_ids,
+                        "sources": all_sources,
+                        "article_count": len(all_article_ids),
+                        "confidence": new_confidence,
+                        "merged_at": datetime.now(),
+                        "merged_from": str(remove_topic["_id"])
+                    }
+                }
+            )
+            
+            # Recalculate centroid
+            new_centroid = await self.compute_centroid(all_article_ids)
+            if new_centroid is not None:
+                await self.topics_collection.update_one(
+                    {"_id": keep_topic_id},
+                    {"$set": {"centroid_embedding": new_centroid.tolist()}}
+                )
+            
+            # Handle discussions
+            if remove_topic.get("discussion_id"):
+                # Move any replies to kept topic's discussion? 
+                # For simplicity, we'll just delete the old discussion
+                await self.db["replies"].delete_many({"discussion_id": remove_topic["discussion_id"]})
+                await self.db["discussions"].delete_one({"_id": remove_topic["discussion_id"]})
+            
+            # Delete the removed topic
+            await self.topics_collection.delete_one({"_id": remove_topic_id})
+            
+            logger.info(f"✅ Merged topic {remove_topic_id} into {keep_topic_id}")
+            logger.info(f"   New article count: {len(all_article_ids)}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error merging topics: {e}")
+            return False
+    
     async def generate_topic_title(self, topic_id: str) -> bool:
         """Generate title and summary for a topic using Gemini LLM with improved prompt"""
         try:
@@ -483,7 +612,13 @@ JSON only, no markdown:"""
             await self.update_existing_topic(matching_topic, article_doc, embedding)
             return str(matching_topic["_id"])
         else:
-            return await self.create_new_topic(article_doc, embedding)
+            # Create new topic
+            new_topic_id = await self.create_new_topic(article_doc, embedding)
+            
+            # Check for near-duplicates after creation (prevents duplicate topics)
+            await self.check_for_near_duplicates(new_topic_id, article_doc["category"])
+            
+            return new_topic_id
     
     async def process_pending_articles(self) -> Dict[str, Any]:
         """Process all articles with status 'pending_clustering'"""
@@ -507,6 +642,7 @@ JSON only, no markdown:"""
             "titles_generated": 0,
             "history_points_created": 0,
             "discussions_created": 0,
+            "near_duplicates_merged": 0,
             "failed": 0,
             "start_time": datetime.now()
         }
@@ -571,6 +707,7 @@ JSON only, no markdown:"""
         logger.info(f"Titles generated: {stats['titles_generated']}")
         logger.info(f"History points created: {stats['history_points_created']}")
         logger.info(f"Discussions created: {stats['discussions_created']}")
+        logger.info(f"Near-duplicates merged: {stats['near_duplicates_merged']}")
         logger.info(f"Failed: {stats['failed']}")
         logger.info(f"Duration: {stats['duration_seconds']:.2f} seconds")
         logger.info("=" * 80)

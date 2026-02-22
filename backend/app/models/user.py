@@ -26,12 +26,12 @@ class UserPreferences(BaseModel):
         schema_extra = {
             "example": {
                 "default_categories": ["technology", "finance"],
-                "default_podcast_length": "medium",
+                "default_podcast_length": "short",
                 "default_tone": "factual",
                 "playback_speed": 1.0,
                 "push_notifications": True,
                 "default_voice": "calm_female",
-                "default_ai_style": "balanced"
+                "default_ai_style": "standard"
             }
         }
 
@@ -56,12 +56,12 @@ class UserProfile(BaseModel):
                 "created_at": "2024-01-01T00:00:00",
                 "preferences": {
                     "default_categories": ["technology"],
-                    "default_podcast_length": "medium",
+                    "default_podcast_length": "short",
                     "default_tone": "factual",
                     "playback_speed": 1.0,
                     "push_notifications": True,
                     "default_voice": "calm_female",
-                    "default_ai_style": "balanced"
+                    "default_ai_style": "standard"
                 }
             }
         }

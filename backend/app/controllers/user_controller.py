@@ -21,12 +21,12 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
     # Create default preferences
     default_prefs = UserPreferences(
         default_categories=[],
-        default_podcast_length="medium",
+        default_podcast_length="short",
         default_tone="factual",
         playback_speed=1.0,
         push_notifications=True,
         default_voice="calm_female",
-        default_ai_style="balanced"
+        default_ai_style="standard"
     )
 
     # Create user document

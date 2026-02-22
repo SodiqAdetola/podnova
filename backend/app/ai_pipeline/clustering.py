@@ -293,7 +293,7 @@ class ClusteringService:
         if should_generate_title:
             logger.info(f"  Topic ready for title generation")
     
-    async def create_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str) -> Optional[str]:
+    async def create_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str, category: str) -> Optional[str]:
         """
         Automatically create a discussion for a topic when it becomes active.
         Returns the discussion_id if created, None otherwise.
@@ -302,7 +302,8 @@ class ClusteringService:
             discussion_id = await create_or_get_topic_discussion(
                 topic_id=str(topic_id),
                 topic_title=topic_title,
-                topic_summary=topic_summary
+                topic_summary=topic_summary,
+                category=category
             )
             
             if discussion_id:
@@ -575,10 +576,12 @@ JSON only, no markdown:"""
             logger.info(f"  📜 Created initial history point for topic with title")
             
             # ✅ Create discussion for this topic now that it's active
+            # FIXED: Use topic.get("category") instead of undefined category variable
             discussion_id = await self.create_topic_discussion(
                 topic_id=topic_id,
                 topic_title=title,
-                topic_summary=result.get("summary", "")
+                topic_summary=result.get("summary", ""),
+                category=topic.get("category")  # Get category from topic object
             )
             
             return True

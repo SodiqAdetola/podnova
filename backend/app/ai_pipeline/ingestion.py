@@ -33,9 +33,7 @@ class ArticleIngestionService:
         """Initialize with Motor async client"""
         self.client = motor.motor_asyncio.AsyncIOMotorClient(
             mongo_uri,
-            tlsCAFile=certifi.where(),
-            maxPoolSize=50,
-            minPoolSize=10
+            tlsCAFile=certifi.where()
         )
         self.db = self.client[db_name]
         self.articles_collection = self.db["articles"]
@@ -270,7 +268,7 @@ class ArticleIngestionService:
                 "description": description,
                 "published_date": pub_date,
                 "category": category,
-                "source": feed_info["name"],
+                "source": feed_info.get("name", "Unknown Source"),  # Use .get() with default
                 "source_priority": feed_info.get("priority", "medium"),
                 "ingested_at": datetime.now(),
                 "status": "pending_clustering",
@@ -319,7 +317,9 @@ class ArticleIngestionService:
 
     async def ingest_from_feed(self, feed_info: Dict, category: str) -> int:
         """Ingest articles from a single RSS feed"""
-        logger.info(f"\nFetching from {feed_info['name']} ({category})...")
+        # Get feed name safely with fallback
+        feed_name = feed_info.get('name', feed_info.get('url', 'Unknown Feed'))
+        logger.info(f"\nFetching from {feed_name} ({category})...")
 
         entries = await self.fetch_feed(feed_info['url'])
         logger.info(f"  Found {len(entries)} entries in feed")
@@ -365,8 +365,21 @@ class ArticleIngestionService:
         for category, feeds in RSS_FEEDS.items():
             category_count = 0
             for feed in feeds:
-                count = await self.ingest_from_feed(feed, category)
-                category_count += count
+                # Validate feed has required fields
+                if not isinstance(feed, dict):
+                    logger.error(f"  Invalid feed format in {category}: {feed}")
+                    continue
+                    
+                if 'url' not in feed:
+                    logger.error(f"  Feed missing URL in {category}: {feed}")
+                    continue
+                    
+                try:
+                    count = await self.ingest_from_feed(feed, category)
+                    category_count += count
+                except Exception as e:
+                    logger.error(f"  Error processing feed {feed.get('name', 'unknown')}: {e}")
+                    continue
 
             stats["by_category"][category] = category_count
             stats["total_ingested"] += category_count

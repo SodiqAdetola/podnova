@@ -1,4 +1,8 @@
 # app/routes/podcast_routes.py
+import asyncio
+from datetime import time
+import datetime
+
 from fastapi import APIRouter, HTTPException, status, Body, Depends, Query
 from typing import Optional, List
 from pydantic import BaseModel, Field
@@ -384,3 +388,31 @@ async def get_user_podcast_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+    
+
+@router.get("/debug/event-loop")
+async def check_event_loop():
+    """
+    Debug endpoint to check if event loop is responsive
+    """
+    start = time.time()
+    
+    # Simulate a quick async operation
+    await asyncio.sleep(0.1)
+    
+    return {
+        "status": "responsive",
+        "response_time_ms": int((time.time() - start) * 1000),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@router.get("/debug/health")
+async def debug_health():
+    """
+    Simple health check that doesn't depend on any services
+    """
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "event_loop": "responsive"
+    }

@@ -12,6 +12,34 @@ import firebase_admin
 from firebase_admin import credentials
 import os
 import json
+import threading
+
+# Thread pool monitor
+class ThreadPoolMonitor:
+    def __init__(self):
+        self.active_threads = 0
+        self.max_threads = 0
+        self.lock = threading.Lock()
+    
+    def start_task(self):
+        with self.lock:
+            self.active_threads += 1
+            self.max_threads = max(self.max_threads, self.active_threads)
+    
+    def end_task(self):
+        with self.lock:
+            self.active_threads -= 1
+    
+    def get_stats(self):
+        with self.lock:
+            return {
+                "active_threads": self.active_threads,
+                "max_concurrent": self.max_threads,
+                "total_threads": threading.active_count()
+            }
+
+# Create global monitor
+thread_monitor = ThreadPoolMonitor()
 
 # Initialise Firebase Admin SDK
 if not firebase_admin._apps:
@@ -57,6 +85,14 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+@app.get("/debug/threads")
+async def get_thread_stats():
+    """Get thread pool statistics"""
+    return thread_monitor.get_stats()
+
+# Make thread_monitor available to other modules
+app.state.thread_monitor = thread_monitor
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])
 app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])

@@ -14,6 +14,7 @@ from app.services.script_service import ScriptService
 from app.services.audio_service import AudioService
 from app.services.storage_service import StorageService
 from app.services.user_service import UserService
+from app.main import thread_monitor
 
 
 class PodcastStyle(str, Enum):
@@ -157,6 +158,7 @@ async def create_podcast(
 
 async def _generate_podcast_async(podcast_id: str):
     """Async task to generate podcast script and audio"""
+    thread_monitor.start_task()  # Track thread usage
     try:
         # Update status: generating script
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
@@ -210,6 +212,8 @@ async def _generate_podcast_async(podcast_id: str):
             PodcastStatus.FAILED,
             {"error_message": str(e)}
         )
+    finally:
+        thread_monitor.end_task() 
 
 
 async def _update_podcast_status(

@@ -41,7 +41,7 @@ class DiscussionService:
             # Create new topic discussion
             discussion_data = {
                 "title": topic_title,
-                "description": f"Discuss this topic: {topic_summary[:200]}...",
+                "description": f"{topic_summary}",
                 "discussion_type": "topic",
                 "topic_id": topic_id,
                 "category": category, 

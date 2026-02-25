@@ -4,7 +4,9 @@ Script generation service for podcasts
 Handles AI-powered script generation using Gemini
 """
 from typing import Dict, List
-from click import prompt
+import asyncio
+import concurrent.futures
+from functools import partial
 from google import genai
 from app.config import GEMINI_API_KEY
 from app.db import db
@@ -49,10 +51,12 @@ class ScriptService:
     def __init__(self):
         """Initialize the script service with Gemini client"""
         self.client = genai.Client(api_key=GEMINI_API_KEY)
+        # Create a thread pool for blocking operations
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     
     async def generate_script(self, podcast_id: str) -> str:
         """
-        Generate podcast script using Gemini AI
+        Generate podcast script using Gemini AI (non-blocking)
         
         Args:
             podcast_id: MongoDB ObjectId of the podcast
@@ -63,27 +67,40 @@ class ScriptService:
         Raises:
             Exception: If script generation fails
         """
-        # Fetch podcast and topic data
-        podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
-        topic = await db["topics"].find_one({"_id": podcast["topic_id"]})
-        
-        # Fetch articles
-        articles = await self._fetch_articles(topic.get("article_ids", []))
-        
-        # Build prompt
-        prompt = self._build_prompt(podcast, topic, articles)
-        
-        # Generate script
         try:
-            response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+            # Fetch podcast and topic data (these are async already)
+            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+            if not podcast:
+                raise Exception(f"Podcast {podcast_id} not found")
+                
+            topic = await db["topics"].find_one({"_id": podcast["topic_id"]})
+            if not topic:
+                raise Exception(f"Topic for podcast {podcast_id} not found")
+            
+            # Fetch articles (async)
+            articles = await self._fetch_articles(topic.get("article_ids", []))
+            
+            # Build prompt (CPU-bound but quick, can stay in event loop)
+            prompt = self._build_prompt(podcast, topic, articles)
+            
+            # Run the blocking Gemini API call in a thread pool
+            loop = asyncio.get_event_loop()
+            
+            # Create a partial function with the arguments
+            func = partial(
+                self.client.models.generate_content,
+                model="gemini-2.0-flash-exp",
                 contents=prompt
             )
+            
+            # Run in thread pool to avoid blocking
+            response = await loop.run_in_executor(self.executor, func)
             
             script = response.text.strip()
             
             # Validate and expand if necessary
-            script = await self._validate_and_expand(podcast, script)
+            if self._needs_expansion(podcast, script):
+                script = await self._expand_script_async(podcast, script)
             
             return script
             
@@ -93,16 +110,56 @@ class ScriptService:
     async def _fetch_articles(self, article_ids: List[ObjectId]) -> List[Dict]:
         """Fetch articles from database"""
         articles = []
-        async for article in db["articles"].find(
+        cursor = db["articles"].find(
             {"_id": {"$in": article_ids}}
-        ).sort("published_date", -1):
+        ).sort("published_date", -1)
+        
+        async for article in cursor:
             articles.append({
                 "title": article["title"],
                 "source": article["source"],
                 "content": article.get("content", article.get("description", "")),
-                "published": article["published_date"].strftime("%Y-%m-%d")
+                "published": article["published_date"].strftime("%Y-%m-%d") if article.get("published_date") else "Unknown"
             })
         return articles
+    
+    def _needs_expansion(self, podcast: Dict, script: str) -> bool:
+        """Synchronous check for expansion need"""
+        word_count = len(script.split())
+        target_words = podcast['length_minutes'] * 150
+        return word_count < target_words * 0.8
+    
+    async def _expand_script_async(self, podcast: Dict, script: str) -> str:
+        """Async version of script expansion"""
+        style_config = self.STYLE_INSTRUCTIONS[podcast['style']]
+        word_count = len(script.split())
+        target_words = podcast['length_minutes'] * 150
+        
+        expansion_prompt = f"""The previous script was too short ({word_count} words vs {target_words} target).
+
+EXPAND by adding MORE DEPTH AND ANALYSIS, not just more words:
+- Dig deeper into the underlying factors and mechanisms
+- Add critical analysis and multiple perspectives
+- Include more specific examples and data points
+- Explore broader implications and connections
+- For {podcast['style'].upper()} level: {style_config['analysis']}
+
+REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary.
+
+Original script:
+{script}
+
+Generate an expanded version with significantly more analytical depth:"""
+        
+        loop = asyncio.get_event_loop()
+        func = partial(
+            self.client.models.generate_content,
+            model="gemini-2.0-flash-exp",
+            contents=expansion_prompt
+        )
+        
+        response = await loop.run_in_executor(self.executor, func)
+        return response.text.strip()
     
     def _build_prompt(self, podcast: Dict, topic: Dict, articles: List[Dict]) -> str:
         """Build the prompt for script generation"""
@@ -153,21 +210,11 @@ CONSISTENT INTRO & OUTRO PATTERN:
 - Transition naturally into the main content (e.g., "Let's get into it," "Here's what's happening," etc.).  
 - Keep the tone warm, inviting, and consistent with your overall style.
 
-*Example variations (not to be copied exactly, but to illustrate the pattern):*  
-- "You're listening to PodNova. I'm your host, and today we're unpacking [topic teaser]. Let's dive in."  
-- "Welcome to PodNova. I'm your host, and this time we're looking at [topic teaser]. Here's the story."  
-- "Hey there, this is PodNova. I'm your host, and today we're talking about [topic teaser]. Let's get started."
-
 **Outro Pattern (10–15 seconds)**  
 - Summarize the key takeaway in a concise, memorable way.  
 - Thank the listener.  
 - Mention "PodNova" and sign off (e.g., "I'm your host, signing off").  
 - Keep the tone warm and appreciative.
-
-*Example variations:*  
-- "So that's the quick take on [key takeaway]. Thanks for listening to PodNova. I'm your host, signing off."  
-- "To wrap it up: [key takeaway]. Thanks for tuning in to PodNova. I'm your host, see you next time."  
-- "That's your PodNova update on [key takeaway]. Appreciate you listening. I'm your host, until next time."
 
 IMPORTANT:  
 - Do not copy the example phrases verbatim; instead, use them as a guide to create your own natural-sounding intro and outro that fit the flow of this specific script.  
@@ -223,45 +270,7 @@ CRITICAL GUIDELINES:
 - Exceed the target word count significantly; be concise but rich.
 - Copy the example intros/outros verbatim—create your own variations.
 
-STYLE EXAMPLES (illustrative only—match your level):
-- Casual: "So, have you been following the news about the big tech hearing? It's kind of a mess, honestly. Here's what's going on…"
-- Standard: "This week's antitrust hearing brought the CEOs of four major tech companies before Congress. The core issue? Whether these firms have become too powerful…"
-- Advanced: "The hearing revealed a fundamental tension in how we regulate digital monopolies. On one hand, there's bipartisan appetite for reform; on the other, the legal frameworks from the 20th century may be ill-equipped…"
-- Expert: "Examining the testimonies, one sees a clash between two competing antitrust philosophies: the Chicago School's consumer welfare standard versus the Neo-Brandeisian focus on market structure and democracy…"
-
 Now, generate the podcast script. Remember: for {podcast['style'].upper()} level, depth of insight matters more than vocabulary complexity. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
 """
 
         return prompt
-    
-    async def _validate_and_expand(self, podcast: Dict, script: str) -> str:
-        """Validate script length and expand if necessary"""
-        word_count = len(script.split())
-        target_words = podcast['length_minutes'] * 150
-        
-        if word_count < target_words * 0.7:
-            style_config = self.STYLE_INSTRUCTIONS[podcast['style']]
-            
-            expansion_prompt = f"""The previous script was too short ({word_count} words vs {target_words} target).
-
-EXPAND by adding MORE DEPTH AND ANALYSIS, not just more words:
-- Dig deeper into the underlying factors and mechanisms
-- Add critical analysis and multiple perspectives
-- Include more specific examples and data points
-- Explore broader implications and connections
-- For {podcast['style'].upper()} level: {style_config['analysis']}
-
-REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary.
-
-Original script:
-{script}
-
-Generate an expanded version with significantly more analytical depth:"""
-            
-            response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=expansion_prompt
-            )
-            script = response.text.strip()
-        
-        return script

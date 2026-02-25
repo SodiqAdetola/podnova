@@ -89,7 +89,7 @@ class ScriptService:
             # Create a partial function with the arguments
             func = partial(
                 self.client.models.generate_content,
-                model="gemini-2.0-flash-exp",
+                model="gemini-2.5-flash",
                 contents=prompt
             )
             
@@ -154,7 +154,7 @@ Generate an expanded version with significantly more analytical depth:"""
         loop = asyncio.get_event_loop()
         func = partial(
             self.client.models.generate_content,
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             contents=expansion_prompt
         )
         

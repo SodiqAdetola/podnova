@@ -1,4 +1,3 @@
-# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import (
@@ -12,34 +11,7 @@ import firebase_admin
 from firebase_admin import credentials
 import os
 import json
-import threading
-
-# Thread pool monitor
-class ThreadPoolMonitor:
-    def __init__(self):
-        self.active_threads = 0
-        self.max_threads = 0
-        self.lock = threading.Lock()
-    
-    def start_task(self):
-        with self.lock:
-            self.active_threads += 1
-            self.max_threads = max(self.max_threads, self.active_threads)
-    
-    def end_task(self):
-        with self.lock:
-            self.active_threads -= 1
-    
-    def get_stats(self):
-        with self.lock:
-            return {
-                "active_threads": self.active_threads,
-                "max_concurrent": self.max_threads,
-                "total_threads": threading.active_count()
-            }
-
-# Create global monitor
-thread_monitor = ThreadPoolMonitor()
+from app.monitor import thread_monitor  # Import from monitor.py
 
 # Initialise Firebase Admin SDK
 if not firebase_admin._apps:
@@ -91,7 +63,7 @@ async def get_thread_stats():
     """Get thread pool statistics"""
     return thread_monitor.get_stats()
 
-# Make thread_monitor available to other modules
+# Make thread_monitor available to other modules via app.state if needed
 app.state.thread_monitor = thread_monitor
 
 app.include_router(user_routes.router, prefix="/users", tags=["users"])

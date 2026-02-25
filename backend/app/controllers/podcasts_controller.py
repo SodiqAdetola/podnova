@@ -1,4 +1,3 @@
-# app/controllers/podcast_controller.py
 """
 PodNova Podcast Generation Controller
 Orchestrates podcast generation workflow using service layer
@@ -14,7 +13,7 @@ from app.services.script_service import ScriptService
 from app.services.audio_service import AudioService
 from app.services.storage_service import StorageService
 from app.services.user_service import UserService
-from app.main import thread_monitor
+from app.monitor import thread_monitor  # Import from monitor.py instead of main
 
 
 class PodcastStyle(str, Enum):
@@ -213,7 +212,7 @@ async def _generate_podcast_async(podcast_id: str):
             {"error_message": str(e)}
         )
     finally:
-        thread_monitor.end_task() 
+        thread_monitor.end_task()  # Stop tracking
 
 
 async def _update_podcast_status(

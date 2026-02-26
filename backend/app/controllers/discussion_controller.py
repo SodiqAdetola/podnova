@@ -87,7 +87,7 @@ async def create_reply(
     username: str,
     parent_reply_id: Optional[str] = None
 ) -> Dict:
-    """Create a reply to a discussion (with AI analysis)"""
+    """Create a reply to a discussion"""
     
     reply = await discussion_service.create_reply(
         discussion_id=discussion_id,

@@ -140,7 +140,7 @@ async def create_discussion_endpoint(
     Users can only create community discussions here.
     """
     try:
-        print(f"\n📥 POST /discussions called with title: {request.title}")
+        print(f"\nPOST /discussions called with title: {request.title}")
         
         # Get username from user profile
         from app.db import db
@@ -153,11 +153,11 @@ async def create_discussion_endpoint(
             username=username
         )
         
-        print(f"  ✅ Created discussion: {discussion.get('id')}\n")
+        print(f"Created discussion: {discussion.get('id')}\n")
         return discussion
         
     except Exception as e:
-        print(f"❌ Error in create_discussion_endpoint: {e}")
+        print(f"Error in create_discussion_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -186,7 +186,7 @@ async def create_reply_endpoint(
     The disclaimer is always included with the analysis.
     """
     try:
-        print(f"\n📥 POST /discussions/{discussion_id}/replies called")
+        print(f"\nPOST /discussions/{discussion_id}/replies called")
         
         # Get username
         from app.db import db
@@ -201,11 +201,11 @@ async def create_reply_endpoint(
             parent_reply_id=parent_reply_id
         )
         
-        print(f"  ✅ Created reply\n")
+        print(f"Created reply\n")
         return reply
         
     except Exception as e:
-        print(f"❌ Error in create_reply_endpoint: {e}")
+        print(f"Error in create_reply_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -225,7 +225,7 @@ async def delete_reply_endpoint(
     This is a soft delete - content is replaced with [deleted].
     """
     try:
-        print(f"\n📥 DELETE /replies/{reply_id} called")
+        print(f"\nDELETE /replies/{reply_id} called")
         
         result = await delete_reply(
             reply_id=reply_id,
@@ -233,10 +233,10 @@ async def delete_reply_endpoint(
         )
         
         if result["success"]:
-            print(f"  ✅ Reply deleted\n")
+            print(f"Reply deleted\n")
             return result
         else:
-            print(f"  ❌ Failed to delete reply\n")
+            print(f"Failed to delete reply\n")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=result["message"]
@@ -245,7 +245,7 @@ async def delete_reply_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error in delete_reply_endpoint: {e}")
+        print(f"Error in delete_reply_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -260,18 +260,18 @@ async def upvote_discussion_endpoint(
 ):
     """Toggle upvote on discussion"""
     try:
-        print(f"\n📥 POST /discussions/{discussion_id}/upvote called")
+        print(f"\nPOST /discussions/{discussion_id}/upvote called")
         
         result = await upvote_discussion(
             discussion_id=discussion_id,
             user_id=firebase_user["uid"]
         )
         
-        print(f"  ✅ Upvote toggled\n")
+        print(f"Upvote toggled\n")
         return result
         
     except Exception as e:
-        print(f"❌ Error in upvote_discussion_endpoint: {e}")
+        print(f"Error in upvote_discussion_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -297,7 +297,7 @@ async def upvote_reply_endpoint(
         return result
         
     except Exception as e:
-        print(f"❌ Error in upvote_reply_endpoint: {e}")
+        print(f"Error in upvote_reply_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -323,7 +323,7 @@ async def list_notifications(
         
         unread_count = len([n for n in notifications if not n.get("is_read", False)])
         
-        print(f"  ✅ Returning {len(notifications)} notifications ({unread_count} unread)\n")
+        print(f"Returning {len(notifications)} notifications ({unread_count} unread)\n")
         
         return {
             "notifications": notifications,
@@ -332,7 +332,7 @@ async def list_notifications(
         }
         
     except Exception as e:
-        print(f"❌ Error in list_notifications: {e}")
+        print(f"Error in list_notifications: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -347,24 +347,24 @@ async def mark_notification_read_endpoint(
 ):
     """Mark a notification as read"""
     try:
-        print(f"\n📥 POST /notifications/{notification_id}/read called")
+        print(f"\nPOST /notifications/{notification_id}/read called")
         
         success = await mark_notification_read(notification_id)
         
         if not success:
-            print(f"  ❌ Notification not found: {notification_id}")
+            print(f"Notification not found: {notification_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Notification not found"
             )
         
-        print(f"  ✅ Notification marked as read\n")
+        print(f"Notification marked as read\n")
         return {"success": True}
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error in mark_notification_read_endpoint: {e}")
+        print(f"Error in mark_notification_read_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -378,15 +378,15 @@ async def mark_all_read_endpoint(
 ):
     """Mark all notifications as read"""
     try:
-        print(f"\n📥 POST /notifications/read-all called")
+        print(f"\nPOST /notifications/read-all called")
         
         count = await mark_all_notifications_read(firebase_user["uid"])
         
-        print(f"  ✅ Marked {count} notifications as read\n")
+        print(f"Marked {count} notifications as read\n")
         return {"success": True, "marked_read": count}
         
     except Exception as e:
-        print(f"❌ Error in mark_all_read_endpoint: {e}")
+        print(f"Error in mark_all_read_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

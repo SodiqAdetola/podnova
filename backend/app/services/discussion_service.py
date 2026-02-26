@@ -307,13 +307,13 @@ class DiscussionService:
             mentions = self._extract_mentions(content)
             
             # Analyze reply content with AI
-            analysis = await ai_analysis_service.analyze_reply(content)
+            # analysis = await ai_analysis_service.analyze_reply(content)
             
             reply_data = {
                 "discussion_id": discussion_id,
                 "parent_reply_id": parent_reply_id,
                 "content": content,
-                "analysis": analysis,
+            #    "analysis": analysis,
                 "user_id": user_id,
                 "username": username,
                 "upvote_count": 0,
@@ -336,7 +336,7 @@ class DiscussionService:
                 }
             )
             
-            print(f"  ✅ Created reply: {result.inserted_id}")
+            print(f"Created reply: {result.inserted_id}")
             
             # Create notifications for mentions
             if mentions:
@@ -363,7 +363,7 @@ class DiscussionService:
             return Reply(**reply_data)
             
         except Exception as e:
-            print(f"❌ Error in create_reply: {e}")
+            print(f"Error in create_reply: {e}")
             traceback.print_exc()
             raise
     
@@ -377,19 +377,19 @@ class DiscussionService:
             print(f"🗑️ Deleting reply: {reply_id}")
             
             if not ObjectId.is_valid(reply_id):
-                print(f"  ❌ Invalid reply_id: {reply_id}")
+                print(f"Invalid reply_id: {reply_id}")
                 return False
             
             # Find the reply
             reply = await db["replies"].find_one({"_id": ObjectId(reply_id)})
             
             if not reply:
-                print(f"  ❌ Reply not found: {reply_id}")
+                print(f"Reply not found: {reply_id}")
                 return False
             
             # Check if user owns this reply
             if reply["user_id"] != user_id:
-                print(f"  ❌ User {user_id} does not own reply {reply_id}")
+                print(f"User {user_id} does not own reply {reply_id}")
                 return False
             
             # Soft delete - mark as deleted instead of removing

@@ -360,13 +360,13 @@ Generate an UPDATED synthesis that reflects the current state of this story. Out
   "Trial date set in major tech case"
   "Deal finally closes after regulatory hurdles"
 
-- **summary** (string, 2-3 sentences): Updated overview reflecting latest developments
+- **summary** (string, 2-3 sentences): Updated overview reflecting latest developments (MAKE THIS INCLUSIVE FOR ALL COMPREHENSION LEVELS).
 
 - **key_insights** (array, 3-5 strings): Current most important facts/developments
 
 - **confidence_score** (integer, 0-100): Current reliability assessment
 
-- **development_note** (string, 1 sentence): What has changed since earlier in this story
+- **development_note** (string, 1 sentence): What has changed since earlier in this story (MAKE THIS INCLUSIVE FOR ALL COMPREHENSION LEVELS).
 
 JSON format only, no markdown:"""
 

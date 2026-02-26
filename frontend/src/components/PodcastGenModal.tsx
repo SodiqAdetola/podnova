@@ -1,4 +1,3 @@
-// frontend/src/components/PodcastGeneratorModal.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -10,10 +9,12 @@ import {
   TextInput,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { auth } from "../firebase/config";
+import { useNavigation } from '@react-navigation/native';
 
 const { height } = Dimensions.get("window");
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
@@ -62,6 +63,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   onClose,
   topic,
 }) => {
+  const navigation = useNavigation();
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState("calm_female");
   const [selectedStyle, setSelectedStyle] = useState("standard");
@@ -70,12 +72,15 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generationStarted, setGenerationStarted] = useState(false);
+  const [podcastId, setPodcastId] = useState<string | null>(null);
+  const [estimatedTime, setEstimatedTime] = useState(60); // Default 60 seconds
 
   // Load preferences when modal opens
   useEffect(() => {
     if (visible) {
       setGenerationStarted(false);
       setGenerating(false);
+      setPodcastId(null);
       setCustomPrompt("");
       setShowAdvanced(false);
       loadUserPreferences();
@@ -108,8 +113,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
-  const estimatedTime = lengthMinutes * 12;
-
   const handleGenerate = async () => {
     setGenerating(true);
 
@@ -117,6 +120,8 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
       const token = await auth.currentUser?.getIdToken(true);
       if (!token) throw new Error("User not authenticated");
 
+      console.log("Sending generation request for topic:", topic.id);
+      
       const response = await fetch(`${API_BASE_URL}/podcasts/generate`, {
         method: "POST",
         headers: {
@@ -133,7 +138,16 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
       });
 
       if (response.ok) {
+        const data = await response.json();
+        console.log("Generation started:", data);
+        
+        // Set the podcast ID and estimated time from response
+        setPodcastId(data.id);
+        setEstimatedTime(data.estimated_time_seconds || lengthMinutes * 60);
+        
+        // Show success screen immediately
         setGenerationStarted(true);
+        setGenerating(false);
       } else {
         const error = await response.json();
         alert(`Failed: ${error.detail || "Unknown error"}`);
@@ -147,9 +161,39 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   };
 
   const handleClose = () => {
-    setCustomPrompt("");
-    setShowAdvanced(false);
-    onClose();
+    if (generating) {
+      Alert.alert(
+        "Generation in Progress",
+        "Your podcast is still being generated. Closing this window won't cancel it. You can check progress in the Library tab.",
+        [
+          { text: "Stay Here", style: "cancel" },
+          { 
+            text: "Close Anyway", 
+            onPress: () => {
+              setCustomPrompt("");
+              setShowAdvanced(false);
+              setGenerationStarted(false);
+              setGenerating(false);
+              setPodcastId(null);
+              onClose();
+            }
+          }
+        ]
+      );
+    } else {
+      setCustomPrompt("");
+      setShowAdvanced(false);
+      setGenerationStarted(false);
+      setGenerating(false);
+      setPodcastId(null);
+      onClose();
+    }
+  };
+
+  const handleGoToLibrary = () => {
+    handleClose();
+    // Navigate to library tab
+    navigation.navigate('Library' as never);
   };
 
   const renderVoiceSelector = () => (
@@ -306,15 +350,25 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             </View>
             <Text style={styles.successTitle}>Podcast Generation Started!</Text>
             <Text style={styles.successMessage}>
-              Your podcast is being generated. Estimated time: {estimatedTime}s.
+              Your podcast is being generated in the background. Estimated time: {Math.round(estimatedTime / 60)} min {estimatedTime % 60} sec.
             </Text>
             <Text style={styles.successInstruction}>
-              Navigate to the <Text style={styles.bold}>Library</Text> tab to track
-              progress.
+              You can track progress in the <Text style={styles.bold}>Library</Text> tab.
             </Text>
-            <TouchableOpacity style={styles.successButton} onPress={handleClose}>
-              <Text style={styles.successButtonText}>Got it!</Text>
-            </TouchableOpacity>
+            <View style={styles.successButtonContainer}>
+              <TouchableOpacity 
+                style={[styles.successButton, styles.secondaryButton]} 
+                onPress={handleClose}
+              >
+                <Text style={styles.secondaryButtonText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.successButton} 
+                onPress={handleGoToLibrary}
+              >
+                <Text style={styles.successButtonText}>Go to Library</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -367,7 +421,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
                 {/* Estimate */}
                 <View style={styles.estimate}>
                   <Text style={styles.estimateText}>
-                    Estimated time: {estimatedTime}s
+                    Estimated time: {lengthMinutes * 12}s
                   </Text>
                 </View>
               </ScrollView>
@@ -403,14 +457,14 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.44)",
     justifyContent: "flex-end",
   },
   modalContainer: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: height * 0.9,
+    maxHeight: height * 0.92,
   },
   header: {
     flexDirection: "row",
@@ -429,8 +483,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
+    fontWeight: "700",
+    color: "#6366F1",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    textAlign: "center",
   },
   placeholder: {
     width: 40,
@@ -664,16 +721,34 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#6366F1",
   },
+  successButtonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    gap: 12,
+  },
   successButton: {
-    paddingHorizontal: 32,
+    flex: 1,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: "#6366F1",
+    alignItems: "center",
+  },
+  secondaryButton: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#6366F1",
   },
   successButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#6366F1",
   },
 });
 

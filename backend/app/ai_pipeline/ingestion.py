@@ -115,55 +115,304 @@ class ArticleIngestionService:
             return None
 
     def extract_image_from_entry(self, entry: Dict, url: str) -> Optional[str]:
-        """Extract image URL from RSS entry"""
-        image_url = None
-
-        # Method 1: Check RSS feed media content
+        """
+        Extract the highest quality image URL from RSS entry.
+        
+        Prioritizes:
+        1. Larger images (width/height if available)
+        2. Images from reliable attributes (media_content > enclosures > thumbnails)
+        3. Images from main content over summaries
+        4. Modern formats (webp, jpg) over older ones
+        """
+        candidates = []
+        
+        # Method 1: RSS feed media content (usually high quality)
         if hasattr(entry, 'media_content') and entry.media_content:
             for media in entry.media_content:
                 if media.get('url'):
-                    image_url = media['url']
-                    break
-
-        # Method 2: Check RSS enclosures
-        elif hasattr(entry, 'enclosures') and entry.enclosures:
+                    width = self._parse_dimension(media.get('width'))
+                    height = self._parse_dimension(media.get('height'))
+                    candidates.append({
+                        'url': media['url'],
+                        'width': width,
+                        'height': height,
+                        'priority': 100,  # Highest priority
+                        'source': 'media_content'
+                    })
+        
+        # Method 2: RSS enclosures
+        if hasattr(entry, 'enclosures') and entry.enclosures:
             for enclosure in entry.enclosures:
                 if enclosure.get('type', '').startswith('image/'):
-                    image_url = enclosure.get('href') or enclosure.get('url')
-                    break
-
-        # Method 3: Check media:thumbnail
-        elif hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
-            image_url = entry.media_thumbnail[0].get('url')
-
-        # Method 4: Extract from HTML content
-        elif hasattr(entry, 'content') and entry.content:
+                    img_url = enclosure.get('href') or enclosure.get('url')
+                    if img_url:
+                        # Try to get dimensions from enclosure
+                        width = self._parse_dimension(enclosure.get('width'))
+                        height = self._parse_dimension(enclosure.get('height'))
+                        candidates.append({
+                            'url': img_url,
+                            'width': width,
+                            'height': height,
+                            'priority': 90,
+                            'source': 'enclosure'
+                        })
+        
+        # Method 3: media:thumbnail (usually lower quality)
+        if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            for thumb in entry.media_thumbnail:
+                if thumb.get('url'):
+                    width = self._parse_dimension(thumb.get('width'))
+                    height = self._parse_dimension(thumb.get('height'))
+                    candidates.append({
+                        'url': thumb['url'],
+                        'width': width,
+                        'height': height,
+                        'priority': 70,  # Lower priority for thumbnails
+                        'source': 'thumbnail'
+                    })
+        
+        # Method 4: Extract from HTML content (parse multiple images)
+        if hasattr(entry, 'content') and entry.content:
             content_html = entry.content[0].get('value', '')
-            image_url = self._extract_image_from_html(content_html)
-
+            html_images = self._extract_images_from_html(content_html)
+            for img in html_images:
+                candidates.append({
+                    'url': img['url'],
+                    'width': img.get('width'),
+                    'height': img.get('height'),
+                    'priority': 80,  # Good priority for content images
+                    'source': 'content'
+                })
+        
+        # Method 5: Extract from summary (lower priority)
         elif hasattr(entry, 'summary') and entry.summary:
-            image_url = self._extract_image_from_html(entry.summary)
-
+            html_images = self._extract_images_from_html(entry.summary)
+            for img in html_images:
+                candidates.append({
+                    'url': img['url'],
+                    'width': img.get('width'),
+                    'height': img.get('height'),
+                    'priority': 60,
+                    'source': 'summary'
+                })
+        
+        # Score and select best image
+        if not candidates:
+            return None
+        
+        best_image = self._select_best_image(candidates)
+        
+        if not best_image:
+            return None
+        
         # Clean and validate URL
-        if image_url:
-            if image_url.startswith('//'):
-                image_url = 'https:' + image_url
-            elif image_url.startswith('/') and url:
-                from urllib.parse import urlparse
-                parsed = urlparse(url)
-                image_url = f"{parsed.scheme}://{parsed.netloc}{image_url}"
-
+        image_url = best_image['url']
+        
+        if image_url.startswith('//'):
+            image_url = 'https:' + image_url
+        elif image_url.startswith('/') and url:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            image_url = f"{parsed.scheme}://{parsed.netloc}{image_url}"
+        
         return image_url
 
-    def _extract_image_from_html(self, html_content: str) -> Optional[str]:
-        """Extract image URL from HTML content"""
+
+    def _parse_dimension(self, dimension) -> Optional[int]:
+        """Parse dimension string to integer"""
+        if not dimension:
+            return None
+        
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            img = soup.find('img')
-            if img:
-                return img.get('src') or img.get('data-src')
+            # Handle strings like "500px" or just "500"
+            if isinstance(dimension, str):
+                dimension = dimension.replace('px', '').strip()
+            return int(dimension)
+        except (ValueError, TypeError):
+            return None
+
+
+    def _extract_images_from_html(self, html: str) -> List[Dict]:
+        """
+        Extract multiple images from HTML with their attributes.
+        Returns list of dicts with url, width, height.
+        """
+        from bs4 import BeautifulSoup
+        
+        images = []
+        
+        if not html:
+            return images
+        
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            img_tags = soup.find_all('img')
+            
+            for img in img_tags:
+                src = img.get('src') or img.get('data-src')
+                if src:
+                    # Skip tiny images, tracking pixels, placeholders
+                    if self._is_valid_image_url(src):
+                        width = self._parse_dimension(img.get('width'))
+                        height = self._parse_dimension(img.get('height'))
+                        
+                        images.append({
+                            'url': src,
+                            'width': width,
+                            'height': height,
+                            'alt': img.get('alt', ''),
+                        })
+            
         except Exception as e:
-            logger.error(f"Error extracting image from HTML: {e}")
+            print(f"Error extracting images from HTML: {e}")
+        
+        return images
+
+
+    def _is_valid_image_url(self, url: str) -> bool:
+        """
+        Filter out invalid/unwanted images.
+        
+        Rejects:
+        - Tracking pixels (1x1)
+        - Placeholder images
+        - Social media icons
+        - Data URIs (too small)
+        """
+        if not url:
+            return False
+        
+        url_lower = url.lower()
+        
+        # Reject data URIs
+        if url_lower.startswith('data:'):
+            return False
+        
+        # Reject common tracking/social/icon patterns
+        reject_patterns = [
+            'pixel',
+            'spacer',
+            'blank',
+            'placeholder',
+            '1x1',
+            'tracker',
+            'icon',
+            'logo-small',
+            'avatar',
+            'favicon',
+            'sprite',
+        ]
+        
+        for pattern in reject_patterns:
+            if pattern in url_lower:
+                return False
+        
+        # Reject very small dimension hints in URL
+        if any(x in url_lower for x in ['w=1', 'h=1', 'size=1', '16x16', '32x32']):
+            return False
+        
+        return True
+
+
+    def _select_best_image(self, candidates: List[Dict]) -> Optional[Dict]:
+        """
+        Score candidates and return the best image.
+        
+        Scoring criteria:
+        1. Base priority (source type)
+        2. Size (prefer larger images)
+        3. Aspect ratio (prefer landscape ~16:9 for news)
+        4. Format preference (webp, jpg > png > gif)
+        """
+        if not candidates:
+            return None
+        
+        for candidate in candidates:
+            score = candidate['priority']
+            
+            # Size scoring
+            width = candidate.get('width')
+            height = candidate.get('height')
+            
+            if width and height:
+                # Prefer larger images (but not absurdly large)
+                area = width * height
+                
+                if area > 1000000:  # > 1MP, very good
+                    score += 50
+                elif area > 500000:  # > 0.5MP, good
+                    score += 40
+                elif area > 200000:  # > 0.2MP, decent
+                    score += 30
+                elif area > 100000:  # > 0.1MP, okay
+                    score += 20
+                elif area < 10000:   # < 0.01MP, probably icon/thumbnail
+                    score -= 30
+                
+                # Aspect ratio scoring (prefer ~16:9 for news images)
+                aspect_ratio = width / height if height > 0 else 0
+                
+                # Ideal range: 1.5 - 2.0 (landscape)
+                if 1.5 <= aspect_ratio <= 2.0:
+                    score += 15
+                elif 1.2 <= aspect_ratio <= 2.5:
+                    score += 10
+                elif aspect_ratio < 0.5 or aspect_ratio > 3.0:
+                    score -= 15  # Too narrow or too wide
+            
+            elif width:  # Only width available
+                if width >= 1200:
+                    score += 30
+                elif width >= 800:
+                    score += 20
+                elif width >= 600:
+                    score += 10
+                elif width < 200:
+                    score -= 20
+            
+            # Format preference
+            url = candidate['url'].lower()
+            
+            if url.endswith('.webp'):
+                score += 10  # Modern format
+            elif url.endswith(('.jpg', '.jpeg')):
+                score += 8   # Good compression
+            elif url.endswith('.png'):
+                score += 5   # Good quality but larger
+            elif url.endswith('.gif'):
+                score -= 10  # Usually low quality or animated
+            
+            # Penalize if URL suggests it's a thumbnail
+            if any(x in url for x in ['thumb', 'small', 'icon', 'avatar', 'logo']):
+                score -= 25
+            
+            # Bonus for containing quality indicators in URL
+            if any(x in url for x in ['large', 'full', 'original', 'hires', 'hero']):
+                score += 20
+            
+            candidate['score'] = score
+        
+        # Sort by score (descending) and return best
+        candidates.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Filter out very low scores (likely bad images)
+        best = candidates[0]
+        if best['score'] < 50:  # Threshold for acceptable quality
+            return None
+        
+        return best
+
+
+    def _extract_image_from_html(self, html: str) -> Optional[str]:
+        """
+        Legacy method - now uses the improved extraction.
+        Kept for backward compatibility.
+        """
+        images = self._extract_images_from_html(html)
+        if images:
+            # Return the first image URL (legacy behavior)
+            # Consider deprecating this in favor of the scoring method
+            return images[0]['url']
         return None
 
     def generate_content_hash(self, text: str) -> str:

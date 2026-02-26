@@ -281,37 +281,75 @@ IMPORTANT_KEYWORDS = {
 
 # Keywords that indicate low-value content to avoid - added a few but kept balanced
 NOISE_KEYWORDS = [
-    # Consumer tech & gadgets (added specific models to avoid)
-    "iPhone", "iPad", "MacBook", "Apple Watch", "AirPods", "Galaxy phone",
-    "Pixel phone", "smartphone review", "laptop review", "best phone",
-    "phone comparison", "unboxing", "hands-on", "first look", "specs leaked",
-    "release date", "pre-order", "discount", "deal", "sale",
-    "iPhone 16", "iPhone 17", "Galaxy S25", "Pixel 9",  # NEW - specific models
+    # Consumer tech & gadgets - specific product lines
+    "iphone", "ipad", "macbook", "apple watch", "airpods", "imac", "mac mini",
+    "galaxy s", "galaxy z", "galaxy tab", "pixel phone", "oneplus", "xiaomi", 
+    "nothing phone", "fairphone", "pixel"
     
-    # Lifestyle & entertainment
-    "quiz", "gallery", "slideshow", "photos only", "in pictures", "best of",
-    "top 10", "top 5", "ranked", "opinion", "blog", "editorial", "celebrity",
-    "gossip", "viral", "trending", "recipe", "cooking", "fashion", "beauty tips",
-    "listicle", "curated", "roundup",  # NEW - common low-effort formats
+    # Review content - must include "review" to avoid false positives
+    "phone review", "laptop review", "tablet review", "headphone review", 
+    "camera review", "speaker review", "tv review", "monitor review", 
+    "keyboard review", "mouse review", "chair review", "game review",
+    "review roundup", "review round-up", "first impressions", "hands-on review",
     
-    # Sports & gaming (added a few more gaming terms)
-    "match report", "player ratings", "transfer news", "video game", "gaming",
-    "esports", "game review", "gameplay", "PlayStation", "Xbox", "Nintendo",
-    "trailer", "game of the year", "GOTY",  # NEW
+    # Comparison/buying guide content
+    "phone comparison", "laptop comparison", "vs", "versus", "compared", 
+    "best phone", "best laptop", "best tablet", "best headphones", 
+    "best camera", "best tv", "best monitor", "best of", "top 10", "top 5", 
+    "top 20", "ranked", "listicle", "roundup", "buying guide", "shopping guide",
     
-    # Low-substance content
-    "things to know", "what you need to know", "beginner's guide", "how to",
-    "tips and tricks", "life hack", "you won't believe", "mind blown",
-    "explained", "in simple terms", "cheat sheet",  # NEW - but careful, "explained" can be good
+    # Unboxing/first look content
+    "unboxing", "unboxed", "first look", "hands-on", "first impressions",
     
-    # Sponsored content
-    "sponsored", "paid content", "advertisement", "promoted", "partner content",
-    "affiliate", "discount code", "promo code",
+    # Specs/release content (unless significant)
+    "specs leaked", "specifications revealed", "render leak", "design leak",
+    "launch date", "release date", "pre-order", "preorder", "available now",
+    "coming soon", "teaser", "teased", "hints at", "suggests",
     
-    # NEW: Financial noise (added a few)
-    "stock picks", "buy now", "invest in", "passive income",
-    "dividend aristocrats", "monthly dividend",  # NEW - but only a few
+    # Deal/shopping content
+    "deal", "sale", "discount", "price drop", "lowest price", "black friday",
+    "cyber monday", "prime day", "holiday sale", "clearance",
+    "affiliate", "sponsored", "paid content", "advertisement", "promoted",
     
-    # NEW: Political noise (added a few)
-    "poll shows", "approval rating", "favorability",  # NEW - minor polls
+    # Low-effort content formats
+    "gallery", "slideshow", "in pictures", "photos only", "things to know", 
+    "what you need to know", "beginner's guide", "how to", "tips and tricks", 
+    "tips", "tricks", "hacks", "life hack", "cheat sheet", "explained simply",
+    "for beginners", "guide to", "primer", "explained in 5 minutes",
+    
+    # Entertainment (specific shows/platforms)
+    "movie review", "film review", "tv show review", "binge-watch", "bingeable",
+    "netflix original", "disney plus", "hulu", "max streaming", "paramount plus", 
+    "apple tv plus", "peacock", "streaming service", "episode recap", "season finale",
+    
+    # Gaming (specific titles)
+    "gameplay trailer", "gameplay reveal", "game awards", "state of play",
+    "nintendo direct", "xbox showcase", "playstation state of play",
+    "steam sale", "epic games store", "game pass", "ps plus", "free games",
+    
+    # Social media/viral content
+    "viral video", "viral tweet", "trending on", "tiktok trend", "instagram reel",
+    "influencer", "content creator", "streamer", "twitch stream", "youtube video",
+    "subscriber count", "follower count", "goes viral",
+    
+    # Personal finance noise (avoid single words)
+    "dividend aristocrats", "monthly dividend stock", "passive income stream",
+    "real estate investing tip", "rental property investment", "side hustle idea",
+    "crypto trading strategy", "day trading tip", "swing trading setup",
+    "technical analysis pattern", "chart pattern breakout",
+    
+    # Political noise (avoid single words)
+    "poll shows", "approval rating drops", "favorability rating", "tracking poll",
+    "campaign ad attack", "fundraising email blast", "rally crowd size", 
+    "campaign stop speech", "stump speech highlights", "town hall meeting",
+    
+    # Rumor/speculation (requires context)
+    "rumor suggests", "leak claims", "speculation grows", "reportedly planning",
+    "allegedly working on", "insider says", "source claims", "tipster claims",
+    "unconfirmed report", "might launch", "could release", "expected to unveil",
+    
+    # Tech support/problem articles
+    "how to fix", "troubleshooting guide", "common problem", "issue with",
+    "not working", "won't turn on", "battery drain", "overheating fix",
+    "error message", "solution for", "workaround for",
 ]

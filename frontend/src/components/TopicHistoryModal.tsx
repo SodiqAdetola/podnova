@@ -1,4 +1,3 @@
-// frontend/src/components/TopicHistoryModal.tsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -14,7 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SLIDE_HEIGHT = SCREEN_HEIGHT * 0.85;
 const SWIPE_THRESHOLD = 100;
 
@@ -41,35 +40,30 @@ interface Props {
 }
 
 const HISTORY_TYPE_CONFIG = {
-  initial: {
-    icon: "flag",
-    color: "#8B5CF6",
-    label: "Story Begins",
-    description: "Initial reports",
+  initial: { 
+    icon: "flag", 
+    label: "Initial",
+    color: "#A78BFA" // Pastel purple
   },
-  major_update: {
-    icon: "git-branch",
-    color: "#EF4444",
+  major_update: { 
+    icon: "git-branch", 
     label: "Major Update",
-    description: "Significant development",
+    color: "#FCA5A5" // Pastel red
   },
-  source_expansion: {
-    icon: "newspaper",
-    color: "#3B82F6",
-    label: "New Perspectives",
-    description: "Additional sources",
+  source_expansion: { 
+    icon: "newspaper", 
+    label: "New Sources",
+    color: "#93C5FD" // Pastel blue
   },
-  confidence_shift: {
-    icon: "shield-checkmark",
-    color: "#F59E0B",
-    label: "Reliability Shift",
-    description: "Verification update",
+  confidence_shift: { 
+    icon: "shield-checkmark", 
+    label: "Confidence Update",
+    color: "#FDBA74" // Pastel orange
   },
-  periodic: {
-    icon: "calendar",
-    color: "#10B981",
+  periodic: { 
+    icon: "calendar", 
     label: "Periodic Update",
-    description: "Regular snapshot",
+    color: "#6EE7B7" // Pastel green
   },
 };
 
@@ -81,32 +75,23 @@ const TopicHistoryModal: React.FC<Props> = ({
 }) => {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPoint, setSelectedPoint] = useState<HistoryPoint | null>(null);
-  const [expandedInsights, setExpandedInsights] = useState<Set<string>>(new Set());
+  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
 
   const slideAnim = useRef(new Animated.Value(SLIDE_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Pan responder for swipe down to close
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 10;
-      },
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          slideAnim.setValue(gestureState.dy);
-        }
+        if (gestureState.dy > 0) slideAnim.setValue(gestureState.dy);
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > SWIPE_THRESHOLD) {
           handleClose();
         } else {
-          Animated.spring(slideAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
+          Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
         }
       },
     })
@@ -122,32 +107,15 @@ const TopicHistoryModal: React.FC<Props> = ({
   const animateIn = () => {
     slideAnim.setValue(SLIDE_HEIGHT);
     Animated.parallel([
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 65,
-        friction: 11,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   };
 
   const handleClose = () => {
     Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: SLIDE_HEIGHT,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
+      Animated.timing(slideAnim, { toValue: SLIDE_HEIGHT, duration: 250, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setSelectedPoint(null);
       onClose();
@@ -169,11 +137,10 @@ const TopicHistoryModal: React.FC<Props> = ({
     }
   };
 
-  const formatTimeAgo = (dateString: string) => {
+  const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) return "Today";
     if (diffDays === 1) return "Yesterday";
@@ -183,9 +150,8 @@ const TopicHistoryModal: React.FC<Props> = ({
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+  const formatFullDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -194,192 +160,147 @@ const TopicHistoryModal: React.FC<Props> = ({
     });
   };
 
-  const toggleInsights = (pointId: string) => {
-    const newExpanded = new Set(expandedInsights);
-    if (newExpanded.has(pointId)) {
-      newExpanded.delete(pointId);
-    } else {
-      newExpanded.add(pointId);
-    }
-    setExpandedInsights(newExpanded);
+  const togglePoint = (pointId: string) => {
+    setSelectedPoint(selectedPoint === pointId ? null : pointId);
   };
 
   const renderTimelinePoint = (point: HistoryPoint, index: number) => {
-    const config = HISTORY_TYPE_CONFIG[point.history_type] || HISTORY_TYPE_CONFIG.major_update;
+    const config = HISTORY_TYPE_CONFIG[point.history_type];
+    const isExpanded = selectedPoint === point.id;
     const isFirst = index === 0;
-    const isLast = index === history.length - 1;
-    const isExpanded = expandedInsights.has(point.id);
 
     return (
-      <View key={point.id} style={styles.timelinePointContainer}>
+      <View key={point.id} style={styles.timelineItem}>
         {/* Timeline line */}
-        {!isFirst && <View style={styles.timelineLine} />}
-
-        {/* Timeline point */}
-        <View style={styles.timelinePoint}>
-          {/* Icon circle */}
-          <View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: config.color + "20", borderColor: config.color },
-              isFirst && styles.iconCircleFirst,
-            ]}
-          >
-            <Ionicons name={config.icon as any} size={isFirst ? 22 : 18} color={config.color} />
+        {index > 0 && <View style={styles.timelineLine} />}
+        
+        <View style={styles.timelineNode}>
+          <View style={[styles.nodeDot, isFirst && styles.nodeDotFirst]}>
+            <Ionicons 
+              name={config.icon as any} 
+              size={isFirst ? 14 : 12} 
+              color={config.color}
+            />
           </View>
-
-          {/* Content card */}
-          <TouchableOpacity
-            style={[styles.contentCard, isFirst && styles.contentCardFirst]}
-            onPress={() => toggleInsights(point.id)}
-            activeOpacity={0.7}
-          >
-            {/* Header */}
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <View style={[styles.typeBadge, { backgroundColor: config.color + "15" }]}>
-                  <Text style={[styles.typeBadgeText, { color: config.color }]}>
-                    {config.label}
-                  </Text>
+          
+          <View style={styles.nodeContent}>
+            <TouchableOpacity
+              style={[styles.nodeCard, isExpanded && styles.nodeCardExpanded]}
+              onPress={() => togglePoint(point.id)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.nodeHeader}>
+                <View style={styles.nodeHeaderLeft}>
+                  <Text style={[styles.nodeType, { color: config.color }]}>{config.label}</Text>
+                  <Text style={styles.nodeDate}>{formatDate(point.created_at)}</Text>
                 </View>
-                <Text style={styles.timeAgo}>{formatTimeAgo(point.created_at)}</Text>
-              </View>
-              {point.was_regenerated && (
-                <View style={styles.regeneratedBadge}>
-                  <Ionicons name="sparkles" size={12} color="#8B5CF6" />
-                  <Text style={styles.regeneratedText}>Updated</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Title */}
-            <Text style={[styles.pointTitle, isFirst && styles.pointTitleFirst]}>
-              {point.title}
-            </Text>
-
-            {/* Development note */}
-            {point.development_note && (
-              <View style={styles.developmentNote}>
-                <Ionicons name="arrow-forward" size={14} color="#6366F1" />
-                <Text style={styles.developmentNoteText}>{point.development_note}</Text>
-              </View>
-            )}
-
-            {/* Meta row */}
-            <View style={styles.metaRow}>
-              <View style={styles.metaItem}>
-                <Ionicons name="document-text" size={14} color="#6B7280" />
-                <Text style={styles.metaText}>{point.article_count} articles</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Ionicons name="newspaper" size={14} color="#6B7280" />
-                <Text style={styles.metaText}>{point.sources.length} sources</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Ionicons name="shield-checkmark" size={14} color="#6B7280" />
-                <Text style={styles.metaText}>{Math.round(point.confidence * 100)}%</Text>
-              </View>
-            </View>
-
-            {/* Expandable insights */}
-            {isExpanded && (
-              <View style={styles.expandedContent}>
-                <View style={styles.divider} />
-                
-                {/* Summary */}
-                <View style={styles.summarySection}>
-                  <Text style={styles.summaryLabel}>Summary</Text>
-                  <Text style={styles.summaryText}>{point.summary}</Text>
-                </View>
-
-                {/* Key insights */}
-                {point.key_insights && point.key_insights.length > 0 && (
-                  <View style={styles.insightsSection}>
-                    <Text style={styles.insightsLabel}>Key Points</Text>
-                    {point.key_insights.slice(0, 3).map((insight, idx) => (
-                      <View key={idx} style={styles.insightRow}>
-                        <View style={styles.insightBullet} />
-                        <Text style={styles.insightText}>{insight}</Text>
-                      </View>
-                    ))}
+                {point.was_regenerated && (
+                  <View style={styles.regeneratedBadge}>
+                    <Ionicons name="refresh" size={10} color="#9CA3AF" />
+                    <Text style={styles.regeneratedText}>Updated</Text>
                   </View>
                 )}
-
-                {/* Timestamp */}
-                <Text style={styles.timestamp}>{formatDate(point.created_at)}</Text>
               </View>
-            )}
 
-            {/* Expand indicator */}
-            <View style={styles.expandIndicator}>
-              <Ionicons
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#9CA3AF"
-              />
-              <Text style={styles.expandText}>
-                {isExpanded ? "Show less" : "Show details"}
+              <Text style={[styles.nodeTitle, isFirst && styles.nodeTitleFirst]}>
+                {point.title}
               </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
 
-        {/* Continue line to next point */}
-        {!isLast && <View style={styles.timelineLine} />}
+              {/* Development note - outside dropdown, under title */}
+              {point.development_note && (
+                <View style={styles.developmentNote}>
+                  <Text style={styles.developmentNoteText}>{point.development_note}</Text>
+                </View>
+              )}
+
+              <View style={styles.nodeStats}>
+                <Text style={styles.statText}>{point.article_count} articles</Text>
+                <Text style={styles.statDot}>•</Text>
+                <Text style={styles.statText}>{point.sources.length} sources</Text>
+                <Text style={styles.statDot}>•</Text>
+                <Text style={styles.statText}>{Math.round(point.confidence * 100)}%</Text>
+              </View>
+
+              {isExpanded && (
+                <View style={styles.expandedContent}>
+                  <View style={styles.divider} />
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Summary</Text>
+                    <Text style={styles.sectionText}>{point.summary}</Text>
+                  </View>
+
+                  {point.key_insights && point.key_insights.length > 0 && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Key Insights</Text>
+                      {point.key_insights.map((insight, idx) => (
+                        <View key={idx} style={styles.insightRow}>
+                          <Text style={styles.insightBullet}>•</Text>
+                          <Text style={styles.insightText}>{insight}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <Text style={styles.timestamp}>{formatFullDate(point.created_at)}</Text>
+                </View>
+              )}
+
+              <View style={styles.expandIndicator}>
+                <Text style={styles.expandText}>
+                  {isExpanded ? "Show less" : "Show details"}
+                </Text>
+                <Ionicons 
+                  name={isExpanded ? "chevron-up" : "chevron-down"} 
+                  size={12} 
+                  color="#9CA3AF" 
+                />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="time-outline" size={64} color="#D1D5DB" />
-      <Text style={styles.emptyTitle}>No History Yet</Text>
+      <Ionicons name="time-outline" size={40} color="#E5E7EB" />
+      <Text style={styles.emptyTitle}>No Timeline Yet</Text>
       <Text style={styles.emptyText}>
-        This topic hasn't had any significant updates yet. Check back as the story develops!
+        This story hasn't had any updates yet.
       </Text>
     </View>
   );
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
-      {/* Backdrop */}
       <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={handleClose} activeOpacity={1} />
       </Animated.View>
 
-      {/* Slide-up panel */}
       <Animated.View
-        style={[
-          styles.slideUpContainer,
-          {
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+        style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
+        {...panResponder.panHandlers}
       >
-        {/* Handle bar */}
-        <View style={styles.handleContainer} {...panResponder.panHandlers}>
+        <View style={styles.handleContainer}>
           <View style={styles.handle} />
         </View>
 
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.headerIconContainer}>
-              <Ionicons name="git-branch" size={20} color="#6366F1" />
+            <View style={styles.headerIcon}>
+              <Ionicons name="git-network" size={18} color="#6B7280" />
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Story Timeline</Text>
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
+              <Text style={styles.headerTitle}>Timeline</Text>
+              <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
                 {topicTitle}
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color="#6B7280" />
-          </TouchableOpacity>
         </View>
 
-        {/* Content */}
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -387,14 +308,14 @@ const TopicHistoryModal: React.FC<Props> = ({
         >
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#6366F1" />
-              <Text style={styles.loadingText}>Loading timeline...</Text>
+              <ActivityIndicator size="small" color="#6366F1" />
+              <Text style={styles.loadingText}>Loading...</Text>
             </View>
           ) : history.length === 0 ? (
             renderEmptyState()
           ) : (
             <>
-              <View style={styles.timelineStats}>
+              <View style={styles.statsRow}>
                 <View style={styles.statItem}>
                   <Text style={styles.statValue}>{history.length}</Text>
                   <Text style={styles.statLabel}>Updates</Text>
@@ -414,11 +335,13 @@ const TopicHistoryModal: React.FC<Props> = ({
                         (1000 * 60 * 60 * 24))
                     )}
                   </Text>
-                  <Text style={styles.statLabel}>Days Active</Text>
+                  <Text style={styles.statLabel}>Days</Text>
                 </View>
               </View>
 
-              <View style={styles.timeline}>{history.map(renderTimelinePoint)}</View>
+              <View style={styles.timeline}>
+                {history.map((point, index) => renderTimelinePoint(point, index))}
+              </View>
             </>
           )}
         </ScrollView>
@@ -430,32 +353,27 @@ const TopicHistoryModal: React.FC<Props> = ({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
-  slideUpContainer: {
+  container: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     height: SLIDE_HEIGHT,
-    backgroundColor: "#F9FAFB",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 20,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   handleContainer: {
     paddingVertical: 12,
     alignItems: "center",
   },
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#D1D5DB",
+    backgroundColor: "#E5E7EB",
   },
   header: {
     flexDirection: "row",
@@ -464,103 +382,89 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "#F3F4F6",
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    marginRight: 12,
+    gap: 12,
   },
-  headerIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#EEF2FF",
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
   headerTextContainer: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: "#111827",
     marginBottom: 2,
   },
   headerSubtitle: {
     fontSize: 13,
     color: "#6B7280",
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    width: "100%",
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 32,
   },
   loadingContainer: {
     paddingVertical: 80,
     alignItems: "center",
+    gap: 12,
   },
   loadingText: {
-    marginTop: 12,
     fontSize: 14,
     color: "#6B7280",
   },
   emptyState: {
     paddingVertical: 80,
     alignItems: "center",
-    paddingHorizontal: 40,
+    gap: 12,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "500",
     color: "#374151",
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 8,
   },
   emptyText: {
     fontSize: 14,
     color: "#6B7280",
     textAlign: "center",
-    lineHeight: 20,
   },
-  timelineStats: {
+  statsRow: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F9FAFB",
     marginHorizontal: 20,
-    marginTop: 20,
+    marginTop: 16,
     marginBottom: 24,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    padding: 16,
+    borderRadius: 12,
   },
   statItem: {
     flex: 1,
     alignItems: "center",
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#6366F1",
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
     color: "#6B7280",
-    textAlign: "center",
   },
   statDivider: {
     width: 1,
@@ -570,179 +474,150 @@ const styles = StyleSheet.create({
   timeline: {
     paddingHorizontal: 20,
   },
-  timelinePointContainer: {
+  timelineItem: {
     position: "relative",
+    marginBottom: 16,
   },
   timelineLine: {
     position: "absolute",
-    left: 19,
-    top: 0,
-    bottom: 0,
+    left: 15,
+    top: -20,
+    bottom: 20,
     width: 2,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: "#F3F4F6",
     zIndex: 0,
   },
-  timelinePoint: {
+  timelineNode: {
     flexDirection: "row",
     position: "relative",
     zIndex: 1,
-    marginBottom: 20,
+    gap: 12,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 3,
+  nodeDot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    marginRight: 12,
   },
-  iconCircleFirst: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 4,
+  nodeDotFirst: {
+    backgroundColor: "#EEF2FF",
   },
-  contentCard: {
+  nodeContent: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+  },
+  nodeCard: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    marginBottom: 4,
   },
-  contentCardFirst: {
-    borderWidth: 2,
-    borderColor: "#8B5CF6",
-    shadowOpacity: 0.1,
+  nodeCardExpanded: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
   },
-  cardHeader: {
+  nodeHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  cardHeaderLeft: {
+  nodeHeaderLeft: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    gap: 8,
   },
-  typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
+  nodeType: {
+    fontSize: 12,
+    fontWeight: "500",
   },
-  typeBadgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  timeAgo: {
+  nodeDate: {
     fontSize: 12,
     color: "#9CA3AF",
   },
   regeneratedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "#F3E8FF",
     gap: 4,
   },
   regeneratedText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#8B5CF6",
+    fontSize: 10,
+    color: "#9CA3AF",
   },
-  pointTitle: {
+  nodeTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#111827",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  nodeTitleFirst: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#111827",
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  pointTitleFirst: {
-    fontSize: 18,
-    fontWeight: "700",
   },
   developmentNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#EEF2FF",
-    padding: 12,
+    backgroundColor: "#F3F4F6",
+    padding: 10,
     borderRadius: 8,
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 10,
   },
   developmentNoteText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#4338CA",
-    lineHeight: 18,
-    fontWeight: "500",
+    fontSize: 12,
+    color: "#4B5563",
+    lineHeight: 16,
   },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  metaItem: {
+  nodeStats: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  metaText: {
+  statText: {
     fontSize: 12,
     color: "#6B7280",
+  },
+  statDot: {
+    fontSize: 12,
+    color: "#D1D5DB",
+    marginHorizontal: 2,
   },
   expandedContent: {
     marginTop: 16,
   },
   divider: {
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: "#F3F4F6",
     marginBottom: 16,
   },
-  summarySection: {
+  section: {
     marginBottom: 16,
   },
-  summaryLabel: {
+  sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 6,
   },
-  summaryText: {
-    fontSize: 14,
-    color: "#4B5563",
-    lineHeight: 20,
-  },
-  insightsSection: {
-    marginBottom: 12,
-  },
-  insightsLabel: {
+  sectionText: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
+    color: "#4B5563",
+    lineHeight: 18,
   },
   insightRow: {
     flexDirection: "row",
     marginBottom: 8,
-    paddingLeft: 4,
+    gap: 6,
   },
   insightBullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#6366F1",
-    marginTop: 6,
-    marginRight: 10,
+    fontSize: 14,
+    color: "#6366F1",
+    lineHeight: 18,
   },
   insightText: {
     flex: 1,
@@ -763,9 +638,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   expandText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#9CA3AF",
-    fontWeight: "500",
   },
 });
 

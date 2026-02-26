@@ -518,11 +518,12 @@ const LibraryScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
+      {/* Header*/}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Library</Text>
-        <TouchableOpacity onPress={() => fetchPodcasts(true)} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={24} color="#6366F1" />
-        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.brandName}>PODNOVA LIBRARY</Text>
+          <Ionicons name="book-outline" size={24} color="#6366F1" />
+        </View>
       </View>
 
       <View style={styles.tabContainer}>
@@ -614,21 +615,29 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
     backgroundColor: "#FFFFFF",
+    paddingTop: 70,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
+  brandName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#6366F1",
+    letterSpacing: 1,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "700",
     color: "#111827",
-    letterSpacing: -0.5,
   },
   refreshButton: {
     width: 40,
@@ -768,7 +777,6 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#FEF3C7",
     justifyContent: "center",
     alignItems: "center",
   },

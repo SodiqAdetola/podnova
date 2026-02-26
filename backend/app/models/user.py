@@ -42,7 +42,7 @@ class UserProfile(BaseModel):
     id: str
     firebase_uid: str
     email: EmailStr
-    full_name: str
+    username: str
     created_at: datetime
     preferences: UserPreferences
     
@@ -52,7 +52,7 @@ class UserProfile(BaseModel):
                 "id": "507f1f77bcf86cd799439011",
                 "firebase_uid": "abc123xyz789",
                 "email": "user@example.com",
-                "full_name": "John Doe",
+                "username": "john_doe",
                 "created_at": "2024-01-01T00:00:00",
                 "preferences": {
                     "default_categories": ["technology"],

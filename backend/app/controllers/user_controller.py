@@ -9,7 +9,7 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
     """Create a new user profile in MongoDB"""
     firebase_uid = firebase_user["uid"]
     email = firebase_user.get("email")
-    full_name = firebase_user.get("name", email.split("@")[0] if email else "User")
+    username = firebase_user.get("name", email.split("@")[0] if email else "User")
 
     # Check if user exists
     existing = await db["users"].find_one({"firebase_uid": firebase_uid})
@@ -33,7 +33,7 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
     profile_data = {
         "firebase_uid": firebase_uid,
         "email": email,
-        "full_name": full_name,
+        "username": username,
         "created_at": datetime.utcnow(),
         "preferences": default_prefs.dict(),
     }

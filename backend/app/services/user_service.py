@@ -31,7 +31,7 @@ class UserService:
                 id=str(user_doc["_id"]),
                 firebase_uid=user_doc.get("firebase_uid", ""),
                 email=user_doc.get("email", ""),
-                full_name=user_doc.get("full_name", ""),
+                username=user_doc.get("username", ""),
                 created_at=user_doc.get("created_at", datetime.now()),
                 preferences=UserPreferences(**user_doc.get("preferences", {}))
             )

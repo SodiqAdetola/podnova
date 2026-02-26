@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# app/ai_pipeline/recluster_all.py
 """
 Simple script to reset embeddings and run normal clustering
 Run with: python -m app.ai_pipeline.reset_and_cluster

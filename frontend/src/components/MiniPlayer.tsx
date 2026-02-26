@@ -35,7 +35,7 @@ const getCategoryColor = (category: string) => {
 
 // Dynamic bottom position based on tab bar presence
 const bottomPosition = hasTabBar ? 80 : 0;
-const paddingBottomPosition = hasTabBar ? 0 : 20;
+const paddingBottomPosition = hasTabBar ? 0 : 10;
 const paddingTopPosition = hasTabBar ? 0 : 0;
 
 
@@ -107,7 +107,7 @@ container: {
     position: 'absolute',
     left: 0,
     right: 0,
-    paddingBottom: 30,
+    paddingBottom: 0,
     backgroundColor: '#f8f7ff',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',

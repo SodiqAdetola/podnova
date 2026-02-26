@@ -6,10 +6,15 @@ import { View, ActivityIndicator } from 'react-native';
 
 type AuthContextProps = {
     user: User | null;
-    loading: boolean; // Export loading state
+    loading: boolean;
+    getToken: () => Promise<string | null>;
 }
 
-const AuthContext = createContext<AuthContextProps>({ user: null, loading: true });
+const AuthContext = createContext<AuthContextProps>({ 
+    user: null, 
+    loading: true,
+    getToken: async () => null 
+});
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -19,8 +24,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log("Setting up auth state listener");
         
         const unsubscribe = onAuthStateChanged(auth, 
-            (firebaseUser) => {
+            async (firebaseUser) => {
                 console.log("Auth state changed:", firebaseUser ? `User ${firebaseUser.email} logged in` : "No user");
+                
+                if (firebaseUser) {
+                    // Force token refresh on auth state change
+                    try {
+                        await firebaseUser.getIdToken(true);
+                        console.log("Token refreshed");
+                    } catch (error) {
+                        console.error("Error refreshing token:", error);
+                    }
+                }
+                
                 setUser(firebaseUser);
                 setLoading(false);
             },
@@ -40,6 +56,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, []);
 
+    const getToken = async (): Promise<string | null> => {
+        if (!user) return null;
+        try {
+            return await user.getIdToken();
+        } catch (error) {
+            console.error("Error getting token:", error);
+            return null;
+        }
+    };
+
     if (loading) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
@@ -49,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return (
-        <AuthContext.Provider value={{ user, loading }}>
+        <AuthContext.Provider value={{ user, loading, getToken }}>
             {children}
         </AuthContext.Provider>
     );

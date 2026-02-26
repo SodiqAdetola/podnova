@@ -1,3 +1,4 @@
+// frontend/src/Navigator.tsx
 import React, { useState } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
@@ -16,6 +17,8 @@ import SearchScreen from "./screens/Search";
 import HomeScreen from "./screens/Home";
 import CategoryTopicsScreen from "./screens/CategoryTopics";
 import TopicDetailScreen from "./screens/TopicDetail";
+import NotificationsScreen from "./screens/NotificationsScreen";
+import DiscussionDetailScreen from "./screens/DiscussionDetailScreen";
 import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
 
@@ -26,18 +29,21 @@ export type AuthStackParamList = {
   Register: undefined;
 };
 
+// Main tabs that appear in the tab bar
 export type MainTabParamList = {
   Home: undefined;
   Search: undefined;
   Create: undefined;
   Library: undefined;
   Profile: undefined;
+  CategoryTopics: { category: string };
 };
 
 export type MainStackParamList = {
   MainTabs: undefined;
-  CategoryTopics: { category: string };
   TopicDetail: { topicId: string };
+  Notifications: undefined;
+  DiscussionDetail: { discussionId: string }; 
 };
 
 /* -------------------- NAVIGATORS -------------------- */
@@ -48,10 +54,7 @@ const MainStack = createNativeStackNavigator<MainStackParamList>();
 
 /* -------------------- ICON MAP -------------------- */
 
-const TAB_ICONS: Record<
-  keyof MainTabParamList,
-  [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]
-> = {
+const TAB_ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]> = {
   Home: ["home", "home-outline"],
   Search: ["search", "search-outline"],
   Create: ["add", "add"],
@@ -80,151 +83,128 @@ const CreateTabButton = ({ children, onPress }: any) => (
   </TouchableOpacity>
 );
 
-/* -------------------- MAIN TABS WITH MINI PLAYER -------------------- */
+/* -------------------- SCREENS WITH PLAYER WRAPPER -------------------- */
+
+// Wrapper component to add mini player and full player to any screen
+const withPlayer = (Component: React.ComponentType<any>) => {
+  return (props: any) => {
+    const { showPlayer, currentPodcast } = useAudio();
+    const [showFullPlayer, setShowFullPlayer] = useState(false);
+    
+    const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
+
+    // Determine if current screen has a tab bar
+    const hasTabBar = props.route?.name === 'CategoryTopics' || 
+                      props.route?.name === 'Home' || 
+                      props.route?.name === 'Search' || 
+                      props.route?.name === 'Create' || 
+                      props.route?.name === 'Library' || 
+                      props.route?.name === 'Profile';
+
+    return (
+      <View style={{ flex: 1 }}>
+        <Component {...props} />
+        
+        {/* Mini Player */}
+        {shouldShowMiniPlayer && (
+          <MiniPlayer 
+            onExpand={() => setShowFullPlayer(true)} 
+            hasTabBar={hasTabBar}
+          />
+        )}
+
+        {/* Full Player */}
+        {showFullPlayer && currentPodcast && (
+          <PodcastPlayer
+            visible={showFullPlayer}
+            podcast={currentPodcast}
+            onClose={() => setShowFullPlayer(false)}
+            isSaved={false}
+            onToggleSave={() => {}}
+          />
+        )}
+      </View>
+    );
+  };
+};
+
+// Wrap screens with player
+const HomeScreenWithPlayer = withPlayer(HomeScreen);
+const SearchScreenWithPlayer = withPlayer(SearchScreen);
+const CreateScreenWithPlayer = withPlayer(CreateScreen);
+const LibraryScreenWithPlayer = withPlayer(LibraryScreen);
+const ProfileScreenWithPlayer = withPlayer(ProfileScreen);
+const CategoryTopicsScreenWithPlayer = withPlayer(CategoryTopicsScreen);
+const TopicDetailScreenWithPlayer = withPlayer(TopicDetailScreen);
+const NotificationsScreenWithPlayer = withPlayer(NotificationsScreen);
+const DiscussionDetailScreenWithPlayer = withPlayer(DiscussionDetailScreen);
+
+/* -------------------- MAIN TABS NAVIGATOR -------------------- */
 
 const MainTabsNavigator: React.FC = () => {
-  const { showPlayer, currentPodcast } = useAudio();
-  const [showFullPlayer, setShowFullPlayer] = useState(false);
-  
-  const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
-
   return (
-    <View style={{ flex: 1 }}>
-      <MainTabs.Navigator
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          tabBarShowLabel: false,
-          tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: "#6366F1",
-          tabBarInactiveTintColor: "#9CA3AF",
-          tabBarIcon: ({ focused, color, size }) => {
-            const [activeIcon, inactiveIcon] = TAB_ICONS[route.name as keyof MainTabParamList];
+    <MainTabs.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: styles.tabBar,
+        tabBarActiveTintColor: "#6366F1",
+        tabBarInactiveTintColor: "#9CA3AF",
+        tabBarIcon: ({ focused, color }) => {
+          if (route.name === "Home") {
+            const [activeIcon, inactiveIcon] = TAB_ICONS.Home;
+            return <Ionicons name={focused ? activeIcon : inactiveIcon} size={24} color={color} />;
+          } else if (route.name === "Search") {
+            const [activeIcon, inactiveIcon] = TAB_ICONS.Search;
+            return <Ionicons name={focused ? activeIcon : inactiveIcon} size={24} color={color} />;
+          } else if (route.name === "Create") {
+            return <Ionicons name="add" size={28} color="#FFFFFF" />;
+          } else if (route.name === "Library") {
+            const [activeIcon, inactiveIcon] = TAB_ICONS.Library;
+            return <Ionicons name={focused ? activeIcon : inactiveIcon} size={24} color={color} />;
+          } else if (route.name === "Profile") {
+            const [activeIcon, inactiveIcon] = TAB_ICONS.Profile;
+            return <Ionicons name={focused ? activeIcon : inactiveIcon} size={24} color={color} />;
+          }
+          return null;
+        },
+      })}
+    >
+      <MainTabs.Screen name="Home" component={HomeScreenWithPlayer} />
+      <MainTabs.Screen name="Search" component={SearchScreenWithPlayer} />
 
-            return (
-              <Ionicons
-                name={focused ? activeIcon : inactiveIcon}
-                size={24}
-                color={color}
-              />
-            );
-          },
-        })}
-      >
-        <MainTabs.Screen name="Home" component={HomeScreen} />
-        <MainTabs.Screen name="Search" component={SearchScreen} />
+      <MainTabs.Screen
+        name="Create"
+        component={CreateScreenWithPlayer}
+        options={{
+          tabBarButton: (props) => <CreateTabButton {...props} />,
+        }}
+      />
 
-        {/* CENTER CREATE BUTTON */}
-        <MainTabs.Screen
-          name="Create"
-          component={CreateScreen}
-          options={{
-            tabBarIcon: () => (
-              <Ionicons name="add" size={28} color="#FFFFFF" />
-            ),
-            tabBarButton: (props) => <CreateTabButton {...props} />,
-          }}
-        />
-
-        <MainTabs.Screen name="Library" component={LibraryScreen} />
-        <MainTabs.Screen name="Profile" component={ProfileScreen} />
-      </MainTabs.Navigator>
-
-      {/* Mini Player for Tab Screens - Always on top of tab bar */}
-      {shouldShowMiniPlayer && (
-        <MiniPlayer 
-          onExpand={() => setShowFullPlayer(true)} 
-          hasTabBar={true}  // Always true for tab screens
-        />
-      )}
-
-      {/* Full Player */}
-      {showFullPlayer && currentPodcast && (
-        <PodcastPlayer
-          visible={showFullPlayer}
-          podcast={currentPodcast}
-          onClose={() => setShowFullPlayer(false)}
-          isSaved={false}
-          onToggleSave={() => {}}
-        />
-      )}
-    </View>
-  );
-};
-
-/* -------------------- STACK SCREENS WITH MINI PLAYER -------------------- */
-
-const CategoryTopicsWithPlayer: React.FC = (props) => {
-  const { showPlayer, currentPodcast } = useAudio();
-  const [showFullPlayer, setShowFullPlayer] = useState(false);
-  
-  const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
-
-  return (
-    <View style={{ flex: 1 }}>
-      <CategoryTopicsScreen {...props} />
+      <MainTabs.Screen name="Library" component={LibraryScreenWithPlayer} />
+      <MainTabs.Screen name="Profile" component={ProfileScreenWithPlayer} />
       
-      {/* Mini Player for Stack Screen - No tab bar */}
-      {shouldShowMiniPlayer && (
-        <MiniPlayer 
-          onExpand={() => setShowFullPlayer(true)} 
-          hasTabBar={false}  // No tab bar on stack screens
-        />
-      )}
-
-      {/* Full Player */}
-      {showFullPlayer && currentPodcast && (
-        <PodcastPlayer
-          visible={showFullPlayer}
-          podcast={currentPodcast}
-          onClose={() => setShowFullPlayer(false)}
-          isSaved={false}
-          onToggleSave={() => {}}
-        />
-      )}
-    </View>
+      <MainTabs.Screen 
+        name="CategoryTopics" 
+        component={CategoryTopicsScreenWithPlayer}
+        options={{
+          tabBarItemStyle: { display: 'none' },
+          tabBarButton: () => null,
+        }}
+      />
+    </MainTabs.Navigator>
   );
 };
 
-const TopicDetailWithPlayer: React.FC = (props) => {
-  const { showPlayer, currentPodcast } = useAudio();
-  const [showFullPlayer, setShowFullPlayer] = useState(false);
-  
-  const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
-
-  return (
-    <View style={{ flex: 1 }}>
-      <TopicDetailScreen {...props} />
-      
-      {/* Mini Player for Stack Screen - No tab bar */}
-      {shouldShowMiniPlayer && (
-        <MiniPlayer 
-          onExpand={() => setShowFullPlayer(true)} 
-          hasTabBar={false}  // No tab bar on stack screens
-        />
-      )}
-
-      {/* Full Player */}
-      {showFullPlayer && currentPodcast && (
-        <PodcastPlayer
-          visible={showFullPlayer}
-          podcast={currentPodcast}
-          onClose={() => setShowFullPlayer(false)}
-          isSaved={false}
-          onToggleSave={() => {}}
-        />
-      )}
-    </View>
-  );
-};
-
-/* -------------------- MAIN STACK -------------------- */
+/* -------------------- STACK NAVIGATOR -------------------- */
 
 const MainStackNavigator: React.FC = () => {
   return (
     <MainStack.Navigator screenOptions={{ headerShown: false }}>
       <MainStack.Screen name="MainTabs" component={MainTabsNavigator} />
-      <MainStack.Screen name="CategoryTopics" component={CategoryTopicsWithPlayer} />
-      <MainStack.Screen name="TopicDetail" component={TopicDetailWithPlayer} />
+      <MainStack.Screen name="TopicDetail" component={TopicDetailScreenWithPlayer} />
+      <MainStack.Screen name="Notifications" component={NotificationsScreenWithPlayer} />  
+      <MainStack.Screen name="DiscussionDetail" component={DiscussionDetailScreenWithPlayer} /> 
     </MainStack.Navigator>
   );
 };
@@ -247,13 +227,23 @@ export default Navigator;
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 80,
-    paddingBottom: 0,
-    paddingTop: 10,
+    height: 70, // Reduced from 80
+    paddingBottom: 5,
+    paddingTop: 5,
     backgroundColor: "#FFFFFF",
-    borderTopWidth: 0,
-    elevation: 10,
-    zIndex: 10, 
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    elevation: 8,
+    zIndex: 10,
+    position: 'absolute',
+    bottom: 0,
+    left: 10, // Add left margin
+    right: 10, // Add right margin
+    borderRadius: 35, // Rounded corners
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   createButtonWrapper: {
     top: -15,
@@ -262,16 +252,18 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   createButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
     backgroundColor: "#6366F1",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#6366F1",
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 8,
   },
 });

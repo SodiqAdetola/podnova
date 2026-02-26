@@ -22,7 +22,7 @@ from app.ai_pipeline.topic_history import TopicHistoryService
 from app.controllers.discussion_controller import create_or_get_topic_discussion
 
 # Configuration
-SIMILARITY_THRESHOLD = 0.68  # Lowered from 0.70 to catch more matches
+SIMILARITY_THRESHOLD = 0.75
 NEAR_DUPLICATE_THRESHOLD = 0.80  # Threshold for auto-merging very similar topics
 MIN_ARTICLES_FOR_TITLE = 2
 CONFIDENCE_THRESHOLD = 0.6

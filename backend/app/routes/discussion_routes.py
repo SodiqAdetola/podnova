@@ -86,7 +86,7 @@ async def get_discussion(
     
     Includes:
     - Discussion details
-    - All replies with AI analysis (factual vs opinion scoring)
+    - All replies
     - User's upvote status
     - Nested reply structure
     

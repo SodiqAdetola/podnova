@@ -35,7 +35,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleRegister = async () => {
     if (!fullName.trim()) {
-      Alert.alert("Missing Information", "Please enter your full name.");
+      Alert.alert("Missing Information", "Please enter your username.");
       return;
     }
 
@@ -89,7 +89,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
       const token = await firebaseUser.getIdToken();
 
-      const response = await fetch(`${API_BASE_URL}/users/user`, {
+      const response = await fetch(`${API_BASE_URL}/users/profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,12 +179,12 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.formContainer}>
           {/* Full Name Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Full Name</Text>
+            <Text style={styles.inputLabel}>Username</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="John Doe"
+                placeholder="JohnDoe"
                 placeholderTextColor="#9CA3AF"
                 value={fullName}
                 onChangeText={setFullName}

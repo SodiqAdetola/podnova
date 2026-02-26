@@ -1,5 +1,4 @@
-// frontend/src/screens/TopicDetail.tsx - WITH HISTORY TIMELINE
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,31 +8,70 @@ import {
   ActivityIndicator,
   Linking,
   Image,
+  RefreshControl,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { TopicDetail } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import PodcastGeneratorModal from "../components/PodcastGenModal";
-import TopicHistoryModal from "../components/TopicHistoryModal"; 
+import TopicHistoryModal from "../components/TopicHistoryModal";
+import DiscussionThread from "../components/DiscussionThread";
+import { getAuth } from "firebase/auth";
+import { useAudio } from "../contexts/AudioContext";
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
-type TabType = "overview" | "discussion";
 type TopicDetailNavigationProp = NativeStackNavigationProp<MainStackParamList>;
+
+// Interface for discussion data
+interface DiscussionData {
+  id: string;
+  reply_count: number;
+}
 
 const TopicDetailScreen: React.FC = () => {
   const navigation = useNavigation<TopicDetailNavigationProp>();
   const route = useRoute();
   const { topicId } = route.params as { topicId: string };
+  const { showPlayer } = useAudio();
+  
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [topic, setTopic] = useState<TopicDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [heroImageError, setHeroImageError] = useState(false);
   const [showPodcastModal, setShowPodcastModal] = useState(false);
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(false);
+  const [discussionId, setDiscussionId] = useState<string | null>(null);
+  const [replyCount, setReplyCount] = useState(0);
+  const [loadingDiscussion, setLoadingDiscussion] = useState(false);
+  const [isArticlesExpanded, setIsArticlesExpanded] = useState(false);
+
+  const getAuthToken = async (): Promise<string | null> => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        return await user.getIdToken();
+      } catch (error) {
+        console.error("Error getting token:", error);
+        return null;
+      }
+    }
+    return null;
+  };
 
   useEffect(() => {
     loadTopic();
@@ -44,11 +82,60 @@ const TopicDetailScreen: React.FC = () => {
       const response = await fetch(`${API_BASE_URL}/topics/${topicId}`);
       const data = await response.json();
       setTopic(data);
+      
+      // After loading the topic, fetch the discussion for it
+      await fetchTopicDiscussion();
     } catch (error) {
       console.error("Error loading topic:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadTopic();
+  };
+
+  const fetchTopicDiscussion = async () => {
+    try {
+      setLoadingDiscussion(true);
+      const token = await getAuthToken();
+      
+      if (!token) {
+        console.log("No auth token for fetching discussion");
+        return;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/discussions?topic_id=${topicId}&discussion_type=topic`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.discussions && data.discussions.length > 0) {
+          const discussion = data.discussions[0];
+          setDiscussionId(discussion.id);
+          setReplyCount(discussion.reply_count || 0);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching topic discussion:", error);
+    } finally {
+      setLoadingDiscussion(false);
+    }
+  };
+
+  const truncateTitle = (title: string, maxLength: number = 30) => {
+    if (!title) return 'Untitled';
+    if (title.length <= maxLength) return title;
+    return title.substring(0, maxLength) + '...';
   };
 
   const openArticle = (url: string) => {
@@ -61,6 +148,17 @@ const TopicDetailScreen: React.FC = () => {
 
   const handleOpenTimeline = () => {
     setShowHistoryTimeline(true);
+  };
+
+  const toggleArticles = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsArticlesExpanded(!isArticlesExpanded);
+  };
+
+  const scrollToDiscussions = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
   };
 
   const renderHeroImage = () => {
@@ -83,145 +181,149 @@ const TopicDetailScreen: React.FC = () => {
     );
   };
 
-  const renderOverviewTab = () => {
+  const renderStats = () => {
     if (!topic) return null;
 
-    // Check if topic has history
-    const hasHistory = topic.history_point_count && topic.history_point_count > 1;
-
     return (
-      <View>
-        {renderHeroImage()}
-
-        <View style={styles.titleSection}>
-          <Text style={styles.topicTitle}>{topic.title}</Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>{topic.article_count} Articles</Text>
-            <Text style={styles.metaSeparator}>•</Text>
-            <Text style={styles.metaLabel}>Updated {topic.time_ago}</Text>
-          </View>
-          <View style={styles.confidenceBadge}>
-            <Text style={styles.confidenceText}>Confidence {Math.round(topic.confidence * 100)}%</Text>
-          </View>
-
-          {/* Development note badge (if story has evolved) */}
-          {hasHistory && topic.development_note && (
-            <View style={styles.developingStoryBadge}>
-              <Ionicons name="git-branch" size={14} color="#8B5CF6" />
-              <Text style={styles.developingStoryText}>Developing Story</Text>
-            </View>
-          )}
+      <View style={styles.statsGrid}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{topic.article_count}</Text>
+          <Text style={styles.statLabel}>Articles</Text>
         </View>
-
-        {/* Story Timeline Button (only show if has history) */}
-        {hasHistory && (
-          <TouchableOpacity 
-            style={styles.timelineButton}
-            onPress={handleOpenTimeline}
-          >
-            <View style={styles.timelineButtonContent}>
-              <View style={styles.timelineIconContainer}>
-                <Ionicons name="git-branch" size={20} color="#8B5CF6" />
-              </View>
-              <View style={styles.timelineTextContainer}>
-                <View style={styles.timelineHeader}>
-                  <Text style={styles.timelineTitle}>Story Timeline</Text>
-                  <View style={styles.timelineCountBadge}>
-                    <Text style={styles.timelineCountText}>{topic.history_point_count}</Text>
-                  </View>
-                </View>
-                <Text style={styles.timelineSubtitle}>
-                  See how this story has evolved over time with {topic.history_point_count} major updates
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {/* Podcast Button */}
-        <TouchableOpacity 
-          style={styles.podcastButton}
-          onPress={handleGeneratePodcast}
-        >
-          <View style={styles.podcastButtonContent}>
-            <View style={styles.podcastIconContainer}>
-                <Ionicons name="sparkles" size={20} color="#6366F1" />
-            </View>
-            <View style={styles.podcastTextContainer}>
-              <Text style={styles.podcastTitle}>Generate AI Podcast</Text>
-              <Text style={styles.podcastSubtitle}>
-                Create a comprehensive podcast summary of all {topic.article_count} articles on this topic.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.podcastGenerateButton}>
-            <Ionicons name="sparkles-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.podcastGenerateText}>Generate Podcast</Text>
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About this Topic</Text>
-          <Text style={styles.summary}>{topic.summary}</Text>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{Math.round(topic.confidence * 100)}%</Text>
+          <Text style={styles.statLabel}>Confidence</Text>
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Key Insights</Text>
-          {topic.key_insights?.map((insight, index) => (
-            <View key={index} style={styles.insightItem}>
-              <View style={styles.insightBullet}>
-                <View style={styles.bulletDot} />
-              </View>
-              <Text style={styles.insightText}>{insight}</Text>
-            </View>
-          ))}
-        </View>
-
-        {topic.tags && topic.tags.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.tagsContainer}>
-              {topic.tags?.map((tag, index) => (
-                <View key={index} style={styles.tag}>
-                  <Text style={styles.tagText}>{tag}</Text>
-                </View>
-              ))}
-              {topic.tags && topic.tags.length > 3 && (
-                <View style={styles.tag}>
-                  <Text style={styles.tagText}>+{topic.tags.length - 3}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Source Articles ({topic.article_count})</Text>
-          {topic.articles?.map((article) => (
-            <TouchableOpacity
-              key={article.id}
-              style={styles.articleCard}
-              onPress={() => openArticle(article.url)}
-            >
-              <Text style={styles.articleTitle}>{article.title}</Text>
-              <Text style={styles.articleSource}>{article.source}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{topic.history_point_count || 0}</Text>
+          <Text style={styles.statLabel}>Updates</Text>
         </View>
       </View>
     );
   };
 
-  const renderDiscussionTab = () => {
+  const renderActionButtons = () => {
+    if (!topic) return null;
+
     return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyTitle}>No Discussions Yet</Text>
-        <Text style={styles.emptyText}>
-          Be the first to start a discussion about this topic
-        </Text>
-        <TouchableOpacity style={styles.startDiscussionButton}>
-          <Text style={styles.startDiscussionText}>Start Discussion</Text>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.timelineAction]}
+          onPress={handleOpenTimeline}
+        >
+          <Ionicons name="git-branch" size={18} color="#8B5CF6" />
+          <Text style={styles.actionButtonText}>Timeline</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.podcastAction]}
+          onPress={handleGeneratePodcast}
+        >
+          <Ionicons name="sparkles" size={18} color="#6366F1" />
+          <Text style={styles.actionButtonText}>Generate Podcast</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.discussionAction]}
+          onPress={scrollToDiscussions}
+        >
+          <Ionicons name="chatbubble-outline" size={18} color="#10B981" />
+          <Text style={styles.actionButtonText}>Discuss</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderDiscussionSection = () => {
+    if (loadingDiscussion) {
+      return (
+        <View style={styles.discussionLoading}>
+          <ActivityIndicator size="small" color="#6366F1" />
+          <Text style={styles.discussionLoadingText}>Loading discussions...</Text>
+        </View>
+      );
+    }
+
+    if (!discussionId) {
+      return (
+        <View style={styles.noDiscussion}>
+          <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
+          <Text style={styles.noDiscussionTitle}>No Discussions Yet</Text>
+          <Text style={styles.noDiscussionText}>
+            Be the first to start a discussion about this topic
+          </Text>
+          <TouchableOpacity style={styles.startDiscussionButton}>
+            <Text style={styles.startDiscussionButtonText}>Start a Discussion</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    const miniPlayerHeight = showPlayer ? 70 : 0;
+
+    return (
+      <View style={styles.discussionSection}>
+        <View style={styles.discussionHeader}>
+          <View style={styles.discussionHeaderLeft}>
+            <Ionicons name="chatbubble-outline" size={20} color="#10B981" />
+            <Text style={styles.discussionHeaderTitle}>Discussion</Text>
+          </View>
+          <View style={styles.replyCountBadge}>
+            <Text style={styles.replyCountText}>{replyCount} {replyCount === 1 ? 'reply' : 'replies'}</Text>
+          </View>
+        </View>
+        <View style={[styles.discussionContent, { paddingBottom: miniPlayerHeight }]}>
+          <DiscussionThread discussionId={discussionId} />
+        </View>
+      </View>
+    );
+  };
+
+  const renderArticlesSection = () => {
+    if (!topic?.articles || topic.articles.length === 0) return null;
+
+    return (
+      <View style={styles.articlesSection}>
+        <TouchableOpacity 
+          style={styles.sectionHeader}
+          onPress={toggleArticles}
+          activeOpacity={0.7}
+        >
+          <View style={styles.sectionHeaderLeft}>
+            <Ionicons name="newspaper" size={20} color="#6366F1" />
+            <Text style={styles.sectionHeaderTitle}>Source Articles</Text>
+          </View>
+          <View style={styles.sectionHeaderRight}>
+            <Text style={styles.articleCountText}>{topic.article_count} total</Text>
+            <Ionicons 
+              name={isArticlesExpanded ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color="#6B7280" 
+            />
+          </View>
+        </TouchableOpacity>
+
+        {isArticlesExpanded && (
+          <View style={styles.articlesContent}>
+            {topic.articles.map((article, index) => (
+              <TouchableOpacity
+                key={article.id}
+                style={[styles.articleCard, index === 0 && styles.firstArticle]}
+                onPress={() => openArticle(article.url)}
+              >
+                <View style={styles.articleContent}>
+                  <Text style={styles.articleTitle} numberOfLines={2}>
+                    {article.title}
+                  </Text>
+                  <Text style={styles.articleSource}>{article.source}</Text>
+                </View>
+                <Ionicons name="open-outline" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -242,44 +344,99 @@ const TopicDetailScreen: React.FC = () => {
     );
   }
 
+  const miniPlayerHeight = showPlayer ? 70 : 0;
+
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {topic.category?.charAt(0).toUpperCase() + topic.category?.slice(1)}
+          PODNOVA TOPIC
         </Text>
-        <TouchableOpacity style={styles.searchButton}>
-          <Ionicons name="search" size={20} color="#6B7280" />
+        <TouchableOpacity style={styles.headerButton}>
+          <Ionicons name="share-outline" size={22} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "overview" && styles.tabActive]}
-          onPress={() => setActiveTab("overview")}
-        >
-          <Text style={[styles.tabText, activeTab === "overview" && styles.tabTextActive]}>
-            Overview
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "discussion" && styles.tabActive]}
-          onPress={() => setActiveTab("discussion")}
-        >
-          <Text style={[styles.tabText, activeTab === "discussion" && styles.tabTextActive]}>
-            Discussion
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Main Content */}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: miniPlayerHeight + 20 }
+        ]}
+      >
+        {/* Hero Section */}
+        {renderHeroImage()}
 
-      <ScrollView style={styles.content}>
-        {activeTab === "overview" ? renderOverviewTab() : renderDiscussionTab()}
+        {/* Title Section */}
+        <View style={styles.titleSection}>
+          <Text style={styles.topicTitle}>{topic.title}</Text>
+          <View style={styles.metadata}>
+            <Text style={styles.metadataText}>
+              Updated {topic.time_ago}
+            </Text>
+            {topic.development_note && (
+              <View style={styles.developingBadge}>
+                <Ionicons name="flash-outline" size={12} color="#8B5CF6" />
+                <Text style={styles.developingBadgeText}>Developing News</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Stats Grid */}
+        {renderStats()}
+
+        {/* Action Buttons */}
+        {renderActionButtons()}
+
+        {/* Summary Section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Summary</Text>
+          <Text style={styles.summaryText}>{topic.summary}</Text>
+        </View>
+
+        {/* Key Insights with Feather check-circle icons */}
+        {topic.key_insights && topic.key_insights.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Key Insights</Text>
+            {topic.key_insights.map((insight, index) => (
+              <View key={index} style={styles.insightItem}>
+                <Feather name="check-circle" size={16} color="#10B981" style={styles.insightIcon} />
+                <Text style={styles.insightText}>{insight}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Tags */}
+        {topic.tags && topic.tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {topic.tags.map((tag, index) => (
+              <View key={index} style={styles.tag}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Articles Section - Collapsible */}
+        {renderArticlesSection()}
+
+        {/* Discussion Section - Non-collapsible, takes more space */}
+        {renderDiscussionSection()}
       </ScrollView>
 
       {/* Modals */}
@@ -295,7 +452,6 @@ const TopicDetailScreen: React.FC = () => {
             }}
           />
 
-          {/* History Timeline Modal */}
           <TopicHistoryModal
             visible={showHistoryTimeline}
             onClose={() => setShowHistoryTimeline(false)}
@@ -308,18 +464,16 @@ const TopicDetailScreen: React.FC = () => {
   );
 };
 
-export default TopicDetailScreen;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFFFFF",
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFFFFF",
   },
   header: {
     flexDirection: "row",
@@ -327,10 +481,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 60,
-    paddingBottom: 16,
+    paddingBottom: 12,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "#F3F4F6",
   },
   backButton: {
     width: 40,
@@ -338,56 +492,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  backIcon: {
-    fontSize: 24,
-    color: "#111827",
-  },
   headerTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-    marginHorizontal: 12,
+    fontWeight: "700",
+    color: "#6366F1",
+    letterSpacing: 1,
+    textTransform: "uppercase",
     textAlign: "center",
   },
-  searchButton: {
+  headerButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
   },
-  tabsContainer: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  tab: {
+  scrollView: {
     flex: 1,
-    paddingVertical: 16,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
   },
-  tabActive: {
-    borderBottomColor: "#6366F1",
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#6B7280",
-  },
-  tabTextActive: {
-    color: "#6366F1",
-    fontWeight: "600",
-  },
-  content: {
-    flex: 1,
+  scrollContent: {
+    paddingBottom: 20,
   },
   heroImage: {
     width: "100%",
     height: 200,
-    backgroundColor: "#F3F4F6",
   },
   heroPlaceholder: {
     width: "100%",
@@ -408,44 +534,131 @@ const styles = StyleSheet.create({
   },
   titleSection: {
     padding: 20,
-    backgroundColor: "#FFFFFF",
+    paddingBottom: 16,
   },
   topicTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
     color: "#111827",
-    lineHeight: 28,
-    marginBottom: 12,
-  },
-  section: {
-    padding: 20,
-    backgroundColor: "#FFFFFF",
+    lineHeight: 32,
     marginBottom: 8,
   },
-  sectionTitle: {
+  metadata: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  metadataText: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  developingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3E8FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  developingBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#8B5CF6",
+  },
+  statsGrid: {
+    flexDirection: "row",
+    backgroundColor: "#F9FAFB",
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    padding: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#111827",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: "#E5E7EB",
+    marginHorizontal: 8,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 24,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timelineAction: {
+    borderColor: "#8B5CF6",
+  },
+  podcastAction: {
+    borderColor: "#6366F1",
+  },
+  discussionAction: {
+    borderColor: "#10B981",
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  cardTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 12,
   },
-  summary: {
-    fontSize: 14,
-    lineHeight: 20,
+  summaryText: {
+    fontSize: 15,
+    lineHeight: 22,
     color: "#4B5563",
   },
   insightItem: {
     flexDirection: "row",
     marginBottom: 12,
+    alignItems: "flex-start",
   },
-  insightBullet: {
-    marginTop: 6,
+  insightIcon: {
     marginRight: 12,
-  },
-  bulletDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#6366F1",
+    marginTop: 2,
   },
   insightText: {
     flex: 1,
@@ -457,209 +670,177 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 20,
   },
   tag: {
+    backgroundColor: "#F3F4F6",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: "#EEF2FF",
   },
   tagText: {
-    fontSize: 12,
-    color: "#6366F1",
-    fontWeight: "500",
+    fontSize: 13,
+    color: "#4B5563",
   },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  metaLabel: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
-  metaSeparator: {
-    marginHorizontal: 8,
-    color: "#D1D5DB",
-  },
-  confidenceBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: "#D1FAE5",
-    marginBottom: 8,
-  },
-  confidenceText: {
-    fontSize: 12,
-    color: "#047857",
-    fontWeight: "600",
-  },
-  developingStoryBadge: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: "#F3E8FF",
-    gap: 6,
-  },
-  developingStoryText: {
-    fontSize: 12,
-    color: "#7C3AED",
-    fontWeight: "600",
-  },
-  timelineButton: {
-    margin: 20,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
+  // Articles Section
+  articlesSection: {
+    marginHorizontal: 20,
+    marginBottom: 20,
     backgroundColor: "#FFFFFF",
-    borderWidth: 2,
-    borderColor: "#8B5CF6",
-    shadowColor: "#8B5CF6",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    overflow: "hidden",
   },
-  timelineButtonContent: {
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#F9FAFB",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  sectionHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  timelineIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F3E8FF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  timelineTextContainer: {
-    flex: 1,
-  },
-  timelineHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
     gap: 8,
   },
-  timelineTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#7C3AED",
-  },
-  timelineCountBadge: {
-    backgroundColor: "#8B5CF6",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 24,
-    alignItems: "center",
-  },
-  timelineCountText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  timelineSubtitle: {
-    fontSize: 13,
-    color: "#6B7280",
-    lineHeight: 18,
-  },
-  podcastButton: {
-    margin: 20,
-    marginTop: 8,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  podcastButtonContent: {
-    flexDirection: "row",
-    marginBottom: 16,
-  },
-  podcastIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#EEF2FF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  podcastTextContainer: {
-    flex: 1,
-  },
-  podcastTitle: {
+  sectionHeaderTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 4,
   },
-  podcastSubtitle: {
+  sectionHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  articleCountText: {
     fontSize: 13,
     color: "#6B7280",
-    lineHeight: 18,
+    fontWeight: "500",
   },
-  podcastGenerateButton: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 14,
-    borderRadius: 8,
-    backgroundColor: "#6366F1",
-    gap: 8,
-  },
-  podcastGenerateText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#FFFFFF",
+  articlesContent: {
+    padding: 16,
   },
   articleCard: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: "#F9FAFB",
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 16,
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  firstArticle: {
+    paddingTop: 0,
+    marginTop: 0,
+    borderTopWidth: 0,
+  },
+  articleContent: {
+    flex: 1,
+    marginRight: 12,
   },
   articleTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "500",
     color: "#111827",
     marginBottom: 4,
+    lineHeight: 20,
   },
   articleSource: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#6B7280",
   },
-  emptyState: {
-    paddingVertical: 80,
-    alignItems: "center",
-    paddingHorizontal: 32,
+  // Discussion Section - Non-collapsible
+  discussionSection: {
+    marginBottom: 0,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    overflow: "hidden",
+    minHeight: 500,
   },
-  emptyTitle: {
-    fontSize: 18,
+  discussionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#F9FAFB",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  discussionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  discussionHeaderTitle: {
+    fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 8,
   },
-  emptyText: {
+  discussionContent: {
+    minHeight: 600,
+    backgroundColor: "#F9FAFB",
+  },
+  replyCountBadge: {
+    backgroundColor: "#E5E7EB",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  replyCountText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#4B5563",
+  },
+  discussionLoading: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 40,
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  discussionLoadingText: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  noDiscussion: {
+    marginHorizontal: 20,
+    padding: 40,
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  noDiscussionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  noDiscussionText: {
     fontSize: 14,
     color: "#6B7280",
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: 16,
   },
   startDiscussionButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
     backgroundColor: "#6366F1",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
-  startDiscussionText: {
-    fontSize: 15,
+  startDiscussionButtonText: {
+    fontSize: 14,
     fontWeight: "600",
     color: "#FFFFFF",
   },
@@ -668,3 +849,5 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
 });
+
+export default TopicDetailScreen;

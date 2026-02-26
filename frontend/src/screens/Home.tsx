@@ -100,6 +100,20 @@ const HomeScreen: React.FC = () => {
     }
   };
 
+  const handleCategoryPress = (categoryName: string) => {
+    // Navigate to CategoryTopics which is in the tab navigator
+    // Use type assertion to bypass TypeScript strict checking
+    (navigation as any).navigate('MainTabs', {
+      screen: 'CategoryTopics',
+      params: { category: categoryName }
+    });
+  };
+
+  const handleTopicPress = (topicId: string) => {
+    // Navigate directly to TopicDetail (stack screen, no tab bar)
+    navigation.navigate('TopicDetail', { topicId });
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -116,11 +130,11 @@ const HomeScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.logo}>PODNOVA</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="notifications-outline" size={20} color="#ffffff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="settings-outline" size={20} color="#ffffff" />
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => navigation.navigate("Notifications")}
+          >
+            <Ionicons name="notifications-outline" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -135,7 +149,7 @@ const HomeScreen: React.FC = () => {
               styles.categoryCard,
               { borderLeftColor: getCategoryColor(category.name) }
             ]}
-            onPress={() => navigation.navigate("CategoryTopics", { category: category.name })}
+            onPress={() => handleCategoryPress(category.name)}
           >
             <View style={styles.categoryIcon}>
               <Ionicons name={CATEGORY_ICONS[category.name.toLowerCase()] ?? "grid-outline"} size={25} color={getCategoryColor(category.name)} />
@@ -163,7 +177,7 @@ const HomeScreen: React.FC = () => {
             <TouchableOpacity
               key={topic.id}
               style={styles.topicCard}
-              onPress={() => navigation.navigate("TopicDetail", { topicId: topic.id })}
+              onPress={() => handleTopicPress(topic.id)}
             >
               <View style={styles.topicHeader}>
                 <Text style={styles.topicTitle}>{topic.title}</Text>
@@ -222,29 +236,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  searchIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
-  userIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-  },
   section: {
     marginTop: 24,
     paddingLeft: 20,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#6366F1",
     marginBottom: 16,
-    color: "#111827",
     paddingRight: 20,
+    textTransform: "uppercase",
   },
   categoryCard: {
     flexDirection: "row",
@@ -270,19 +272,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-  docIcon: {
-    width: 20,
-    height: 24,
-    backgroundColor: "#6B7280",
-    borderRadius: 2,
-  },
   categoryContent: {
     flex: 1,
   },
   categoryName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#111827",
+    color: "#363d4f",
     marginBottom: 4,
   },
   categoryTrending: {
@@ -316,9 +312,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
     lineHeight: 20,
-  },
-  trendIndicator: {
-
   },
   topicMeta: {
     fontSize: 13,

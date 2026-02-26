@@ -45,7 +45,7 @@ const ProfileScreen: React.FC = () => {
   const [stats, setStats] = useState({
     podcasts: 0,
     discussions: 0,
-    followers: 0,
+    upvotes: 0,
   });
 
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -127,7 +127,7 @@ const ProfileScreen: React.FC = () => {
         setStats({
           podcasts: data.podcasts || 0,
           discussions: data.discussions || 0,
-          followers: data.followers || 0,
+          upvotes: data.upvotes || 0,
         });
       }
     } catch (error) {
@@ -265,13 +265,12 @@ const ProfileScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
+      {/* Header*/}
       <View style={styles.header}>
-        <Text style={styles.brandName}>PODNOVA</Text>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={24} color="#EF4444" />
-        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.brandName}>PODNOVA PROFILE</Text>
+          <Ionicons name="log-out-outline" size={24} color="#6366F1" onPress={handleLogout} />
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -297,8 +296,8 @@ const ProfileScreen: React.FC = () => {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{stats.followers}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
+              <Text style={styles.statValue}>{stats.upvotes}</Text>
+              <Text style={styles.statLabel}>Upvotes</Text>
             </View>
           </View>
         </View>
@@ -484,26 +483,24 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
     backgroundColor: "#FFFFFF",
+    paddingTop: 70,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
   brandName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     color: "#6366F1",
     letterSpacing: 1,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   logoutButton: {
     width: 40,

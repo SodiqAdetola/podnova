@@ -48,7 +48,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       const firebaseUser = userCredential.user;
       const token = await firebaseUser.getIdToken();
 
-      const response = await fetch(`${API_BASE_URL}/users/user`, {
+      const response = await fetch(`${API_BASE_URL}/users/profile`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -58,7 +58,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
       if (!response.ok) {
         if (response.status === 404) {
-          const createResponse = await fetch(`${API_BASE_URL}/users/user`, {
+          const createResponse = await fetch(`${API_BASE_URL}/users/profile`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

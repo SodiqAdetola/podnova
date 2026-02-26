@@ -1,4 +1,5 @@
-// frontend/src/screens/SearchScreen.tsx - FIXED VERSION
+// frontend/src/screens/SearchScreen.tsx (updated topic card layout)
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -6,435 +7,686 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
   StatusBar,
-  Keyboard,
-  ScrollView,
+  FlatList,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import Feather from '@expo/vector-icons/Feather';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
-import { auth } from "../firebase/config";
+import { getAuth } from "firebase/auth";
 
-type Props = NativeStackScreenProps<MainStackParamList>;
+const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+
+type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
 
 interface Topic {
   id: string;
   title: string;
+  summary: string;
   category: string;
-  confidence: number;
   article_count: number;
+  confidence_score: number;
+  last_updated: string;
+  image_url?: string;
+  time_ago?: string;
+  tags?: string[];
 }
 
-const CATEGORY_FILTERS = [
-  { id: "all", label: "All", color: "#6366F1" },
-  { id: "technology", label: "Tech", color: "#EF4444" },
-  { id: "finance", label: "Finance", color: "#3B82F6" },
-  { id: "politics", label: "Politics", color: "#8B5CF6" },
+interface Discussion {
+  id: string;
+  title: string;
+  description: string;
+  discussion_type: "topic" | "community";
+  category?: string;
+  username: string;
+  reply_count: number;
+  upvote_count: number;
+  time_ago: string;
+  tags?: string[];
+}
+
+type SearchResult = Topic | Discussion;
+
+const CATEGORIES = [
+  { id: "all", name: "All Categories", icon: "apps", color: "#6B7280" },
+  { id: "technology", name: "Technology", icon: "hardware-chip", color: "#f16365ff" },
+  { id: "finance", name: "Finance", icon: "cash", color: "#73aef2ff" },
+  { id: "politics", name: "Politics", icon: "people", color: "#8B5CF6" }
 ];
 
-const SearchScreen: React.FC<Props> = ({ navigation }) => {
+type SearchScope = "news" | "discussions";
+type DiscussionFilter = "all" | "topic" | "community";
+
+const SearchScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp>();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState("all");
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [filteredTopics, setFilteredTopics] = useState<Topic[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<Topic[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [searchScope, setSearchScope] = useState<SearchScope>("news");
+  const [discussionFilter, setDiscussionFilter] = useState<DiscussionFilter>("all");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
+  // Get current user ID from Firebase
   useEffect(() => {
-    loadRecentSearches();
-    loadAISuggestions();
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (user) {
+      setUserId(user.uid);
+    } else {
+      setUserId(null);
+    }
+
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+        setRecentSearches([]);
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
+  // Load recent searches when userId changes
   useEffect(() => {
-    if (submittedQuery.trim()) {
-      filterTopics();
-      setShowSuggestions(false);
+    if (userId) {
+      loadRecentSearches();
     } else {
-      setFilteredTopics([]);
-      setShowSuggestions(true);
+      setRecentSearches([]);
     }
-  }, [submittedQuery, activeFilter]);
+  }, [userId]);
+
+  useEffect(() => {
+    if (submittedQuery) {
+      performSearch();
+    } else {
+      setSearchResults([]);
+    }
+  }, [submittedQuery, selectedCategory, searchScope, discussionFilter]);
+
+  const getRecentSearchesKey = () => {
+    return userId ? `@podnova_recent_searches_${userId}` : null;
+  };
 
   const loadRecentSearches = async () => {
     try {
-      const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
-      const saved = await AsyncStorage.getItem("@podnova_recent_searches");
-      if (saved) {
-        setRecentSearches(JSON.parse(saved));
+      const key = getRecentSearchesKey();
+      if (!key) return;
+
+      const stored = await AsyncStorage.getItem(key);
+      if (stored) {
+        setRecentSearches(JSON.parse(stored));
+      } else {
+        setRecentSearches([]);
       }
     } catch (error) {
       console.error("Error loading recent searches:", error);
     }
   };
 
+  const performSearch = async () => {
+    try {
+      setLoadingResults(true);
+
+      if (searchScope === "news") {
+        // Search for news topics
+        const params = new URLSearchParams({
+          q: submittedQuery,
+          limit: "30"
+        });
+
+        if (selectedCategory !== "all") {
+          params.append("category", selectedCategory);
+        }
+
+        const endpoint = `${API_BASE_URL}/topics/search?${params.toString()}`;
+        console.log("Searching news:", endpoint);
+
+        const response = await fetch(endpoint);
+        
+        if (response.ok) {
+          const data = await response.json();
+          setSearchResults(data.topics || []);
+        } else {
+          setSearchResults([]);
+        }
+      } else {
+        // Search for discussions
+        const params = new URLSearchParams({
+          sort_by: "latest",
+          limit: "30"
+        });
+
+        // Add discussion type filter
+        if (discussionFilter !== "all") {
+          params.append("discussion_type", discussionFilter);
+        }
+
+        if (selectedCategory !== "all") {
+          params.append("category", selectedCategory);
+        }
+
+        const endpoint = `${API_BASE_URL}/discussions?${params.toString()}`;
+        console.log("Searching discussions:", endpoint);
+
+        const response = await fetch(endpoint);
+        
+        if (response.ok) {
+          const data = await response.json();
+          setSearchResults(data.discussions || []);
+        } else {
+          setSearchResults([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error performing search:", error);
+      setSearchResults([]);
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
   const saveRecentSearch = async (query: string) => {
     try {
-      const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
-      const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 5);
+      const key = getRecentSearchesKey();
+      if (!key) return;
+
+      const trimmedQuery = query.trim();
+      if (!trimmedQuery) return;
+
+      const updated = [
+        trimmedQuery,
+        ...recentSearches.filter((s) => s !== trimmedQuery),
+      ].slice(0, 10);
+
       setRecentSearches(updated);
-      await AsyncStorage.setItem("@podnova_recent_searches", JSON.stringify(updated));
+      await AsyncStorage.setItem(key, JSON.stringify(updated));
     } catch (error) {
       console.error("Error saving recent search:", error);
     }
   };
 
-  const clearRecentSearches = async () => {
-    try {
-      const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
-      setRecentSearches([]);
-      await AsyncStorage.removeItem("@podnova_recent_searches");
-    } catch (error) {
-      console.error("Error clearing recent searches:", error);
-    }
-  };
-
-  const loadAISuggestions = async () => {
-    try {
-      const token = await auth.currentUser?.getIdToken(true);
-      if (!token) return;
-
-      const response = await fetch(
-        "https://podnova-backend-r8yz.onrender.com/topics/categories/all",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const allTopics = data.topics || [];
-        
-        // Get top 6 topics by confidence (most reliable trending topics)
-        const topTopics = allTopics
-          .filter((t: Topic) => t.article_count >= 5) // Only show substantial topics
-          .sort((a: Topic, b: Topic) => b.confidence - a.confidence)
-          .slice(0, 6);
-        
-        setAiSuggestions(topTopics);
-      }
-    } catch (error) {
-      console.error("Error loading AI suggestions:", error);
-    }
-  };
-
-  const filterTopics = async () => {
-    try {
-      setLoading(true);
-      const token = await auth.currentUser?.getIdToken(true);
-      if (!token) return;
-
-      // Fetch from appropriate category
-      const category = activeFilter === "all" ? "all" : activeFilter;
-      const response = await fetch(
-        `https://podnova-backend-r8yz.onrender.com/topics/categories/${category}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        let results = data.topics || [];
-
-        // Filter by search query if present
-        if (submittedQuery.trim()) {
-          const query = submittedQuery.toLowerCase();
-          results = results.filter((topic: Topic) =>
-            topic.title.toLowerCase().includes(query)
-          );
-        }
-
-        setFilteredTopics(results);
-      }
-    } catch (error) {
-      console.error("Error filtering topics:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSearchSubmit = () => {
-    const query = searchQuery.trim();
-    if (query) {
-      setSubmittedQuery(query);
-      saveRecentSearch(query);
-      Keyboard.dismiss();
-    }
-  };
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
 
-  const handleSuggestionPress = (topic: Topic) => {
-    navigation.navigate("TopicDetail", { topicId: topic.id });
+    saveRecentSearch(trimmed);
+    setSubmittedQuery(trimmed);
   };
 
   const handleRecentSearchPress = (query: string) => {
     setSearchQuery(query);
     setSubmittedQuery(query);
-    Keyboard.dismiss();
   };
 
-  const removeRecentSearch = async (query: string) => {
-    const updated = recentSearches.filter(s => s !== query);
-    setRecentSearches(updated);
+  const handleRemoveRecentSearch = async (query: string) => {
     try {
-      const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
-      await AsyncStorage.setItem("@podnova_recent_searches", JSON.stringify(updated));
+      const key = getRecentSearchesKey();
+      if (!key) return;
+
+      const updated = recentSearches.filter((s) => s !== query);
+      setRecentSearches(updated);
+      await AsyncStorage.setItem(key, JSON.stringify(updated));
     } catch (error) {
-      console.error("Error removing search:", error);
+      console.error("Error removing recent search:", error);
     }
   };
 
-  const handleTopicPress = (topic: Topic) => {
-    navigation.navigate("TopicDetail", { topicId: topic.id });
+  const handleClearAllSearches = async () => {
+    try {
+      const key = getRecentSearchesKey();
+      if (!key) return;
+
+      setRecentSearches([]);
+      await AsyncStorage.removeItem(key);
+    } catch (error) {
+      console.error("Error clearing recent searches:", error);
+    }
   };
 
-  const getCategoryColor = (category: string) => {
-    const filter = CATEGORY_FILTERS.find((f) => f.id === category);
-    return filter?.color || "#6366F1";
+  const handleImageError = (topicId: string) => {
+    setImageErrors((prev) => new Set(prev).add(topicId));
   };
 
-  const getCategoryIcon = (category: string): keyof typeof Ionicons.glyphMap => {
-    const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-      technology: "hardware-chip-outline",
-      finance: "stats-chart-outline",
-      politics: "shield-outline",
-    };
-    return icons[category] || "trending-up-outline";
+  const getCategoryColor = (category: string | undefined): string => {
+    if (!category) return "#6B7280";
+    const cat = CATEGORIES.find(c => c.id === category.toLowerCase());
+    return cat?.color || "#6B7280";
   };
 
-  const renderAISuggestion = ({ item }: { item: Topic }) => (
-    <TouchableOpacity
-      style={styles.suggestionCard}
-      onPress={() => handleSuggestionPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.suggestionIcon, { backgroundColor: getCategoryColor(item.category) + "20" }]}>
-        <Ionicons 
-          name={getCategoryIcon(item.category)} 
-          size={20} 
-          color={getCategoryColor(item.category)} 
-        />
-      </View>
-      <Text style={styles.suggestionText} numberOfLines={1}>
-        {item.title}
-      </Text>
-      <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
-    </TouchableOpacity>
-  );
+  const renderTopicImage = (topic: Topic) => {
+    if (!topic.image_url || imageErrors.has(topic.id)) {
+      return (
+        <View style={styles.topicImagePlaceholder}>
+          <Text style={styles.placeholderIcon}>📰</Text>
+        </View>
+      );
+    }
 
-  const renderRecentSearch = ({ item }: { item: string }) => (
-    <View style={styles.recentSearchItem}>
+    return (
+      <Image
+        source={{ uri: topic.image_url }}
+        style={styles.topicImage}
+        resizeMode="cover"
+        onError={() => handleImageError(topic.id)}
+      />
+    );
+  };
+
+  const renderTopicCard = ({ item }: { item: Topic }) => {
+    const categoryColor = getCategoryColor(item.category);
+    
+    return (
       <TouchableOpacity
-        style={styles.recentSearchButton}
-        onPress={() => handleRecentSearchPress(item)}
+        style={styles.resultCard}
+        onPress={() => navigation.navigate("TopicDetail", { topicId: item.id })}
         activeOpacity={0.7}
       >
-        <Ionicons name="time-outline" size={20} color="#6B7280" />
-        <Text style={styles.recentSearchText}>{item}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => removeRecentSearch(item)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderTopicCard = ({ item }: { item: Topic }) => (
-    <TouchableOpacity
-      style={styles.topicCard}
-      onPress={() => handleTopicPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.topicContent}>
-        <View
-          style={[
-            styles.topicThumbnail,
-            { backgroundColor: getCategoryColor(item.category) },
-          ]}
-        >
-          <Ionicons name="newspaper-outline" size={24} color="#FFFFFF" />
+        {/* Top row with category and article count - full width */}
+        <View style={styles.topicTopRow}>
+          <View style={styles.topicLeftSection}>
+            <View style={[styles.categoryBadge, { backgroundColor: "white" }]}>
+              <Text style={[styles.categoryText, { color: categoryColor }]}>{item.category}</Text>
+            </View>
+            <View style={styles.sourceBadge}>
+              <Ionicons name="newspaper-outline" size={10} color="#6B7280" />
+              <Text style={styles.sourceText}>{item.article_count} articles</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.topicInfo}>
-          <Text style={styles.topicTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
+        {/* Image and content row */}
+        <View style={styles.topicMiddleRow}>
+          {renderTopicImage(item)}
+          <View style={styles.topicContent}>
+            <Text style={styles.resultTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.resultSummary} numberOfLines={2}>
+              {item.summary}
+            </Text>
+          </View>
+        </View>
 
-          <View style={styles.topicMeta}>
+        {/* Tags section - full width */}
+        {item.tags && item.tags.length > 0 && (
+          <View style={styles.topicTagsRow}>
+            {item.tags.slice(0, 3).map((tag, index) => (
+              <View key={index} style={styles.tag}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+const renderDiscussionCard = ({ item }: { item: Discussion }) => {
+  const categoryColor = getCategoryColor(item.category);
+  const isAutoGenerated = item.discussion_type === "topic";
+  
+  // Topic discussions have no border, community discussions have orange border
+  const cardStyle = isAutoGenerated 
+    ? styles.resultCard 
+    : [styles.resultCard, { borderLeftColor: "#F59E0B", borderLeftWidth: 4 }];
+  
+  return (
+    <TouchableOpacity
+      style={cardStyle}
+      onPress={() => navigation.navigate("DiscussionDetail", { discussionId: item.id })}
+      activeOpacity={0.7}
+    >
+      <View style={styles.resultHeader}>
+        <View style={styles.resultHeaderLeft}>
+          <View
+            style={[
+              styles.discussionBadge,
+              {
+                backgroundColor: isAutoGenerated
+                  ? "white"
+                  : "#FEF3C7",
+              },
+            ]}
+          >
+            <Ionicons
+              name={isAutoGenerated ? "chatbubble-ellipses-outline" : "people-outline"}
+              size={10}
+              color={isAutoGenerated ? categoryColor : "#d68b0a"}
+            />
+            <Text
+              style={[
+                styles.discussionBadgeText,
+                { color: isAutoGenerated ? categoryColor : "#d68b0a" },
+              ]}
+            >
+              {isAutoGenerated ? "Podnova Topic Discussion" : "Community Discussion"}
+            </Text>
+          </View>
+          {item.category && (
             <View
               style={[
-                styles.categoryBadge,
-                { backgroundColor: getCategoryColor(item.category) + "20" },
+                styles.miniCategoryBadge
               ]}
             >
               <Text
                 style={[
-                  styles.categoryText,
-                  { color: getCategoryColor(item.category) },
+                  styles.miniCategoryText,
+                  { color: categoryColor },
                 ]}
               >
                 {item.category}
               </Text>
             </View>
-            <Text style={styles.articleCount}>{item.article_count} articles</Text>
-          </View>
+          )}
         </View>
-
-        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+        <View style={styles.metaInfo}>
+          <Ionicons name="chatbubble-outline" size={11} color="#6B7280" />
+          <Text style={styles.metaText}>{item.reply_count}</Text>
+          <Feather name="thumbs-up" size={11} color="#6B7280" style={styles.metaIcon} />
+          <Text style={styles.metaText}>{item.upvote_count}</Text>
+        </View>
       </View>
+
+      <Text style={styles.resultTitle} numberOfLines={2}>
+        {item.title}
+      </Text>
+
+      <Text style={styles.resultSummary} numberOfLines={2}>
+        {item.description}
+      </Text>
+
+      <View style={styles.resultFooter}>
+        <View style={styles.footerLeft}>
+          <Ionicons name="person-circle-outline" size={16} color="#9CA3AF" />
+          <Text style={styles.footerText}>{item.username}</Text>
+        </View>
+        <Text style={styles.footerText}>{item.time_ago}</Text>
+      </View>
+
+      {item.tags && item.tags.length > 0 && (
+        <View style={styles.tagsRow}>
+          {item.tags.slice(0, 3).map((tag, index) => (
+            <View key={index} style={styles.tag}>
+              <Text style={styles.tagText}>#{tag}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </TouchableOpacity>
   );
+};
 
-  const renderEmptyState = () => {
-    if (loading) return null;
-
-    if (submittedQuery.trim() && filteredTopics.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Ionicons name="search-outline" size={64} color="#D1D5DB" />
-          <Text style={styles.emptyTitle}>No results found</Text>
-          <Text style={styles.emptySubtitle}>
-            Try adjusting your search or filter
-          </Text>
-        </View>
-      );
+  const renderResult = ({ item }: { item: SearchResult }) => {
+    if ('article_count' in item) {
+      return renderTopicCard({ item: item as Topic });
+    } else {
+      return renderDiscussionCard({ item: item as Discussion });
     }
+  };
 
-    return null;
+  const getActiveCategoryColor = () => {
+    const cat = CATEGORIES.find(c => c.id === selectedCategory);
+    return cat?.color || "#6366F1";
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Search</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.brandName}>PODNOVA SEARCH</Text>
+          <Ionicons name="search-outline" size={24} color="#6366F1" />
+        </View>
       </View>
 
-      {/* Search Bar */}
+      {/* Search Input */}
       <View style={styles.searchSection}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color="#9CA3AF" />
+        <View style={styles.searchInputContainer}>
+          <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search Topics and Discussions..."
+            placeholder="Search news or discussions..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            returnKeyType="search"
             onSubmitEditing={handleSearchSubmit}
+            returnKeyType="search"
+            autoCapitalize="none"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => {
-              setSearchQuery("");
-              setSubmittedQuery("");
-              setShowSuggestions(true);
-            }}>
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery("");
+                setSubmittedQuery("");
+              }}
+              style={styles.clearButton}
+            >
               <Ionicons name="close-circle" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Category Filters */}
+        {/* Search Scope Toggle */}
+        <View style={styles.scopeToggleContainer}>
+          <TouchableOpacity
+            style={[
+              styles.scopeToggle,
+              searchScope === "news" && styles.scopeToggleActive
+            ]}
+            onPress={() => setSearchScope("news")}
+          >
+            <Ionicons 
+              name="newspaper-outline" 
+              size={16} 
+              color={searchScope === "news" ? "#6366F1" : "#6B7280"} 
+            />
+            <Text style={[
+              styles.scopeToggleText,
+              searchScope === "news" && styles.scopeToggleTextActive
+            ]}>News</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.scopeToggle,
+              searchScope === "discussions" && styles.scopeToggleActive
+            ]}
+            onPress={() => setSearchScope("discussions")}
+          >
+            <Ionicons 
+              name="chatbubbles-outline" 
+              size={16} 
+              color={searchScope === "discussions" ? "#6366F1" : "#6B7280"} 
+            />
+            <Text style={[
+              styles.scopeToggleText,
+              searchScope === "discussions" && styles.scopeToggleTextActive
+            ]}>Discussions</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Category Filters - Always show */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersContainer}
+          style={styles.categoriesScroll}
+          contentContainerStyle={styles.categoriesContent}
         >
-          {CATEGORY_FILTERS.map((filter) => (
-            <TouchableOpacity
-              key={filter.id}
-              style={[
-                styles.filterChip,
-                activeFilter === filter.id && {
-                  backgroundColor: filter.color,
-                },
-              ]}
-              onPress={() => setActiveFilter(filter.id)}
-              activeOpacity={0.7}
-            >
-              <Text
+          {CATEGORIES.map((cat) => {
+            const isActive = selectedCategory === cat.id;
+            return (
+              <TouchableOpacity
+                key={cat.id}
                 style={[
-                  styles.filterText,
-                  activeFilter === filter.id && styles.filterTextActive,
+                  styles.categoryChip,
+                  isActive && { borderColor: cat.color, borderWidth: 2 },
+                  !isActive && styles.categoryChipInactive,
                 ]}
+                onPress={() => setSelectedCategory(cat.id)}
               >
-                {filter.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Ionicons
+                  name={cat.icon as any}
+                  size={16}
+                  color={isActive ? cat.color : "#6366F1"}
+                />
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    isActive && { color: cat.color, fontWeight: "600" },
+                  ]}
+                >
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
+
+        {/* Discussion Type Filters - Only show when searching discussions */}
+        {searchScope === "discussions" && (
+          <View style={styles.discussionFiltersContainer}>
+            <TouchableOpacity
+              style={[
+                styles.discussionFilter,
+                discussionFilter === "all" && styles.discussionFilterActive
+              ]}
+              onPress={() => setDiscussionFilter("all")}
+            >
+              <Text style={[
+                styles.discussionFilterText,
+                discussionFilter === "all" && styles.discussionFilterTextActive
+              ]}>All</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.discussionFilter,
+                discussionFilter === "topic" && styles.discussionFilterActive
+              ]}
+              onPress={() => setDiscussionFilter("topic")}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={14} color={discussionFilter === "topic" ? "#6366F1" : "#6B7280"} />
+              <Text style={[
+                styles.discussionFilterText,
+                discussionFilter === "topic" && styles.discussionFilterTextActive
+              ]}>Auto</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.discussionFilter,
+                discussionFilter === "community" && styles.discussionFilterActive
+              ]}
+              onPress={() => setDiscussionFilter("community")}
+            >
+              <Ionicons name="people-outline" size={14} color={discussionFilter === "community" ? "#6366F1" : "#6B7280"} />
+              <Text style={[
+                styles.discussionFilterText,
+                discussionFilter === "community" && styles.discussionFilterTextActive
+              ]}>Community</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Content */}
-      {showSuggestions && !submittedQuery.trim() ? (
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* AI Suggestions */}
-          {aiSuggestions.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="sparkles" size={20} color="#8B5CF6" />
-                <Text style={styles.sectionTitle}>AI Suggestions</Text>
-              </View>
-              <FlatList
-                data={aiSuggestions}
-                renderItem={renderAISuggestion}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-              />
-            </View>
-          )}
-
-          {/* Recent Searches */}
+      {!userId ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="log-in-outline" size={64} color="#E5E7EB" />
+          <Text style={styles.emptyTitle}>Sign in to Search</Text>
+          <Text style={styles.emptyText}>
+            Please sign in to search and save your search history
+          </Text>
+        </View>
+      ) : !submittedQuery ? (
+        <View style={styles.content}>
           {recentSearches.length > 0 && (
-            <View style={styles.section}>
+            <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Recent Searches</Text>
-                <TouchableOpacity onPress={clearRecentSearches}>
-                  <Text style={styles.clearText}>Clear</Text>
+                <TouchableOpacity onPress={handleClearAllSearches}>
+                  <Text style={[styles.clearText, { color: getActiveCategoryColor() }]}>Clear All</Text>
                 </TouchableOpacity>
               </View>
-              <FlatList
-                data={recentSearches}
-                renderItem={renderRecentSearch}
-                keyExtractor={(item, index) => `recent-${index}`}
-                scrollEnabled={false}
-              />
-            </View>
+
+              {recentSearches.map((search, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.recentItem}
+                  onPress={() => handleRecentSearchPress(search)}
+                >
+                  <View style={styles.recentLeft}>
+                    <Ionicons name="time-outline" size={18} color="#6B7280" />
+                    <Text style={styles.recentText}>{search}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleRemoveRecentSearch(search);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="close-circle-outline" size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+            </>
           )}
-        </ScrollView>
-      ) : (
-        <View style={styles.resultsContainer}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#6366F1" />
-              <Text style={styles.loadingText}>Searching...</Text>
+
+          {recentSearches.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="search-outline" size={64} color="#E5E7EB" />
+              <Text style={styles.emptyTitle}>Start Searching</Text>
+              <Text style={styles.emptyText}>
+                Search for news or join discussions
+              </Text>
             </View>
-          ) : (
-            <FlatList
-              data={filteredTopics}
-              renderItem={renderTopicCard}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.resultsList}
-              ListEmptyComponent={renderEmptyState}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            />
           )}
         </View>
+      ) : loadingResults ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={getActiveCategoryColor()} />
+          <Text style={styles.loadingText}>Searching...</Text>
+        </View>
+      ) : searchResults.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="search-outline" size={64} color="#E5E7EB" />
+          <Text style={styles.emptyTitle}>No Results Found</Text>
+          <Text style={styles.emptyText}>
+            Try different keywords or adjust your filters
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={searchResults}
+          renderItem={renderResult}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.resultsList}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={styles.resultsHeader}>
+              <Text style={[styles.resultsCount, { color: getActiveCategoryColor() }]}>
+                {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.resultsQuery}>for "{submittedQuery}"</Text>
+            </View>
+          }
+        />
       )}
     </View>
   );
@@ -446,227 +698,384 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
     backgroundColor: "#FFFFFF",
+    paddingTop: 70,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 28,
+  brandName: {
+    fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
-    letterSpacing: -0.5,
+    color: "#6366F1",
+    letterSpacing: 1,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   searchSection: {
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  searchBar: {
+  searchInputContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F3F4F6",
-    borderRadius: 12,
+    borderRadius: 24,
     paddingHorizontal: 16,
-    height: 48,
-    marginBottom: 12,
+    marginTop: 16,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    height: 44,
+    fontSize: 15,
     color: "#111827",
-    marginLeft: 12,
-    marginRight: 8,
   },
-  filtersContainer: {
+  clearButton: {
+    padding: 4,
+  },
+  scopeToggleContainer: {
     flexDirection: "row",
-    gap: 8,
+    marginTop: 16,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 24,
+    padding: 4,
   },
-  filterChip: {
-    paddingHorizontal: 16,
+  scopeToggle: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#F3F4F6",
-    marginRight: 8,
+    gap: 6,
   },
-  filterText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#6B7280",
-  },
-  filterTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-    marginLeft: 8,
-    flex: 1,
-  },
-  clearText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#6366F1",
-  },
-  suggestionCard: {
-    flexDirection: "row",
-    alignItems: "center",
+  scopeToggleActive: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 2,
     elevation: 1,
   },
-  suggestionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  suggestionText: {
-    flex: 1,
-    fontSize: 15,
+  scopeToggleText: {
+    fontSize: 14,
     fontWeight: "500",
-    color: "#111827",
+    color: "#6B7280",
   },
-  recentSearchItem: {
+  scopeToggleTextActive: {
+    color: "#6366F1",
+  },
+  categoriesScroll: {
+    marginTop: 16,
+    marginHorizontal: -20,
+  },
+  categoriesContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  categoryChip: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 24,
+    backgroundColor: "#EEF2FF",
+    gap: 6,
   },
-  recentSearchButton: {
+  categoryChipInactive: {
+    backgroundColor: "#EEF2FF",
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6366F1",
+  },
+  discussionFiltersContainer: {
+    flexDirection: "row",
+    marginTop: 12,
+    gap: 8,
+  },
+  discussionFilter: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
-    gap: 12,
-  },
-  recentSearchText: {
-    flex: 1,
-    fontSize: 15,
-    color: "#374151",
-  },
-  resultsContainer: {
-    flex: 1,
-  },
-  resultsList: {
-    padding: 16,
-  },
-  topicCard: {
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
-    marginBottom: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: "#F3F4F6",
+    gap: 4,
   },
-  topicContent: {
-    flexDirection: "row",
-    alignItems: "center",
+  discussionFilterActive: {
+    backgroundColor: "#EEF2FF",
   },
-  topicThumbnail: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
+  discussionFilterText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#6B7280",
   },
-  topicInfo: {
+  discussionFilterTextActive: {
+    color: "#6366F1",
+  },
+  content: {
     flex: 1,
+    padding: 20,
   },
-  topicTitle: {
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 6,
-    lineHeight: 22,
   },
-  topicMeta: {
+  clearText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  recentItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
   },
-  categoryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  recentLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
   },
-  categoryText: {
-    fontSize: 11,
+  recentText: {
+    fontSize: 14,
+    color: "#111827",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
     fontWeight: "600",
-    textTransform: "capitalize",
+    color: "#111827",
+    marginTop: 16,
+    marginBottom: 8,
   },
-  articleCount: {
-    fontSize: 13,
+  emptyText: {
+    fontSize: 14,
     color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 60,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
     color: "#6B7280",
   },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
+  resultsList: {
+    padding: 16,
   },
-  emptyTitle: {
-    fontSize: 18,
+  resultsHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  resultsCount: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
-    marginTop: 16,
-    marginBottom: 8,
+    marginRight: 6,
   },
-  emptySubtitle: {
+  resultsQuery: {
     fontSize: 14,
     color: "#6B7280",
-    textAlign: "center",
+  },
+  resultCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  // Topic-specific styles
+  topicTopRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  topicLeftSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  topicMiddleRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  topicImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  topicImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderIcon: {
+    fontSize: 32,
+  },
+  topicContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  topicTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  // Discussion styles
+  resultHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  resultHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  categoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  categoryText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  sourceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  sourceText: {
+    fontSize: 10,
+    color: "#6B7280",
+  },
+  discussionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  discussionBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  miniCategoryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  miniCategoryText: {
+    fontSize: 10,
+    fontWeight: "500",
+    textTransform: "capitalize",
+  },
+  metaInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  metaIcon: {
+    marginLeft: 8,
+  },
+  metaText: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginLeft: 2,
+  },
+  resultTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  resultSummary: {
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 18,
+  },
+  resultFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  footerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  footerText: {
+    fontSize: 11,
+    color: "#9CA3AF",
+  },
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  tag: {
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  tagText: {
+    fontSize: 10,
+    color: "#6366F1",
+    fontWeight: "500",
   },
 });
 

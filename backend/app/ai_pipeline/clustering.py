@@ -2,7 +2,8 @@
 """
 PodNova Clustering Module
 FULLY ASYNC VERSION with Motor
-NOW WITH INTEGRATED TOPIC HISTORY TRACKING, AUTOMATIC DISCUSSIONS, AND O(1) CENTROID MATH
+NOW WITH INTEGRATED TOPIC HISTORY TRACKING, AUTOMATIC DISCUSSIONS, O(1) CENTROID MATH,
+AND BULLETPROOF TITLE GENERATION.
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
@@ -74,7 +75,6 @@ class ClusteringService:
     async def compute_embedding(self, text: str) -> Optional[np.ndarray]:
         """Compute embedding for given text using Async Gemini"""
         try:
-            # FIXED: Now strictly asynchronous to prevent event loop blocking
             response = await client.aio.models.embed_content(
                 model=EMBEDDING_MODEL,
                 contents=text
@@ -104,7 +104,6 @@ class ClusteringService:
         
         stale_since = topic.get("stale_since")
         if stale_since:
-            # Ensure timezones match
             if stale_since.tzinfo is None:
                 stale_since = stale_since.replace(tzinfo=UK_TZ)
                 
@@ -129,7 +128,6 @@ class ClusteringService:
         best_match = None
         best_similarity = 0.0
         
-        # FIXED: Stream cursor directly to avoid RAM explosion on large datasets
         cursor = self.topics_collection.find({"category": category, "status": "active"})
         
         async for topic in cursor:
@@ -143,7 +141,6 @@ class ClusteringService:
                 best_similarity = similarity
                 best_match = topic
         
-        # Check stale topics if no active match
         if not best_match:
             stale_cursor = self.topics_collection.find({"category": category, "status": "stale"})
             resurrection_threshold = SIMILARITY_THRESHOLD + self.maintenance_service.config.RESURRECTION_SIMILARITY_BONUS
@@ -166,12 +163,8 @@ class ClusteringService:
         return best_match
     
     def calculate_new_centroid(self, old_centroid: List[float], new_embedding: np.ndarray, current_count: int) -> np.ndarray:
-        """
-        FIXED: O(1) Mathematical Centroid Update.
-        No longer requires querying the DB for all past articles!
-        """
+        """O(1) Mathematical Centroid Update."""
         old_vec = np.array(old_centroid)
-        # Weighted average math: ((Old Centroid * N) + New Embedding) / (N + 1)
         new_vec = ((old_vec * current_count) + new_embedding) / (current_count + 1)
         return new_vec
 
@@ -223,7 +216,6 @@ class ClusteringService:
         is_new_source = article_doc["source"] not in sources
         sources.add(article_doc["source"])
         
-        # Use O(1) math instead of DB queries
         new_centroid = self.calculate_new_centroid(
             topic.get("centroid_embedding", article_embedding.tolist()), 
             article_embedding, 
@@ -231,8 +223,12 @@ class ClusteringService:
         )
         
         confidence = topic.get("confidence", 0.5)
+        # Fix 1: Provide a small confidence bump even if it's not a new source
+        # This allows heavily reported single-source topics to eventually get a title.
         if is_new_source:
             confidence = min(1.0, confidence + 0.1)
+        else:
+            confidence = min(1.0, confidence + 0.05)
         
         update_fields = {
             "article_ids": article_ids,
@@ -300,15 +296,51 @@ class ClusteringService:
             article_texts = []
             for article in articles[:10]:
                 description = article.get('description') or article.get('content', '')[:300]
-                article_texts.append(f"Title: {article.get('title')}\nSummary: {description}\n")
+                article_texts.append(f"Title: {article.get('title')}\nSummary: {description}")
             
-            prompt = f"""Write a clear headline for a news podcast. Category: {topic.get('category')}
+            combined_articles = "\n---\n".join(article_texts)
+            
+            # User's highly detailed, few-shot prompt restored
+            prompt = f"""Write a clear, straightforward headline for a news podcast. Use simple words that everyone can understand.
+
+Category: {topic.get('category', 'general').upper()}
+Number of articles: {len(articles)}
+
 Articles:
-{"".join(article_texts)}
+{combined_articles}
 
-RULES: MAX 10 WORDS. Clear English. No jargon. Be specific."""
+RULES FOR THE HEADLINE:
+- MAX 10 WORDS
+- Say WHAT happened in plain English
+- Use everyday words, no jargon or slang
+- Be specific - include names, numbers, key details
+- Make it easy to understand in 2 seconds and INCLUSIVE FOR ALL COMPREHENSION LEVELS
 
-            # FIXED: Async call & explicit JSON Schema enforcement
+✅ GOOD EXAMPLES (clear, specific):
+• "Google fined €2.4 billion by EU regulators"
+• "Tesla delays Cybertruck production to 2025"
+• "AI software creates fake videos of UK streets"
+• "US Supreme Court blocks Trump trade tariffs"
+• "Microsoft bug exposes confidential emails"
+
+❌ BAD EXAMPLES (confusing, vague, jargon):
+• "AI slop costs threaten global economic reckoning" (uses slang, vague)
+• "Tech giant faces regulatory scrutiny" (too vague)
+• "The future of AI in question" (vague, says nothing)
+• "Paradigm shift in tech landscape" (jargon, meaningless)
+
+Generate a JSON object with:
+
+- **title** (string, MAX 10 WORDS): Clear, straightforward headline following the rules above.
+
+- **summary** (string, 2-3 sentences): Clear overview of what happened and why it matters (MAKE THIS INCLUSIVE FOR ALL COMPREHENSION LEVELS).
+
+- **key_insights** (array, 3-5 strings): Specific, concrete takeaways.
+
+- **confidence_score** (integer, 0-100): How reliable is this information? Be strict - only give high scores for well-known, reputable sources with clear facts.
+
+JSON only, no markdown:"""
+
             response = await client.aio.models.generate_content(
                 model=TEXT_MODEL,
                 contents=prompt,
@@ -317,10 +349,28 @@ RULES: MAX 10 WORDS. Clear English. No jargon. Be specific."""
                 )
             )
             
-            result = json.loads(response.text)
+            # Bulletproof JSON Cleaning
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text.replace("```json", "", 1)
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+            elif raw_text.startswith("```"):
+                raw_text = raw_text.replace("```", "", 1)
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+            
+            result = json.loads(raw_text.strip())
+            
+            # SAFETY CHECK: Ensure the LLM actually returned a dictionary
+            if not isinstance(result, dict):
+                logger.error(f"  LLM returned a {type(result).__name__} instead of a dict. Raw output: {raw_text}")
+                return False
+                
             title = result.get("title")
             
             if not title:
+                logger.error("  JSON response was missing the 'title' key.")
                 return False
             
             await self.topics_collection.update_one(
@@ -347,8 +397,12 @@ RULES: MAX 10 WORDS. Clear English. No jargon. Be specific."""
                 topic_summary=result.get("summary", ""),
                 category=topic.get("category")
             )
+            logger.info(f"  Generated title: {title}")
             return True
             
+        except json.JSONDecodeError as e:
+            logger.error(f"  JSON parsing error (Title gen): {e}")
+            return False
         except Exception as e:
             logger.error(f"  Error generating topic title: {str(e)}")
             return False
@@ -357,7 +411,6 @@ RULES: MAX 10 WORDS. Clear English. No jargon. Be specific."""
         """Main function: compute embedding and assign article to topic"""
         text_for_embedding = f"{article_doc['title']} {article_doc.get('description', '')}"
         
-        # Await the new async compute_embedding
         embedding = await self.compute_embedding(text_for_embedding)
         
         if embedding is None:
@@ -400,7 +453,10 @@ RULES: MAX 10 WORDS. Clear English. No jargon. Be specific."""
         })
         
         async for topic in ready_cursor:
-            await self.generate_topic_title(topic["_id"])
+            success = await self.generate_topic_title(topic["_id"])
+            if success:
+                # API Rate Limiter to protect against 429 Too Many Requests
+                await asyncio.sleep(4) 
         
         return stats
     

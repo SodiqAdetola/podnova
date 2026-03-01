@@ -1,11 +1,13 @@
 # backend/app/ai_pipeline/scheduler.py
 """
 PodNova Automated Scheduler
-FULLY ASYNC VERSION
+FULLY ASYNC VERSION - SEQUENTIAL PIPELINE
+Protects against concurrent task overlapping and race conditions.
 """
 import asyncio
 import signal
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import logging
 
 from app.ai_pipeline.ingestion import ArticleIngestionService
@@ -25,6 +27,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Timezone Configuration
+UK_TZ = ZoneInfo("Europe/London")
 
 class PodNovaScheduler:
     def __init__(self):
@@ -35,208 +39,182 @@ class PodNovaScheduler:
         self.history_service = TopicHistoryService(MONGODB_URI, MONGODB_DB_NAME)
         
         self.running = True
-        self.tasks = []
+        self.active_tasks = set()
         
-        # Schedule intervals (in seconds)
-        self.INGESTION_INTERVAL = 4 * 3600  # 4 hours
-        self.CLUSTERING_INTERVAL = 4 * 3600  # 4 hours
-        self.HISTORY_INTERVAL = 4 * 3600  # 4 hours
-        self.LIGHT_MAINTENANCE_INTERVAL = 6 * 3600  # 6 hours
+        # Lock flags to prevent fork-bombing
+        self.is_pipeline_running = False
+        self.is_maintenance_running = False
         
-        # Track last run times
-        self.last_ingestion = datetime.min
-        self.last_clustering = datetime.min
-        self.last_history = datetime.min
-        self.last_light_maintenance = datetime.min
-        self.last_full_maintenance = datetime.min
+        # Schedule intervals
+        self.PIPELINE_INTERVAL_HOURS = 4
+        self.LIGHT_MAINTENANCE_INTERVAL_HOURS = 6
+        
+        # Track last run times (Initialize to the past to force immediate start)
+        past_date = datetime.now(UK_TZ) - timedelta(days=999)
+        self.last_pipeline = past_date
+        self.last_light_maintenance = past_date
+        self.last_full_maintenance = past_date
     
-    async def run_ingestion(self):
-        """Scheduled ingestion job"""
+    async def run_core_pipeline(self):
+        """
+        SEQUENTIAL PIPELINE: Ingestion -> Clustering -> History
+        Ensures data flows logically and prevents race conditions.
+        """
+        if self.is_pipeline_running:
+            logger.warning("Pipeline is already running. Skipping this trigger.")
+            return
+
+        self.is_pipeline_running = True
+        self.last_pipeline = datetime.now(UK_TZ) # Update immediately to reset timer
+
         try:
+            # 1. INGESTION
             logger.info("=" * 80)
-            logger.info("SCHEDULED JOB: Article Ingestion")
+            logger.info("PIPELINE STEP 1: Article Ingestion")
             logger.info("=" * 80)
-            stats = await self.ingestion_service.run_ingestion()
-            logger.info(f"Ingestion completed: {stats['total_ingested']} articles")
-            self.last_ingestion = datetime.now()
-        except Exception as e:
-            logger.error(f"Ingestion failed: {str(e)}", exc_info=True)
-    
-    async def run_clustering(self):
-        """Scheduled clustering job"""
-        try:
-            logger.info("=" * 80)
-            logger.info("SCHEDULED JOB: Article Clustering")
-            logger.info("=" * 80)
+            ingest_stats = await self.ingestion_service.run_ingestion()
+            logger.info(f"Ingestion completed: {ingest_stats['total_ingested']} articles")
             
-            stats = await self.clustering_service.process_pending_articles()
+            # 2. CLUSTERING
+            logger.info("=" * 80)
+            logger.info("PIPELINE STEP 2: Article Clustering")
+            logger.info("=" * 80)
+            cluster_stats = await self.clustering_service.process_pending_articles()
             await self.clustering_service.mark_inactive_topics()
+            logger.info(f"Clustering completed: {cluster_stats['processed']} articles clustered")
             
-            logger.info(f"Clustering completed: {stats['total_processed']} articles processed")
-            self.last_clustering = datetime.now()
-            
-        except Exception as e:
-            logger.error(f"Clustering failed: {str(e)}", exc_info=True)
-    
-    async def run_history_check(self):
-        """Scheduled history check job"""
-        try:
+            # 3. HISTORY CHECK
             logger.info("=" * 80)
-            logger.info("SCHEDULED JOB: Topic History Check")
+            logger.info("PIPELINE STEP 3: Topic History Check")
             logger.info("=" * 80)
-            
-            stats = await self.history_service.run_history_check_cycle()
-            
-            logger.info(f"History check completed: {stats['histories_created']} history points created")
-            self.last_history = datetime.now()
-            
+            history_stats = await self.history_service.run_history_check_cycle()
+            logger.info(f"History completed: {history_stats['histories_created']} snapshots created")
+
         except Exception as e:
-            logger.error(f"History check failed: {str(e)}", exc_info=True)
-    
+            logger.error(f"Core Pipeline failed: {str(e)}", exc_info=True)
+        finally:
+            self.is_pipeline_running = False
+            logger.info("Core Pipeline Run Complete.")
+
     async def run_full_maintenance(self):
         """Full maintenance job - daily at 3 AM"""
+        if self.is_maintenance_running:
+            return
+
+        self.is_maintenance_running = True
+        self.last_full_maintenance = datetime.now(UK_TZ)
+
         try:
             logger.info("=" * 80)
             logger.info("SCHEDULED JOB: Full Database Maintenance")
             logger.info("=" * 80)
-            
-            stats = await self.maintenance_service.run_full_maintenance()
-            
-            logger.info(f"Full maintenance completed")
-            self.last_full_maintenance = datetime.now()
-            
+            await self.maintenance_service.run_full_maintenance()
+            logger.info("Full maintenance completed")
         except Exception as e:
             logger.error(f"Full maintenance failed: {str(e)}", exc_info=True)
+        finally:
+            self.is_maintenance_running = False
     
     async def run_light_maintenance(self):
-        """Light maintenance - just trim topics"""
+        """Light maintenance - just trim oversized topics"""
+        if self.is_maintenance_running:
+            return
+
+        self.is_maintenance_running = True
+        self.last_light_maintenance = datetime.now(UK_TZ)
+
         try:
             logger.info("=" * 80)
             logger.info("SCHEDULED JOB: Light Maintenance")
             logger.info("=" * 80)
             
-            # Trim oversized topics
-            active_topics = []
+            # FIXED: Stream cursor to save RAM
+            trimmed = 0
             cursor = self.maintenance_service.topics_collection.find({"status": "active"})
             async for topic in cursor:
-                active_topics.append(topic)
-            
-            trimmed = 0
-            for topic in active_topics:
-                result = await self.maintenance_service.trim_topic_articles(topic["_id"])
+                result = await self.maintenance_service.trim_topic_articles(str(topic["_id"]))
                 if result.get("trimmed", 0) > 0:
                     trimmed += 1
             
             logger.info(f"Light maintenance: {trimmed} topics trimmed")
-            self.last_light_maintenance = datetime.now()
-            
         except Exception as e:
             logger.error(f"Light maintenance failed: {str(e)}", exc_info=True)
+        finally:
+            self.is_maintenance_running = False
     
     async def check_and_run_jobs(self):
-        """Check if it's time to run scheduled jobs"""
-        now = datetime.now()
+        """Check if it's time to run scheduled jobs based on UK time"""
+        now = datetime.now(UK_TZ)
         
-        # Check ingestion
-        if (now - self.last_ingestion).total_seconds() >= self.INGESTION_INTERVAL:
-            self.tasks.append(asyncio.create_task(self.run_ingestion()))
-        
-        # Check clustering
-        if (now - self.last_clustering).total_seconds() >= self.CLUSTERING_INTERVAL:
-            self.tasks.append(asyncio.create_task(self.run_clustering()))
-        
-        # Check history
-        if (now - self.last_history).total_seconds() >= self.HISTORY_INTERVAL:
-            self.tasks.append(asyncio.create_task(self.run_history_check()))
+        # Check Pipeline (Ingestion -> Clustering -> History)
+        if (now - self.last_pipeline).total_seconds() >= (self.PIPELINE_INTERVAL_HOURS * 3600):
+            task = asyncio.create_task(self.run_core_pipeline())
+            self.active_tasks.add(task)
+            task.add_done_callback(self.active_tasks.discard)
         
         # Check light maintenance
-        if (now - self.last_light_maintenance).total_seconds() >= self.LIGHT_MAINTENANCE_INTERVAL:
-            self.tasks.append(asyncio.create_task(self.run_light_maintenance()))
+        if (now - self.last_light_maintenance).total_seconds() >= (self.LIGHT_MAINTENANCE_INTERVAL_HOURS * 3600):
+            task = asyncio.create_task(self.run_light_maintenance())
+            self.active_tasks.add(task)
+            task.add_done_callback(self.active_tasks.discard)
         
-        # Check for full maintenance (daily at 3 AM)
+        # Check for full maintenance (daily at 3 AM UK Time)
         if now.hour == 3 and now.minute == 0:
-            if (now - self.last_full_maintenance).total_seconds() > 3600:  # Only once per day
-                self.tasks.append(asyncio.create_task(self.run_full_maintenance()))
-        
-        # Clean up completed tasks
-        self.tasks = [t for t in self.tasks if not t.done()]
+            if (now - self.last_full_maintenance).total_seconds() > 3600:  # Only trigger once
+                task = asyncio.create_task(self.run_full_maintenance())
+                self.active_tasks.add(task)
+                task.add_done_callback(self.active_tasks.discard)
     
     async def shutdown(self, sig=None):
         """Graceful shutdown"""
-        logger.info("Shutting down scheduler...")
+        logger.info(f"Received signal {sig}. Shutting down scheduler gracefully...")
         self.running = False
         
-        # Cancel all pending tasks
-        for task in self.tasks:
-            task.cancel()
+        # Wait for active tasks to finish (or cancel them if they take too long)
+        if self.active_tasks:
+            logger.info(f"Waiting for {len(self.active_tasks)} active jobs to complete...")
+            await asyncio.gather(*self.active_tasks, return_exceptions=True)
         
-        if self.tasks:
-            await asyncio.gather(*self.tasks, return_exceptions=True)
-        
-        # Close all database connections
+        # Close all database connections and HTTP sessions
         await self.ingestion_service.close()
         await self.clustering_service.close()
         await self.maintenance_service.close()
         await self.history_service.close()
         
-        logger.info("Scheduler stopped")
-    
-    async def run_initial_jobs(self):
-        """Run initial jobs on startup"""
-        logger.info("\nRunning initial jobs on startup...")
-        
-        # Run ingestion first
-        await self.run_ingestion()
-        await asyncio.sleep(60)
-        
-        # Run clustering
-        await self.run_clustering()
-        await asyncio.sleep(30)
-        
-        # Run history check
-        await self.run_history_check()
+        logger.info("Scheduler stopped cleanly.")
     
     async def start(self):
         """Start the scheduler"""
-        # Set up signal handlers for graceful shutdown
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown(sig)))
+            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(self.shutdown(s)))
         
         logger.info("=" * 80)
-        logger.info("PodNova Scheduler Starting (FULLY ASYNC)")
-        logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("PodNova Scheduler Starting (SEQUENTIAL PIPELINE)")
+        logger.info(f"Time: {datetime.now(UK_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
         logger.info("=" * 80)
         
         logger.info("\nScheduled Jobs:")
-        logger.info(f"  • Ingestion: Every {self.INGESTION_INTERVAL/3600} hours")
-        logger.info(f"  • Clustering: Every {self.CLUSTERING_INTERVAL/3600} hours")
-        logger.info(f"  • History Check: Every {self.HISTORY_INTERVAL/3600} hours")
-        logger.info(f"  • Light Maintenance: Every {self.LIGHT_MAINTENANCE_INTERVAL/3600} hours")
-        logger.info(f"  • Full Maintenance: Daily at 3:00 AM")
-        
-        # Run initial jobs
-        await self.run_initial_jobs()
-        
+        logger.info(f"  • Core Pipeline (Ingest->Cluster->History): Every {self.PIPELINE_INTERVAL_HOURS} hours")
+        logger.info(f"  • Light Maintenance: Every {self.LIGHT_MAINTENANCE_INTERVAL_HOURS} hours")
+        logger.info(f"  • Full Maintenance: Daily at 3:00 AM (UK Time)")
         logger.info("\nScheduler running. Press Ctrl+C to stop.")
         logger.info("=" * 80)
         
-        # Main loop
         try:
             while self.running:
                 await self.check_and_run_jobs()
-                await asyncio.sleep(60)  # Check every minute
+                await asyncio.sleep(60)  # Check the clock every 60 seconds
         except asyncio.CancelledError:
             pass
         finally:
-            await self.shutdown()
-
+            if self.running:  # Only call shutdown if not already called by signal
+                await self.shutdown()
 
 async def main():
     """Entry point"""
     scheduler = PodNovaScheduler()
     await scheduler.start()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

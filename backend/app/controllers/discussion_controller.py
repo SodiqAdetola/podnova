@@ -139,33 +139,3 @@ async def upvote_reply(
         reply_id=reply_id,
         user_id=user_id
     )
-
-
-async def get_notifications(
-    user_id: str,
-    unread_only: bool = False,
-    limit: int = 20
-) -> List[Dict]:
-    """Get user notifications"""
-    
-    return await discussion_service.get_notifications(
-        user_id=user_id,
-        unread_only=unread_only,
-        limit=limit
-    )
-
-
-async def mark_notification_read(
-    notification_id: str
-) -> bool:
-    """Mark notification as read"""
-    
-    return await discussion_service.mark_notification_read(notification_id)
-
-
-async def mark_all_notifications_read(
-    user_id: str
-) -> int:
-    """Mark all notifications as read"""
-    
-    return await discussion_service.mark_all_notifications_read(user_id)

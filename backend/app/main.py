@@ -5,6 +5,7 @@ from app.routes import (
     topics_routes,
     podcasts_routes,
     discussion_routes,
+    notification_routes,
     # auth,  # only for explicit auth routes
 )
 import firebase_admin
@@ -70,4 +71,5 @@ app.include_router(user_routes.router, prefix="/users", tags=["users"])
 app.include_router(topics_routes.router, prefix="/topics", tags=["topics"])
 app.include_router(podcasts_routes.router, prefix="/podcasts", tags=["podcasts"])
 app.include_router(discussion_routes.router, prefix="/discussions", tags=["discussions"])
+app.include_router(notification_routes.router, prefix="/notifications", tags=["notifications"])
 # app.include_router(auth.router, prefix="/auth", tags=["auth"])

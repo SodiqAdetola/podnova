@@ -10,9 +10,6 @@ from app.controllers.discussion_controller import (
     delete_reply,
     upvote_discussion,
     upvote_reply,
-    get_notifications,
-    mark_notification_read,
-    mark_all_notifications_read
 )
 from app.models.discussion import CreateDiscussionRequest
 import traceback
@@ -298,95 +295,6 @@ async def upvote_reply_endpoint(
         
     except Exception as e:
         print(f"Error in upvote_reply_endpoint: {e}")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.get("/notifications/list")
-async def list_notifications(
-    unread_only: bool = Query(False),
-    limit: int = Query(20, ge=1, le=50),
-    firebase_user: dict = Depends(require_firebase_token)
-):
-    """Get user notifications"""
-    try:
-        print(f"\n📥 GET /notifications/list called")
-        
-        notifications = await get_notifications(
-            user_id=firebase_user["uid"],
-            unread_only=unread_only,
-            limit=limit
-        )
-        
-        unread_count = len([n for n in notifications if not n.get("is_read", False)])
-        
-        print(f"Returning {len(notifications)} notifications ({unread_count} unread)\n")
-        
-        return {
-            "notifications": notifications,
-            "total": len(notifications),
-            "unread_count": unread_count
-        }
-        
-    except Exception as e:
-        print(f"Error in list_notifications: {e}")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/notifications/{notification_id}/read")
-async def mark_notification_read_endpoint(
-    notification_id: str,
-    firebase_user: dict = Depends(require_firebase_token)
-):
-    """Mark a notification as read"""
-    try:
-        print(f"\nPOST /notifications/{notification_id}/read called")
-        
-        success = await mark_notification_read(notification_id)
-        
-        if not success:
-            print(f"Notification not found: {notification_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Notification not found"
-            )
-        
-        print(f"Notification marked as read\n")
-        return {"success": True}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error in mark_notification_read_endpoint: {e}")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/notifications/read-all")
-async def mark_all_read_endpoint(
-    firebase_user: dict = Depends(require_firebase_token)
-):
-    """Mark all notifications as read"""
-    try:
-        print(f"\nPOST /notifications/read-all called")
-        
-        count = await mark_all_notifications_read(firebase_user["uid"])
-        
-        print(f"Marked {count} notifications as read\n")
-        return {"success": True, "marked_read": count}
-        
-    except Exception as e:
-        print(f"Error in mark_all_read_endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

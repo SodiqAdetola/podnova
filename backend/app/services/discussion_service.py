@@ -11,6 +11,8 @@ from app.models.discussion import (
     AnalysisResult
 )
 from app.services.ai_analysis_service import ai_analysis_service
+from app.services.notification_service import notification_service
+from app.models.notification import NotificationType
 import re
 import traceback
 
@@ -284,6 +286,7 @@ class DiscussionService:
             traceback.print_exc()
             return None
     
+
     async def create_reply(
         self,
         discussion_id: str,
@@ -292,7 +295,7 @@ class DiscussionService:
         username: str,
         parent_reply_id: Optional[str] = None
     ) -> Reply:
-        """Create a reply to a discussion with AI analysis"""
+        """Create a reply to a discussion"""
         try:
             print(f"📝 Creating reply for discussion: {discussion_id}")
             
@@ -303,21 +306,14 @@ class DiscussionService:
             if not discussion:
                 raise ValueError(f"Discussion not found: {discussion_id}")
             
-            # Extract mentions from content (@username)
-            mentions = self._extract_mentions(content)
-            
-            # Analyze reply content with AI
-            # analysis = await ai_analysis_service.analyze_reply(content)
-            
             reply_data = {
                 "discussion_id": discussion_id,
                 "parent_reply_id": parent_reply_id,
                 "content": content,
-            #    "analysis": analysis,
                 "user_id": user_id,
                 "username": username,
                 "upvote_count": 0,
-                "mentions": mentions,
+                "mentions": [],
                 "created_at": datetime.utcnow(),
                 "updated_at": None,
                 "is_deleted": False,
@@ -338,26 +334,17 @@ class DiscussionService:
             
             print(f"Created reply: {result.inserted_id}")
             
-            # Create notifications for mentions
-            if mentions:
-                await self._create_mention_notifications(
-                    discussion_id=discussion_id,
-                    reply_id=str(result.inserted_id),
-                    mentions=mentions,
-                    actor_user_id=user_id,
-                    actor_username=username,
-                    content=content
-                )
-            
-            # Notify discussion creator if it's not their own reply and not auto-created
+            # Create notification for discussion owner (if not their own reply)
             if discussion and discussion.get("user_id") and discussion["user_id"] != user_id:
-                await self._create_reply_notification(
+                from app.services.notification_service import notification_service
+                
+                await notification_service.create_reply_notification(
+                    discussion_owner_id=discussion["user_id"],
                     discussion_id=discussion_id,
-                    reply_id=str(result.inserted_id),
-                    recipient_user_id=discussion["user_id"],
-                    actor_user_id=user_id,
-                    actor_username=username,
-                    content=content
+                    discussion_title=discussion.get("title", "Discussion"),
+                    reply_author_id=user_id,
+                    reply_author_name=username,
+                    reply_preview=content[:100]
                 )
             
             return Reply(**reply_data)
@@ -572,167 +559,6 @@ class DiscussionService:
             traceback.print_exc()
             raise
     
-    async def get_notifications(
-        self,
-        user_id: str,
-        unread_only: bool = False,
-        limit: int = 20
-    ) -> List[Dict]:
-        """Get notifications for a user"""
-        try:
-            print(f"🔍 Getting notifications for user: {user_id}")
-            
-            query = {"user_id": user_id}
-            if unread_only:
-                query["is_read"] = False
-            
-            cursor = db["notifications"].find(query).sort("created_at", -1).limit(limit)
-            
-            notifications = []
-            async for notif in cursor:
-                try:
-                    notifications.append({
-                        "id": str(notif["_id"]),
-                        "type": notif["type"],
-                        "discussion_id": notif["discussion_id"],
-                        "reply_id": notif.get("reply_id"),
-                        "actor_user_id": notif["actor_user_id"],
-                        "actor_username": notif["actor_username"],
-                        "preview": notif["preview"],
-                        "is_read": notif["is_read"],
-                        "created_at": notif["created_at"].isoformat() if isinstance(notif["created_at"], datetime) else notif["created_at"],
-                        "time_ago": self._format_time_ago(notif["created_at"])
-                    })
-                except Exception as e:
-                    print(f"  ❌ Error processing notification {notif.get('_id')}: {e}")
-                    continue
-            
-            print(f"  ✅ Found {len(notifications)} notifications")
-            return notifications
-            
-        except Exception as e:
-            print(f"❌ Error in get_notifications: {e}")
-            traceback.print_exc()
-            return []
-    
-    async def mark_notification_read(self, notification_id: str) -> bool:
-        """Mark a notification as read"""
-        try:
-            print(f"📌 Marking notification as read: {notification_id}")
-            
-            if not ObjectId.is_valid(notification_id):
-                print(f"  ❌ Invalid notification_id: {notification_id}")
-                return False
-            
-            result = await db["notifications"].update_one(
-                {"_id": ObjectId(notification_id)},
-                {"$set": {"is_read": True}}
-            )
-            
-            success = result.modified_count > 0
-            print(f"  ✅ {'Success' if success else 'Failed'}")
-            return success
-            
-        except Exception as e:
-            print(f"❌ Error in mark_notification_read: {e}")
-            traceback.print_exc()
-            return False
-    
-    async def mark_all_notifications_read(self, user_id: str) -> int:
-        """Mark all notifications as read for a user"""
-        try:
-            print(f"📌 Marking all notifications as read for user: {user_id}")
-            
-            result = await db["notifications"].update_many(
-                {"user_id": user_id, "is_read": False},
-                {"$set": {"is_read": True}}
-            )
-            
-            print(f"  ✅ Marked {result.modified_count} notifications as read")
-            return result.modified_count
-            
-        except Exception as e:
-            print(f"❌ Error in mark_all_notifications_read: {e}")
-            traceback.print_exc()
-            return 0
-    
-    def _extract_mentions(self, content: str) -> List[str]:
-        """Extract @mentions from content"""
-        try:
-            pattern = r'@(\w+)'
-            matches = re.findall(pattern, content)
-            return list(set(matches))
-        except Exception as e:
-            print(f"⚠️ Error extracting mentions: {e}")
-            return []
-    
-    async def _create_mention_notifications(
-        self,
-        discussion_id: str,
-        reply_id: str,
-        mentions: List[str],
-        actor_user_id: str,
-        actor_username: str,
-        content: str
-    ):
-        """Create notifications for mentioned users"""
-        try:
-            print(f"📨 Creating mention notifications for: {mentions}")
-            
-            cursor = db["users"].find({"full_name": {"$in": mentions}})
-            
-            count = 0
-            async for user in cursor:
-                if user["firebase_uid"] != actor_user_id:
-                    await db["notifications"].insert_one({
-                        "user_id": user["firebase_uid"],
-                        "type": "mention",
-                        "discussion_id": discussion_id,
-                        "reply_id": reply_id,
-                        "actor_user_id": actor_user_id,
-                        "actor_username": actor_username,
-                        "preview": content[:100],
-                        "is_read": False,
-                        "created_at": datetime.utcnow()
-                    })
-                    count += 1
-            
-            print(f"  ✅ Created {count} mention notifications")
-            
-        except Exception as e:
-            print(f"❌ Error creating mention notifications: {e}")
-            traceback.print_exc()
-    
-    async def _create_reply_notification(
-        self,
-        discussion_id: str,
-        reply_id: str,
-        recipient_user_id: str,
-        actor_user_id: str,
-        actor_username: str,
-        content: str
-    ):
-        """Create notification when someone replies to a discussion"""
-        try:
-            print(f"📨 Creating reply notification for user: {recipient_user_id}")
-            
-            await db["notifications"].insert_one({
-                "user_id": recipient_user_id,
-                "type": "reply",
-                "discussion_id": discussion_id,
-                "reply_id": reply_id,
-                "actor_user_id": actor_user_id,
-                "actor_username": actor_username,
-                "preview": content[:100],
-                "is_read": False,
-                "created_at": datetime.utcnow()
-            })
-            
-            print(f"  ✅ Created reply notification")
-            
-        except Exception as e:
-            print(f"❌ Error creating reply notification: {e}")
-            traceback.print_exc()
     
     def _format_time_ago(self, dt) -> str:
         """Format datetime as relative time"""
@@ -759,6 +585,7 @@ class DiscussionService:
             print(f"⚠️ Error formatting time: {e}")
             return "Unknown"
 
+ 
 
-# Singleton instance
+
 discussion_service = DiscussionService()

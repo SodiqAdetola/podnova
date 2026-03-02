@@ -1,6 +1,7 @@
 # app/routes/topics_routes.py
 from fastapi import APIRouter, HTTPException, status, Query
 from typing import Optional
+from bson import ObjectId
 from app.controllers.topics_controller import (
     get_all_categories,
     get_topics_by_category,
@@ -28,11 +29,6 @@ async def search_topics_endpoint(
     - Categories
     
     Returns matching topics sorted by relevance.
-    
-    Example usage:
-    - /topics/search?q=climate
-    - /topics/search?q=AI&category=technology
-    - /topics/search?q=election&category=politics&limit=20
     """
     try:
         result = await search_topics(q, category, limit)
@@ -85,12 +81,6 @@ async def get_developing_stories(
 ):
     """
     Get developing stories in a category
-    
-    Returns topics that have evolved significantly over time,
-    based on number of history points created.
-    
-    Perfect for highlighting stories that are actively developing
-    with new information coming in.
     """
     try:
         from app.db import db
@@ -144,6 +134,13 @@ async def get_topic_details(topic_id: str):
     - Development notes
     """
     try:
+        # ✅ PROTECT AGAINST "undefined" OR BAD IDs
+        if topic_id == "undefined" or not ObjectId.is_valid(topic_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Invalid Topic ID"
+            )
+
         topic = await get_topic_by_id(topic_id)
         
         if not topic:
@@ -170,17 +167,16 @@ async def get_topic_history_timeline(
 ):
     """
     Get complete history timeline for a topic
-    
-    Returns chronological list of significant updates showing how the topic evolved.
-    Each history point includes:
-    - Snapshot of title/summary/insights at that time
-    - Significance score and type
-    - Article count and sources
-    - What changed (development note)
-    
-    Use this to build a timeline view in the frontend.
     """
     try:
+        # ✅ PROTECT AGAINST "undefined" OR BAD IDs
+        if topic_id == "undefined" or not ObjectId.is_valid(topic_id):
+            return {
+                "topic_id": topic_id,
+                "history_points": [],
+                "count": 0
+            }
+            
         history = await get_topic_history(topic_id, limit)
         
         return {
@@ -200,19 +196,15 @@ async def get_topic_history_timeline(
 async def trigger_history_check(topic_id: str):
     """
     Manually trigger history check for a topic
-    
-    **Admin/Debug Endpoint**
-    
-    Forces the system to evaluate if current topic state warrants
-    a new history point. Useful for:
-    - Testing the history algorithm
-    - Manual intervention when needed
-    - Debugging significance scoring
-    
-    Returns the result of the check including whether a history
-    point was created and the significance breakdown.
     """
     try:
+        # ✅ PROTECT AGAINST "undefined" OR BAD IDs
+        if topic_id == "undefined" or not ObjectId.is_valid(topic_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Invalid Topic ID"
+            )
+
         result = await force_history_check(topic_id)
         
         if "error" in result:

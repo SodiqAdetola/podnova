@@ -16,7 +16,6 @@ import traceback
 
 router = APIRouter()
 
-
 # PUBLIC GET ENDPOINTS - auth optional
 @router.get("/")
 async def list_discussions(
@@ -26,25 +25,16 @@ async def list_discussions(
     sort_by: str = Query("latest", regex="^(latest|most_discussed)$"),
     limit: int = Query(20, ge=1, le=50),
     skip: int = Query(0, ge=0),
-    q: Optional[str] = Query(None, description="Search query"),
+    q: Optional[str] = Query(None, description="Search query string"),
     firebase_user: Optional[dict] = Depends(verify_firebase_token)
 ):
     """
     Get discussions with filtering
-    
-    Discussion types:
-    - topic: Auto-created for each news topic (one per topic)
-    - community: User-created general discussions
-    
-    Sort options:
-    - latest: By last activity
-    - most_discussed: By reply count
     """
     try:
         print(f"\n📥 GET /discussions called")
-        print(f"  📌 Params: type={discussion_type}, topic={topic_id}, category={category}, sort={sort_by}")
+        print(f"  📌 Params: type={discussion_type}, topic={topic_id}, category={category}, sort={sort_by}, q={q}")
         
-        # Get user_id from token if available
         user_id = firebase_user.get("uid") if firebase_user else None
         print(f"  👤 User ID: {user_id}")
         
@@ -55,7 +45,8 @@ async def list_discussions(
             sort_by=sort_by,
             limit=limit,
             skip=skip,
-            user_id=user_id
+            user_id=user_id,
+            q=q
         )
         
         print(f"  ✅ Returning {len(discussions)} discussions\n")
@@ -73,7 +64,6 @@ async def list_discussions(
             detail=str(e)
         )
 
-
 @router.get("/{discussion_id}")
 async def get_discussion(
     discussion_id: str,
@@ -81,21 +71,10 @@ async def get_discussion(
 ):
     """
     Get single discussion with all replies
-    
-    Includes:
-    - Discussion details
-    - All replies
-    - User's upvote status
-    - Nested reply structure
-    
-    AI Analysis Disclaimer:
-    The factual/opinion scores are AI-generated estimates and should not be 
-    considered definitive fact-checks. Users should verify information independently.
     """
     try:
         print(f"\n📥 GET /discussions/{discussion_id} called")
         
-        # Get user_id from token if available
         user_id = firebase_user.get("uid") if firebase_user else None
         print(f"  👤 User ID: {user_id}")
         
@@ -124,7 +103,6 @@ async def get_discussion(
             detail=str(e)
         )
 
-
 # PROTECTED POST ENDPOINTS - require auth
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_discussion_endpoint(
@@ -133,14 +111,10 @@ async def create_discussion_endpoint(
 ):
     """
     Create a new community discussion
-    
-    Note: Topic discussions are auto-created by the system when topics are generated.
-    Users can only create community discussions here.
     """
     try:
         print(f"\nPOST /discussions called with title: {request.title}")
         
-        # Get username from user profile
         from app.db import db
         user = await db["users"].find_one({"firebase_uid": firebase_user["uid"]})
         username = user.get("full_name", "Anonymous") if user else "Anonymous"
@@ -162,7 +136,6 @@ async def create_discussion_endpoint(
             detail=str(e)
         )
 
-
 @router.post("/{discussion_id}/replies", status_code=status.HTTP_201_CREATED)
 async def create_reply_endpoint(
     discussion_id: str,
@@ -172,16 +145,10 @@ async def create_reply_endpoint(
 ):
     """
     Create a reply to a discussion
-    
-
-    - @mentions (notifies mentioned users)
-    - Nested replies (use parent_reply_id)
-    
     """
     try:
         print(f"\nPOST /discussions/{discussion_id}/replies called")
         
-        # Get username
         from app.db import db
         user = await db["users"].find_one({"firebase_uid": firebase_user["uid"]})
         username = user.get("full_name", "Anonymous") if user else "Anonymous"
@@ -205,7 +172,6 @@ async def create_reply_endpoint(
             detail=str(e)
         )
 
-
 @router.delete("/replies/{reply_id}")
 async def delete_reply_endpoint(
     reply_id: str,
@@ -213,9 +179,6 @@ async def delete_reply_endpoint(
 ):
     """
     Delete a reply
-    
-    Users can only delete their own replies.
-    This is a soft delete - content is replaced with [deleted].
     """
     try:
         print(f"\nDELETE /replies/{reply_id} called")
@@ -245,7 +208,6 @@ async def delete_reply_endpoint(
             detail=str(e)
         )
 
-
 @router.post("/{discussion_id}/upvote")
 async def upvote_discussion_endpoint(
     discussion_id: str,
@@ -270,7 +232,6 @@ async def upvote_discussion_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
 
 @router.post("/replies/{reply_id}/upvote")
 async def upvote_reply_endpoint(

@@ -3,7 +3,6 @@ from typing import List, Dict, Optional
 from app.services.discussion_service import discussion_service
 from app.models.discussion import CreateDiscussionRequest
 
-
 async def create_or_get_topic_discussion(
     topic_id: str,
     topic_title: str,
@@ -13,8 +12,6 @@ async def create_or_get_topic_discussion(
     """
     Auto-create or get existing discussion for a topic
     Called when topic is created/viewed
-    
-    Returns: discussion_id
     """
     return await discussion_service.create_or_get_topic_discussion(
         topic_id=topic_id,
@@ -23,15 +20,12 @@ async def create_or_get_topic_discussion(
         category=category
     )
 
-
 async def create_community_discussion(
     request: CreateDiscussionRequest,
     user_id: str,
     username: str
 ) -> Dict:
     """Create a user-created community discussion"""
-    
-    # Extract category from request
     category = getattr(request, 'category', None)
     
     discussion = await discussion_service.create_community_discussion(
@@ -42,9 +36,7 @@ async def create_community_discussion(
         tags=request.tags,
         category=category  
     )
-    
     return discussion.dict() if hasattr(discussion, 'dict') else discussion
-
 
 async def get_discussions(
     discussion_type: Optional[str] = None,
@@ -53,11 +45,10 @@ async def get_discussions(
     sort_by: str = "latest",
     limit: int = 20,
     skip: int = 0,
-    q: Optional[str] = None,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    q: Optional[str] = None
 ) -> List[Dict]:
-    """Get discussions with filters"""
-    
+    """Get discussions with filters and search query support"""
     return await discussion_service.get_discussions(
         discussion_type=discussion_type,
         topic_id=topic_id,
@@ -69,18 +60,15 @@ async def get_discussions(
         search_query=q
     )
 
-
 async def get_discussion_by_id(
     discussion_id: str,
     user_id: Optional[str] = None
 ) -> Optional[Dict]:
     """Get single discussion with replies"""
-    
     return await discussion_service.get_discussion_by_id(
         discussion_id=discussion_id,
         user_id=user_id
     )
-
 
 async def create_reply(
     discussion_id: str,
@@ -90,7 +78,6 @@ async def create_reply(
     parent_reply_id: Optional[str] = None
 ) -> Dict:
     """Create a reply to a discussion"""
-    
     reply = await discussion_service.create_reply(
         discussion_id=discussion_id,
         content=content,
@@ -98,45 +85,37 @@ async def create_reply(
         username=username,
         parent_reply_id=parent_reply_id
     )
-    
     return reply.dict() if hasattr(reply, 'dict') else reply
-
 
 async def delete_reply(
     reply_id: str,
     user_id: str
 ) -> Dict:
     """Delete a reply (only if user owns it)"""
-    
     success = await discussion_service.delete_reply(
         reply_id=reply_id,
         user_id=user_id
     )
-    
     if success:
         return {"success": True, "message": "Reply deleted successfully"}
     else:
         return {"success": False, "message": "Failed to delete reply or unauthorized"}
-
 
 async def upvote_discussion(
     discussion_id: str,
     user_id: str
 ) -> Dict:
     """Toggle upvote on discussion"""
-    
     return await discussion_service.upvote_discussion(
         discussion_id=discussion_id,
         user_id=user_id
     )
-
 
 async def upvote_reply(
     reply_id: str,
     user_id: str
 ) -> Dict:
     """Toggle upvote on reply"""
-    
     return await discussion_service.upvote_reply(
         reply_id=reply_id,
         user_id=user_id

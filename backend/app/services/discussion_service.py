@@ -1,3 +1,4 @@
+# app/services/discussion_service.py
 from typing import List, Dict, Optional
 from datetime import datetime
 from bson import ObjectId
@@ -12,9 +13,8 @@ from app.services.notification_service import notification_service
 import re
 import traceback
 
-
 class DiscussionService:
-    """Service for managing discussions, replies, and notifications (AI Analysis removed)"""
+    """Service for managing discussions, replies, and notifications"""
     
     async def create_or_get_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str, category: str) -> str:
         """Get or create discussion for a topic"""
@@ -26,7 +26,6 @@ class DiscussionService:
             })
             
             if existing:
-                print(f"Found existing discussion: {existing['_id']}")
                 return str(existing["_id"])
             
             discussion_data = {
@@ -51,17 +50,14 @@ class DiscussionService:
             }
             
             result = await db["discussions"].insert_one(discussion_data)
-            print(f"  ✅ Created new discussion: {result.inserted_id}")
             return str(result.inserted_id)
         except Exception as e:
-            print(f"❌ Error in create_or_get_topic_discussion: {e}")
             traceback.print_exc()
             raise
-
+    
     async def create_community_discussion(self, title: str, description: str, user_id: str, username: str, tags: List[str] = None, category: Optional[str] = None) -> Discussion:
         """Create a user-created community discussion"""
         try:
-            print(f"📝 Creating community discussion: {title}")
             discussion_data = {
                 "title": title,
                 "description": description,
@@ -84,39 +80,48 @@ class DiscussionService:
             }
             result = await db["discussions"].insert_one(discussion_data)
             discussion_data["id"] = str(result.inserted_id)
-            print(f"  ✅ Created discussion: {result.inserted_id}")
             return Discussion(**discussion_data)
         except Exception as e:
-            print(f"❌ Error in create_community_discussion: {e}")
             traceback.print_exc()
             raise
 
-    async def get_discussions(self, discussion_type: Optional[str] = None, topic_id: Optional[str] = None, category: Optional[str] = None, sort_by: str = "latest", limit: int = 20, skip: int = 0, user_id: Optional[str] = None, search_query: Optional[str] = None) -> List[Dict]:
-        """Get discussions with Atlas Smart Search or Filtered Feeds"""
+    async def get_discussions(
+        self,
+        discussion_type: Optional[str] = None,
+        topic_id: Optional[str] = None,
+        category: Optional[str] = None,
+        sort_by: str = "latest",
+        limit: int = 20,
+        skip: int = 0,
+        user_id: Optional[str] = None,
+        search_query: Optional[str] = None
+    ) -> List[Dict]:
+        """Search vs Feed Logic"""
         try:
-            print(f"🔍 Getting discussions: type={discussion_type}, topic={topic_id}, category={category}, search={search_query}")
+            print(f"🔍 Getting discussions with filters: type={discussion_type}, topic={topic_id}, category={category}, search={search_query}")
             
+            # --- SCENARIO A: SEARCH MODE ---
+            # If the user is actively searching, bypass the "must have replies" filter
             if search_query and search_query.strip():
-                pipeline = [
-                    {"$search": {
-                        "index": "default",
-                        "text": {"query": search_query, "path": ["title", "description", "tags"], "fuzzy": {"maxEdits": 1}}
-                    }},
-                    {"$match": {"is_active": True}}
-                ]
-                if category and category != "all": pipeline[1]["$match"]["category"] = category
-                if discussion_type and discussion_type != "all": pipeline[1]["$match"]["discussion_type"] = discussion_type
-                if topic_id: pipeline[1]["$match"]["topic_id"] = topic_id
+                print(f"🔎 SEARCH MODE: '{search_query}' (Ignoring reply count)")
+                query = {
+                    "is_active": True,
+                    "$or": [
+                        {"title": {"$regex": search_query, "$options": "i"}},
+                        {"description": {"$regex": search_query, "$options": "i"}},
+                        {"tags": {"$in": [re.compile(search_query, re.IGNORECASE)]}}
+                    ]
+                }
+                if category and category != "all": query["category"] = category
+                if discussion_type and discussion_type != "all": query["discussion_type"] = discussion_type
                 
-                pipeline.extend([
-                    {"$sort": {"score": {"$meta": "searchScore"}}},
-                    {"$skip": skip},
-                    {"$limit": limit},
-                    {"$project": {"score": {"$meta": "searchScore"}, "document": "$$ROOT"}}
-                ])
-                cursor = db["discussions"].aggregate(pipeline)
-                return await self._process_cursor(cursor, user_id, is_aggregate=True)
+                # We specifically DO NOT add any reply_count logic here.
+                
+                cursor = db["discussions"].find(query).sort("last_activity", -1).skip(skip).limit(limit)
+                return await self._process_cursor(cursor, user_id)
 
+            # --- SCENARIO B: FEED MODE ---
+            # If browsing organically, hide auto-posts that have 0 replies to keep feed clean.
             else:
                 query = {"is_active": True}
                 if topic_id:
@@ -138,20 +143,19 @@ class DiscussionService:
                 elif sort_by == "most_viewed": sort = [("unique_view_count", -1)]
                 
                 cursor = db["discussions"].find(query).sort(sort).skip(skip).limit(limit)
-                return await self._process_cursor(cursor, user_id, is_aggregate=False)
+                return await self._process_cursor(cursor, user_id)
+                
         except Exception as e:
             print(f"❌ Error in get_discussions: {e}")
             traceback.print_exc()
             return []
 
-    async def _process_cursor(self, cursor, user_id, is_aggregate=False) -> List[Dict]:
-        """Consolidated formatting keeping all relevant fields"""
+    async def _process_cursor(self, cursor, user_id) -> List[Dict]:
+        """Formatting helper"""
         discussions = []
-        async for item in cursor:
+        async for disc in cursor:
             try:
-                disc = item["document"] if is_aggregate else item
                 d_id = str(disc["_id"])
-                
                 user_has_upvoted = False
                 if user_id:
                     upvote = await db["discussion_upvotes"].find_one({"discussion_id": d_id, "user_id": user_id})
@@ -175,18 +179,15 @@ class DiscussionService:
                     "is_pinned": disc.get("is_pinned", False),
                     "is_auto_created": disc.get("is_auto_created", False),
                     "time_ago": self._format_time_ago(disc["created_at"]),
-                    "user_has_upvoted": user_has_upvoted,
-                    "search_score": item.get("score") if is_aggregate else None
+                    "user_has_upvoted": user_has_upvoted
                 })
-            except Exception as e:
-                print(f"  ❌ Error processing discussion: {e}")
+            except Exception:
                 continue
         return discussions
 
     async def get_discussion_by_id(self, discussion_id: str, user_id: Optional[str] = None) -> Optional[Dict]:
-        """Get single discussion with all replies and view tracking"""
+        """Get single discussion with all replies"""
         try:
-            print(f"🔍 Getting discussion by id: {discussion_id}")
             if not ObjectId.is_valid(discussion_id): return None
             
             disc = await db["discussions"].find_one({"_id": ObjectId(discussion_id)})
@@ -228,17 +229,14 @@ class DiscussionService:
                 "replies": replies,
                 "total_replies": len(replies)
             }
-        except Exception as e:
-            print(f"❌ Error in get_discussion_by_id: {e}")
+        except Exception:
             traceback.print_exc()
             return None
 
     async def create_reply(self, discussion_id: str, content: str, user_id: str, username: str, parent_reply_id: Optional[str] = None) -> Reply:
-        """Create a reply and trigger owner notification"""
+        """Create a reply to a discussion"""
         try:
-            print(f"📝 Creating reply for discussion: {discussion_id}")
             if not ObjectId.is_valid(discussion_id): raise ValueError("Invalid ID")
-            
             discussion = await db["discussions"].find_one({"_id": ObjectId(discussion_id)})
             
             reply_data = {
@@ -277,14 +275,33 @@ class DiscussionService:
             except Exception: pass
             
             return Reply(**reply_data)
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             raise
+
+    async def delete_reply(self, reply_id: str, user_id: str) -> bool:
+        """Delete a reply (soft delete)"""
+        try:
+            if not ObjectId.is_valid(reply_id): return False
+            reply = await db["replies"].find_one({"_id": ObjectId(reply_id)})
+            if not reply or reply["user_id"] != user_id: return False
+            
+            result = await db["replies"].update_one({"_id": ObjectId(reply_id)}, {
+                "$set": {
+                    "is_deleted": True,
+                    "content": "[deleted]",
+                    "updated_at": datetime.utcnow()
+                }
+            })
+            if result.modified_count > 0:
+                await db["discussions"].update_one({"_id": ObjectId(reply["discussion_id"])}, {"$inc": {"reply_count": -1}})
+                return True
+            return False
+        except Exception: return False
 
     async def get_replies(self, discussion_id: str, user_id: Optional[str] = None) -> List[Dict]:
         """Get all replies for a discussion"""
         try:
-            print(f"🔍 Getting replies for discussion: {discussion_id}")
             cursor = db["replies"].find({"discussion_id": discussion_id, "is_deleted": False}).sort("created_at", 1)
             replies = []
             async for reply in cursor:
@@ -310,14 +327,11 @@ class DiscussionService:
                     })
                 except Exception: continue
             return replies
-        except Exception as e:
-            print(f"❌ Error in get_replies: {e}")
-            return []
+        except Exception: return []
 
     async def upvote_discussion(self, discussion_id: str, user_id: str) -> Dict:
         """Toggle upvote on discussion"""
         try:
-            print(f"👍 Toggling upvote for discussion: {discussion_id}")
             if not ObjectId.is_valid(discussion_id): raise ValueError("Invalid ID")
             existing = await db["discussion_upvotes"].find_one({"discussion_id": discussion_id, "user_id": user_id})
             
@@ -336,7 +350,6 @@ class DiscussionService:
     async def upvote_reply(self, reply_id: str, user_id: str) -> Dict:
         """Toggle upvote on reply"""
         try:
-            print(f"👍 Toggling upvote for reply: {reply_id}")
             if not ObjectId.is_valid(reply_id): raise ValueError("Invalid ID")
             existing = await db["reply_upvotes"].find_one({"reply_id": reply_id, "user_id": user_id})
             
@@ -351,7 +364,7 @@ class DiscussionService:
         except Exception as e:
             traceback.print_exc()
             raise
-
+    
     def _format_time_ago(self, dt) -> str:
         """Format datetime as relative time"""
         try:
@@ -364,6 +377,6 @@ class DiscussionService:
             minutes = diff.seconds // 60
             if minutes > 0: return f"{minutes}m ago" if minutes > 1 else "1m ago"
             return "Just now"
-        except Exception: return "Recently"
+        except Exception: return "Unknown"
 
 discussion_service = DiscussionService()

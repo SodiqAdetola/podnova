@@ -1,7 +1,7 @@
 // frontend/src/Navigator.tsx
 import React, { useState } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, useNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,7 +17,7 @@ import SearchScreen from "./screens/Search";
 import HomeScreen from "./screens/Home";
 import CategoryTopicsScreen from "./screens/CategoryTopics";
 import TopicDetailScreen from "./screens/TopicDetail";
-import NotificationsScreen from "./screens/NotificationsScreen";
+import NotificationsScreen from "./screens/Notification";
 import DiscussionDetailScreen from "./screens/DiscussionDetailScreen";
 import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
@@ -29,7 +29,6 @@ export type AuthStackParamList = {
   Register: undefined;
 };
 
-// Main tabs that appear in the tab bar
 export type MainTabParamList = {
   Home: undefined;
   Search: undefined;
@@ -43,7 +42,8 @@ export type MainStackParamList = {
   MainTabs: undefined;
   TopicDetail: { topicId: string };
   Notifications: undefined;
-  DiscussionDetail: { discussionId: string }; 
+  DiscussionDetail: { discussionId: string };
+  Library: undefined;
 };
 
 /* -------------------- NAVIGATORS -------------------- */
@@ -83,62 +83,6 @@ const CreateTabButton = ({ children, onPress }: any) => (
   </TouchableOpacity>
 );
 
-/* -------------------- SCREENS WITH PLAYER WRAPPER -------------------- */
-
-// Wrapper component to add mini player and full player to any screen
-const withPlayer = (Component: React.ComponentType<any>) => {
-  return (props: any) => {
-    const { showPlayer, currentPodcast } = useAudio();
-    const [showFullPlayer, setShowFullPlayer] = useState(false);
-    
-    const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
-
-    // Determine if current screen has a tab bar
-    const hasTabBar = props.route?.name === 'CategoryTopics' || 
-                      props.route?.name === 'Home' || 
-                      props.route?.name === 'Search' || 
-                      props.route?.name === 'Create' || 
-                      props.route?.name === 'Library' || 
-                      props.route?.name === 'Profile';
-
-    return (
-      <View style={{ flex: 1 }}>
-        <Component {...props} />
-        
-        {/* Mini Player */}
-        {shouldShowMiniPlayer && (
-          <MiniPlayer 
-            onExpand={() => setShowFullPlayer(true)} 
-            hasTabBar={hasTabBar}
-          />
-        )}
-
-        {/* Full Player */}
-        {showFullPlayer && currentPodcast && (
-          <PodcastPlayer
-            visible={showFullPlayer}
-            podcast={currentPodcast}
-            onClose={() => setShowFullPlayer(false)}
-            isSaved={false}
-            onToggleSave={() => {}}
-          />
-        )}
-      </View>
-    );
-  };
-};
-
-// Wrap screens with player
-const HomeScreenWithPlayer = withPlayer(HomeScreen);
-const SearchScreenWithPlayer = withPlayer(SearchScreen);
-const CreateScreenWithPlayer = withPlayer(CreateScreen);
-const LibraryScreenWithPlayer = withPlayer(LibraryScreen);
-const ProfileScreenWithPlayer = withPlayer(ProfileScreen);
-const CategoryTopicsScreenWithPlayer = withPlayer(CategoryTopicsScreen);
-const TopicDetailScreenWithPlayer = withPlayer(TopicDetailScreen);
-const NotificationsScreenWithPlayer = withPlayer(NotificationsScreen);
-const DiscussionDetailScreenWithPlayer = withPlayer(DiscussionDetailScreen);
-
 /* -------------------- MAIN TABS NAVIGATOR -------------------- */
 
 const MainTabsNavigator: React.FC = () => {
@@ -170,27 +114,19 @@ const MainTabsNavigator: React.FC = () => {
         },
       })}
     >
-      <MainTabs.Screen name="Home" component={HomeScreenWithPlayer} />
-      <MainTabs.Screen name="Search" component={SearchScreenWithPlayer} />
-
+      <MainTabs.Screen name="Home" component={HomeScreen} />
+      <MainTabs.Screen name="Search" component={SearchScreen} />
       <MainTabs.Screen
         name="Create"
-        component={CreateScreenWithPlayer}
-        options={{
-          tabBarButton: (props) => <CreateTabButton {...props} />,
-        }}
+        component={CreateScreen}
+        options={{ tabBarButton: (props) => <CreateTabButton {...props} /> }}
       />
-
-      <MainTabs.Screen name="Library" component={LibraryScreenWithPlayer} />
-      <MainTabs.Screen name="Profile" component={ProfileScreenWithPlayer} />
-      
+      <MainTabs.Screen name="Library" component={LibraryScreen} />
+      <MainTabs.Screen name="Profile" component={ProfileScreen} />
       <MainTabs.Screen 
         name="CategoryTopics" 
-        component={CategoryTopicsScreenWithPlayer}
-        options={{
-          tabBarItemStyle: { display: 'none' },
-          tabBarButton: () => null,
-        }}
+        component={CategoryTopicsScreen}
+        options={{ tabBarItemStyle: { display: 'none' }, tabBarButton: () => null }}
       />
     </MainTabs.Navigator>
   );
@@ -202,32 +138,84 @@ const MainStackNavigator: React.FC = () => {
   return (
     <MainStack.Navigator screenOptions={{ headerShown: false }}>
       <MainStack.Screen name="MainTabs" component={MainTabsNavigator} />
-      <MainStack.Screen name="TopicDetail" component={TopicDetailScreenWithPlayer} />
-      <MainStack.Screen name="Notifications" component={NotificationsScreenWithPlayer} />  
-      <MainStack.Screen name="DiscussionDetail" component={DiscussionDetailScreenWithPlayer} /> 
+      <MainStack.Screen name="TopicDetail" component={TopicDetailScreen} />
+      <MainStack.Screen name="Notifications" component={NotificationsScreen} />  
+      <MainStack.Screen name="DiscussionDetail" component={DiscussionDetailScreen} /> 
     </MainStack.Navigator>
   );
 };
 
-/* -------------------- ROOT -------------------- */
+/* -------------------- ROOT OVERLAY -------------------- */
 
-const Navigator: React.FC = () => {
+// Define which screens actually display the bottom tab bar
+const SCREENS_WITH_TAB_BAR = [
+  "Home", 
+  "Search", 
+  "Create", 
+  "Library", 
+  "Profile", 
+  "CategoryTopics"
+];
+
+const RootAppOverlay: React.FC = () => {
   const { user } = useAuth();
+  const { showPlayer, currentPodcast } = useAudio();
+  
+  const [showFullPlayer, setShowFullPlayer] = useState(false);
+  const [currentRouteName, setCurrentRouteName] = useState<string>("Home");
+  
+  // Navigation Ref allows us to track route changes globally
+  const navigationRef = useNavigationContainerRef();
+
+  const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
+  
+  // Check if the current screen is one of our tab screens
+  const hasTabBar = SCREENS_WITH_TAB_BAR.includes(currentRouteName);
 
   return (
-    <NavigationContainer>
-      {user ? <MainStackNavigator /> : <AuthStackNavigator />}
-    </NavigationContainer>
+    <View style={{ flex: 1 }}>
+      {/* Navigation Layer */}
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={() => {
+          setCurrentRouteName(navigationRef.getCurrentRoute()?.name ?? "Home");
+        }}
+        onStateChange={() => {
+          setCurrentRouteName(navigationRef.getCurrentRoute()?.name ?? "Home");
+        }}
+      >
+        {user ? <MainStackNavigator /> : <AuthStackNavigator />}
+      </NavigationContainer>
+
+      {/* Global Mini Player Layer - Now aware of the tab bar! */}
+      {shouldShowMiniPlayer && (
+        <MiniPlayer 
+          onExpand={() => setShowFullPlayer(true)} 
+          hasTabBar={hasTabBar} 
+        />
+      )}
+
+      {/* Global Full Player Modal Layer */}
+      {showFullPlayer && currentPodcast && (
+        <PodcastPlayer
+          visible={showFullPlayer}
+          podcast={currentPodcast}
+          onClose={() => setShowFullPlayer(false)}
+          isSaved={false}
+          onToggleSave={() => {}}
+        />
+      )}
+    </View>
   );
 };
 
-export default Navigator;
+export default RootAppOverlay;
 
 /* -------------------- STYLES -------------------- */
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 70, // Reduced from 80
+    height: 70,
     paddingBottom: 5,
     paddingTop: 5,
     backgroundColor: "#FFFFFF",
@@ -237,9 +225,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
     position: 'absolute',
     bottom: 0,
-    left: 10, // Add left margin
-    right: 10, // Add right margin
-    borderRadius: 35, // Rounded corners
+    left: 10,
+    right: 10,
+    borderRadius: 35,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,

@@ -535,6 +535,7 @@ const styles = StyleSheet.create({
   },
   speedMenuContainer: {
     backgroundColor: "#5d5d5dd8",
+    width: "40%",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 20,
@@ -562,9 +563,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000ad",
   },
   speedMenuItemText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: "#374151",
+    textAlign: "center",
+
+
   },
   speedMenuItemTextActive: {
     color: "#8B5CF6",

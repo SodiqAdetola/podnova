@@ -41,6 +41,9 @@ RSS_FEEDS = {
         {"name": "Ars Technica - Tech Policy", "url": "https://feeds.arstechnica.com/arstechnica/tech-policy"}, 
         {"name": "Techdirt", "url": "https://www.techdirt.com/techdirt_rss.xml"}, 
         
+        # --- Global: Tech in Medicine / BioTech ---
+        {"name": "MobiHealthNews", "url": "https://mobihealthnews.com/feed"}, 
+        {"name": "Fierce Healthcare - Tech", "url": "https://www.fiercehealthcare.com/rss/xml"} 
     ],
 
     "finance": [

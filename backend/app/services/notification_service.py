@@ -113,7 +113,7 @@ class NotificationService:
             source_id=podcast_id,
             actor_user_id=None,
             actor_username=None,
-            title="🎧 Your Podcast is Ready!",
+            title="Your Podcast is Ready!",
             message=f"Your podcast on '{topic_title[:50]}...' has been generated.",
             preview="Tap here to listen in your library.",
             action_path="/library"
@@ -153,7 +153,7 @@ class NotificationService:
             priority=NotificationPriority.NORMAL,
             source_type="topic",
             source_id=topic_id,
-            title="📰 Topic Update",
+            title="Topic Update",
             message=f"Your watched topic '{topic_title[:50]}' has {update_count} new {'update' if update_count == 1 else 'updates'}",
             preview=f"{update_count} new {'update' if update_count == 1 else 'updates'} available",
             action_path=f"/topic/{topic_id}"

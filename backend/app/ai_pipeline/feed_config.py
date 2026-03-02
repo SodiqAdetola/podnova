@@ -35,9 +35,16 @@ RSS_FEEDS = {
         {"name": "Sky News - Business", "url": "https://feeds.skynews.com/feeds/rss/business.xml"}, 
         {"name": "BBC News - Business", "url": "http://feeds.bbci.co.uk/news/business/rss.xml"},
         # --- Global ---
-        {"name": "CNBC - World", "url": "https://www.cnbc.com/id/100727362/device/rss/rss.html"},
+        {
+            "name": "CNBC - Business News", 
+            "url": "https://www.cnbc.com/id/10001147/device/rss/rss.html" # Strict Business/Finance
+        },
+        {
+            "name": "CNBC - Economy", 
+            "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html" # Macro-Economy/Fed/BoE
+        },
         {"name": "AP News - Business", "url": "https://newsunrolled.com/rss/business"}, 
-        {"name": "NPR Economy", "url": "https://feeds.npr.org/1017/rss.xml"}, 
+        {"name": "NPR Economy", "url": "https://feeds.npr.org/1017/rss.xml"},
     ],
 
     "politics": [

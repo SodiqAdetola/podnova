@@ -5,6 +5,7 @@ Handles text-to-speech conversion using Google Cloud TTS
 """
 import os
 import json
+import re
 import asyncio
 import concurrent.futures
 from typing import List, Tuple
@@ -33,29 +34,44 @@ class AudioService:
     
     def chunk_text(self, text: str, max_chars: int = 4000) -> List[str]:
         """
-        Split text into chunks for TTS processing (synchronous, quick)
+        Split text into chunks for TTS processing semantically by paragraphs.
+        This preserves Google TTS inflection logic and prevents audio stitching pops.
         
         Args:
             text: The text to split
-            max_chars: Maximum characters per chunk
+            max_chars: Maximum characters per chunk (Google's limit is ~5000 bytes)
             
         Returns:
             List of text chunks
         """
         chunks = []
-        while len(text) > max_chars:
-            # Try to split at sentence end
-            split_at = text.rfind(".", 0, max_chars)
-            if split_at == -1:
-                split_at = text.rfind(" ", 0, max_chars)
-                if split_at == -1:
-                    split_at = max_chars
-            chunks.append(text[:split_at + 1].strip())
-            text = text[split_at + 1:].strip()
+        # Split by paragraphs first (double newline)
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
         
-        if text:
-            chunks.append(text)
+        current_chunk = ""
         
+        for paragraph in paragraphs:
+            # If adding this paragraph exceeds the limit, save the current chunk
+            if len(current_chunk) + len(paragraph) + 2 > max_chars and current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+                
+            # If a single paragraph is absurdly long (rare in generated scripts), fallback to sentence split
+            if len(paragraph) > max_chars:
+                sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+                for sentence in sentences:
+                    if len(current_chunk) + len(sentence) + 1 > max_chars and current_chunk:
+                        chunks.append(current_chunk.strip())
+                        current_chunk = ""
+                    current_chunk += sentence + " "
+            else:
+                # Add paragraph to current chunk
+                current_chunk += paragraph + "\n\n"
+                
+        # Add the final chunk if it exists
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+            
         return chunks
     
     async def generate_audio(
@@ -69,7 +85,7 @@ class AudioService:
         
         Args:
             script: The podcast script text
-            voice_name: The voice model name
+            voice_name: The voice model name (e.g., 'en-US-Journey-F')
             speaking_rate: Speech speed multiplier (0.8-1.25)
             
         Returns:
@@ -78,7 +94,7 @@ class AudioService:
         chunks = self.chunk_text(script)
         full_audio = b""
         
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         for chunk in chunks:
             # Create synthesis function for this chunk
@@ -102,7 +118,7 @@ class AudioService:
                 )
                 return response.audio_content
             
-            # Run in thread pool
+            # Run the blocking Google SDK call in a thread pool
             audio_chunk = await loop.run_in_executor(
                 self.executor, 
                 synthesize_chunk, 
@@ -110,9 +126,9 @@ class AudioService:
             )
             full_audio += audio_chunk
         
-        # Estimate duration based on word count (more accurate)
+        # Estimate duration based on word count (more accurate than file size for VBR MP3)
         word_count = len(script.split())
-        # Average speaking rate: 150 words per minute, adjust for speaking_rate
+        # Average speaking rate: ~150 words per minute, adjust for speaking_rate
         duration_seconds = int((word_count / 150) * 60 / speaking_rate)
         
         return full_audio, duration_seconds

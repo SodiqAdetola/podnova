@@ -1,12 +1,13 @@
 # app/services/script_service.py
 """
 Script generation service for podcasts
-Handles AI-powered script generation using Gemini
+Handles AI-powered script generation using Gemini, optimized for Text-to-Speech (TTS)
 """
 from typing import Dict, List
 import asyncio
 import concurrent.futures
 from functools import partial
+import re
 from google import genai
 from app.config import GEMINI_API_KEY
 from app.db import db
@@ -47,6 +48,20 @@ class ScriptService:
             "audience": "Professionals and enthusiasts with domain knowledge"
         }
     }
+
+    # Centralized rules applied to ALL prompts to ensure TTS compliance
+    TTS_STRICT_RULES = """
+CRITICAL TEXT-TO-SPEECH (TTS) FORMATTING RULES:
+This text will be fed directly into a machine text-to-speech engine. ANY special formatting will break the audio.
+1. ABSOLUTELY NO MARKDOWN. Do not use asterisks (*), underscores (_), hashtags (#), or backticks (`).
+2. NO ALL CAPS FOR EMPHASIS. The TTS engine reads ALL CAPS as acronyms (e.g., it reads "HUGE" as "H-U-G-E"). Use normal capitalization only.
+3. NO LISTS OR BULLET POINTS. Everything must flow as continuous conversational prose.
+4. NO BRACKETS OR PARENTHESES. Do not write [pause], (laughs), or [Intro Music]. Just write the spoken words.
+5. NO URLS: Never include web links. Say "according to their website" instead.
+6. WRITE FOR THE EAR. Spell out symbols when helpful (e.g., write "one point five billion dollars" instead of "$1.5B", or "percent" instead of "%").
+7. USE PUNCTUATION FOR PACING. Use commas, periods, and em-dashes (—) to create natural pauses and breathing room for the AI voice.
+8. USE FREQUENT PARAGRAPH BREAKS. Do not write a wall of text. Hit "Enter" twice between every few sentences to separate thoughts into short, distinct paragraphs.
+"""
     
     def __init__(self):
         """Initialize the script service with Gemini client"""
@@ -62,7 +77,7 @@ class ScriptService:
             podcast_id: MongoDB ObjectId of the podcast
             
         Returns:
-            Generated script text
+            Generated script text sanitized for TTS
             
         Raises:
             Exception: If script generation fails
@@ -80,11 +95,11 @@ class ScriptService:
             # Fetch articles (async)
             articles = await self._fetch_articles(topic.get("article_ids", []))
             
-            # Build prompt (CPU-bound but quick, can stay in event loop)
+            # Build prompt
             prompt = self._build_prompt(podcast, topic, articles)
             
             # Run the blocking Gemini API call in a thread pool
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             
             # Create a partial function with the arguments
             func = partial(
@@ -102,10 +117,31 @@ class ScriptService:
             if self._needs_expansion(podcast, script):
                 script = await self._expand_script_async(podcast, script)
             
-            return script
+            # Sanitize for TTS before returning
+            return self._sanitize_for_tts(script)
             
         except Exception as e:
             raise Exception(f"Failed to generate script: {str(e)}")
+            
+    def _sanitize_for_tts(self, text: str) -> str:
+        """
+        Deterministic post-processing to strip Markdown and TTS-breaking characters.
+        Never trust the LLM to perfectly follow the 'No Markdown' rule.
+        """
+        # Remove markdown asterisks, underscores, hashes, and backticks
+        text = re.sub(r'[*_#`]', '', text)
+        
+        # Remove any lingering stage directions like [pause], (sigh), or [Music]
+        text = re.sub(r'\[.*?\]|\(.*?\)', '', text)
+        
+        # Replace common markdown list dashes with a space to preserve flow
+        text = re.sub(r'^[-+]\s+', '', text, flags=re.MULTILINE)
+        
+        # Collapse multiple spaces or newlines into clean paragraph breaks
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r' {2,}', ' ', text)
+        
+        return text.strip()
     
     async def _fetch_articles(self, article_ids: List[ObjectId]) -> List[Dict]:
         """Fetch articles from database"""
@@ -146,12 +182,14 @@ EXPAND by adding MORE DEPTH AND ANALYSIS, not just more words:
 
 REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary.
 
+{self.TTS_STRICT_RULES}
+
 Original script:
 {script}
 
 Generate an expanded version with significantly more analytical depth:"""
         
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         func = partial(
             self.client.models.generate_content,
             model="gemini-2.5-flash",
@@ -180,7 +218,7 @@ Generate an expanded version with significantly more analytical depth:"""
         if podcast.get("custom_prompt"):
             custom_text = f"\n\nCUSTOM INSTRUCTIONS: {podcast['custom_prompt']}"
         
-        prompt = f"""You are a seasoned news narrator creating a spoken monologue for a PodNova podcast. Your script will be read aloud, so it must sound natural, fluid, and engaging—like a thoughtful friend explaining a complex topic. Write ONLY the words to be spoken; no stage directions, sound cues, formatting marks, or meta-commentary.
+        prompt = f"""You are a seasoned news narrator creating a spoken monologue for a PodNova podcast. Your script will be read aloud by an AI text-to-speech engine, so it must sound natural, fluid, and engaging—like a thoughtful friend explaining a complex topic.
 
 TOPIC: {topic['title']}
 CATEGORY: {topic['category'].upper()}
@@ -195,6 +233,8 @@ STYLE PROFILE:
 - Analysis Style: {style_config['analysis']}
 - Language Guidelines: {style_config['language']}
 
+{self.TTS_STRICT_RULES}
+
 SOURCE MATERIALS:
 You have {len(articles)} articles covering this topic. Synthesize information from ALL sources, not just one. When sources differ, acknowledge the nuance naturally (e.g., "While some outlets report X, others point to Y...").
 
@@ -204,73 +244,27 @@ You have {len(articles)} articles covering this topic. Synthesize information fr
 
 CONSISTENT INTRO & OUTRO PATTERN:
 
-**Intro Pattern (10–15 seconds)**  
-- Must mention "PodNova" and "I'm your host" (or similar phrasing).  
+**Intro Pattern (10–15 seconds)** - Must mention "PodNova" and "I'm your host".  
 - Include a brief teaser of today's topic (a few words, engaging but not detailed).  
 - Transition naturally into the main content (e.g., "Let's get into it," "Here's what's happening," etc.).  
 - Keep the tone warm, inviting, and consistent with your overall style.
 
-**Outro Pattern (10–15 seconds)**  
-- Summarize the key takeaway in a concise, memorable way.  
+**Outro Pattern (10–15 seconds)** - Summarize the key takeaway in a concise, memorable way.  
 - Thank the listener.  
-- Mention "PodNova" and sign off (e.g., "I'm your host, signing off").  
+- Mention "PodNova" and sign off.  
 - Keep the tone warm and appreciative.
 
 IMPORTANT:  
-- Do not copy the example phrases verbatim; instead, use them as a guide to create your own natural-sounding intro and outro that fit the flow of this specific script.  
-- The core elements (PodNova, host mention, teaser, thanks, sign-off) must always be present, but the exact wording can vary.  
-- Keep both intro and outro brief (10–15 seconds each).
+- Do not copy the example phrases verbatim; instead, use them as a guide to create your own natural-sounding intro and outro.  
+- The core elements (PodNova, host mention, teaser, thanks, sign-off) must always be present.  
 
 SCRIPT STRUCTURE (between intro and outro, follow approximate timing):
 
 1. **Opening Hook** (next 15 seconds after intro) – Grab the listener with the most compelling angle: a surprising fact, a provocative question, or a vivid scene.
+2. **Context & Background** (~20% of total time) – Set the stage: What's happening and why does it matter now? Provide essential background for the target audience.
+3. **Core Analysis** (~50% of total time) – Synthesize the main developments from multiple sources. Go beyond surface facts. Use specific facts, figures, quotes, and attributions naturally.
+4. **Implications & What's Next** (~20% of total time) – Who is affected and how? What are the broader consequences?
 
-2. **Context & Background** (~20% of total time)  
-   - Set the stage: What's happening and why does it matter now?  
-   - Provide essential background for the target audience (avoid over-explaining basics for Advanced/Expert levels).  
-   - {style_config['depth']}
-
-3. **Core Analysis** (~50% of total time)  
-   - Synthesize the main developments from multiple sources.  
-   - Go beyond surface facts: {style_config['analysis']}  
-   - For ADVANCED/EXPERT levels, explore the "why behind the why"—uncover underlying causes, conflicting interpretations, and systemic implications.  
-   - Use specific facts, figures, quotes, and attributions (e.g., "According to Reuters...") to build credibility.  
-   - Weave in analogies, examples, or historical parallels if they illuminate the story.
-
-4. **Implications & What's Next** (~20% of total time)  
-   - Who is affected and how?  
-   - What are the broader consequences—economic, political, social?  
-   - For ADVANCED/EXPERT, discuss competing future scenarios or strategic considerations.  
-   - Connect the dots to related issues or trends.
-
-5. **Outro** – Use the pattern described above, varying the wording but always including the key takeaway, thanks, PodNova mention, and sign-off.
-
-CRITICAL GUIDELINES:
-
-✅ DO:
-- Write in a conversational, thinking-aloud style. Use natural pauses (ellipses … or line breaks), occasional light fillers ("well," "you know," "the thing is…"), and rhetorical questions.
-- Synthesize across sources—your script should reflect the full range of reporting.
-- Attribute information naturally ("Bloomberg reports that…", "Experts quoted by the BBC suggest…").
-- Use concrete details: numbers, dates, names, quotes.
-- Keep sentences varied in length—mix short punchy statements with longer explanatory ones.
-- Match the depth and language to the comprehension level:  
-  *Casual*: simple words, explain terms, focus on the big picture.  
-  *Standard*: clear professional tone, balanced.  
-  *Advanced*: critical analysis, industry terms used purposefully.  
-  *Expert*: deep multi‑factor analysis, nuanced, precise.
-- Stay objective and balanced; avoid editorializing.
-- Ensure the intro and outro follow the consistent pattern (core elements present) but vary the wording naturally.
-
-❌ DO NOT:
-- Include any stage directions, sound effects, or music cues (e.g., [intro music], [pause]).
-- Use markdown formatting like asterisks, underscores, or bullet lists.
-- Write numbered lists or bullet points—everything must flow as continuous prose.
-- Say "in this episode" or "today's episode"—PodNova is a continuous podcast feed, not episode‑based. Just dive in.
-- Use overly polished, scripted transitions; aim for natural segues.
-- Exceed the target word count significantly; be concise but rich.
-- Copy the example intros/outros verbatim—create your own variations.
-
-Now, generate the podcast script. Remember: for {podcast['style'].upper()} level, depth of insight matters more than vocabulary complexity. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
+Now, generate the podcast script. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
 """
-
         return prompt

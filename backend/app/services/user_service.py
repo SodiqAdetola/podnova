@@ -1,15 +1,55 @@
-# app/services/user_service.py
+# backend/app/services/user_service.py
 """
-User service for managing user profiles and preferences
+User service for managing user profiles, preferences, and optimized authentication
+Includes high-speed token caching to reduce Firebase network latency.
 """
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
+import time
+from firebase_admin import auth
 from app.db import db
 from app.models.user import UserProfile, UserPreferences
 
+# Local cache to prevent redundant Firebase API calls
+# Schema: { "token_string": {"uid": "user123", "expires": 1700000000} }
+_VERIFIED_TOKEN_CACHE: Dict[str, Dict] = {}
 
 class UserService:
-    """Service for user-related operations"""
+    """Service for user-related operations including auth and profiles"""
+
+    async def verify_firebase_token(self, id_token: str) -> Optional[str]:
+        """Verify Firebase token with local caching for extreme speed"""
+        if not id_token:
+            return None
+        
+        # 1. Check local memory cache first
+        now = time.time()
+        if id_token in _VERIFIED_TOKEN_CACHE:
+            cached = _VERIFIED_TOKEN_CACHE[id_token]
+            if now < cached["expires"]:
+                # Token is still valid in our local cache, return UID instantly
+                return cached["uid"]
+        
+        try:
+            # 2. If not in cache, call Firebase (Network Latency occurs here)
+            decoded_token = auth.verify_id_token(id_token)
+            uid = decoded_token['uid']
+            
+            # 3. Store in cache for 5 minutes (300 seconds)
+            _VERIFIED_TOKEN_CACHE[id_token] = {
+                "uid": uid,
+                "expires": now + 300  
+            }
+            return uid
+        except Exception as e:
+            print(f"Firebase Auth error: {e}")
+            return None
+
+    def get_auth_header(self, authorization: str = None) -> str:
+        """Helper to extract token from Bearer string"""
+        if not authorization or not authorization.startswith("Bearer "):
+            return ""
+        return authorization.split("Bearer ")[1]
     
     async def get_user_profile(self, user_id: str) -> Optional[UserProfile]:
         """
@@ -39,27 +79,3 @@ class UserService:
             print(f"Error fetching user profile: {str(e)}")
             return None
     
-'''    def calculate_speaking_rate(
-        self,
-        user_profile: Optional[UserProfile],
-        base_rate: float = 1.0
-    ) -> float:
-        """
-        Calculate speaking rate based on user preferences
-        
-        Args:
-            user_profile: The user's profile
-            base_rate: Base speaking rate
-            
-        Returns:
-            Adjusted speaking rate
-        """
-        if not user_profile:
-            return base_rate
-        
-        # Adjust speaking rate based on user's playback speed preference
-        adjustment = (user_profile.preferences.playback_speed - 1.0) * 0.3
-        adjusted_rate = base_rate + adjustment
-        
-        # Clamp to valid range
-        return max(0.8, min(1.25, adjusted_rate))'''

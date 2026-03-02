@@ -1,80 +1,45 @@
-# app/controllers/notification_controller.py
-from typing import List, Dict, Optional
+# backend/app/controllers/notification_controller.py
+from typing import List, Dict
 import asyncio
 from app.services.notification_service import notification_service
-from app.models.notification import NotificationType, NotificationResponse, NotificationListResponse
-
+from app.models.notification import NotificationListResponse
 
 async def get_user_notifications(
-    user_id: str,
-    unread_only: bool = False,
-    limit: int = 50,
+    user_id: str, 
+    unread_only: bool = False, 
+    limit: int = 50, 
     skip: int = 0
 ) -> NotificationListResponse:
-    """Get notifications with total and unread counts in parallel"""
+    """Parallel fetch for notifications, total count, and unread count"""
     
-    # Run all database queries simultaneously to minimize wait time
-    notifications_task = notification_service.get_user_notifications(
-        user_id=user_id,
-        unread_only=unread_only,
-        limit=limit,
-        skip=skip
-    )
-    total_task = notification_service.get_notification_count(user_id=user_id, unread_only=False)
-    unread_task = notification_service.get_notification_count(user_id=user_id, unread_only=True)
-    
-    # Perform parallel execution
-    notifications, total, unread_count = await asyncio.gather(
-        notifications_task, total_task, unread_task
-    )
+    # Create the concurrent tasks
+    list_task = notification_service.get_user_notifications(user_id, unread_only, limit, skip)
+    unread_task = notification_service.get_notification_count(user_id, unread_only=True)
+    total_task = notification_service.get_notification_count(user_id, unread_only=False)
+
+    # Run all 3 DB queries at the exact same time
+    notifications, unread_count, total = await asyncio.gather(list_task, unread_task, total_task)
     
     return NotificationListResponse(
         notifications=notifications,
         total=total,
         unread_count=unread_count,
-        page=skip // limit + 1 if limit > 0 else 1,
+        page=(skip // limit) + 1 if limit > 0 else 1,
         limit=limit
     )
 
-
-async def mark_notification_read(
-    notification_id: str,
-    user_id: str
-) -> Dict:
-    """Mark a notification as read and return new unread count"""
+async def mark_notification_read(notification_id: str, user_id: str) -> Dict:
+    """Atomic update and count refresh"""
     success = await notification_service.mark_as_read(notification_id, user_id)
-    
-    if not success:
-        return {"success": False, "message": "Notification not found or unauthorized"}
-    
-    unread_count = await notification_service.get_notification_count(
-        user_id=user_id,
-        unread_only=True
-    )
-    
-    return {
-        "success": True,
-        "unread_count": unread_count
-    }
+    new_count = await notification_service.get_notification_count(user_id, unread_only=True) if success else 0
+    return {"success": success, "unread_count": new_count}
 
-
-async def mark_all_notifications_read(
-    user_id: str
-) -> Dict:
-    """Mark all notifications as read"""
+async def mark_all_notifications_read(user_id: str) -> Dict:
+    """Atomic bulk update"""
     count = await notification_service.mark_all_as_read(user_id)
-    return {
-        "success": True,
-        "marked_read": count
-    }
+    return {"success": True, "marked_read": count, "unread_count": 0}
 
-
-async def get_unread_count(
-    user_id: str
-) -> Dict:
-    """Get unread notification count"""
-    count = await notification_service.get_notification_count(
-        user_id=user_id,
-        unread_only=True
-    )
+async def get_unread_count(user_id: str) -> Dict:
+    """Standalone count check"""
+    count = await notification_service.get_notification_count(user_id, unread_only=True)
     return {"unread_count": count}

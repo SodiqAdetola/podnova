@@ -49,6 +49,14 @@ class ScriptService:
         }
     }
 
+    # Narrative Lens Configuration: Anchors the story without restricting natural intersections
+    CATEGORY_INSTRUCTIONS = {
+        "finance": "Anchor the narrative in a financial and economic perspective. Highlight market impact, business strategy, and economic consequences. You may discuss tech, politics, or social elements if they are relevant, but ensure they ultimately tie back to the money and markets.",
+        "technology": "Anchor the narrative in a technology and innovation perspective. Highlight how the tech works, industry trends, and its impact on the digital landscape. You may discuss business or political factors if relevant, but ensure the spotlight remains on the technological developments.",
+        "politics": "Anchor the narrative in a political and policy perspective. Highlight government actions, geopolitical shifts, and societal impact. You may discuss economic or tech factors if they intersect with policy, but ensure the primary focus remains on the political narrative and consequences.",
+        "default": "Anchor the narrative in the core themes of this category while naturally incorporating relevant outside context."
+    }
+
     # Centralized rules applied to ALL prompts to ensure TTS compliance
     TTS_STRICT_RULES = """
 CRITICAL TEXT-TO-SPEECH (TTS) FORMATTING RULES:
@@ -66,24 +74,11 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
     def __init__(self):
         """Initialize the script service with Gemini client"""
         self.client = genai.Client(api_key=GEMINI_API_KEY)
-        # Create a thread pool for blocking operations
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     
     async def generate_script(self, podcast_id: str) -> str:
-        """
-        Generate podcast script using Gemini AI (non-blocking)
-        
-        Args:
-            podcast_id: MongoDB ObjectId of the podcast
-            
-        Returns:
-            Generated script text sanitized for TTS
-            
-        Raises:
-            Exception: If script generation fails
-        """
+        """Generate podcast script using Gemini AI (non-blocking)"""
         try:
-            # Fetch podcast and topic data (these are async already)
             podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
             if not podcast:
                 raise Exception(f"Podcast {podcast_id} not found")
@@ -92,55 +87,34 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
             if not topic:
                 raise Exception(f"Topic for podcast {podcast_id} not found")
             
-            # Fetch articles (async)
             articles = await self._fetch_articles(topic.get("article_ids", []))
-            
-            # Build prompt
             prompt = self._build_prompt(podcast, topic, articles)
             
-            # Run the blocking Gemini API call in a thread pool
             loop = asyncio.get_running_loop()
-            
-            # Create a partial function with the arguments
             func = partial(
                 self.client.models.generate_content,
                 model="gemini-2.5-flash",
                 contents=prompt
             )
             
-            # Run in thread pool to avoid blocking
             response = await loop.run_in_executor(self.executor, func)
-            
             script = response.text.strip()
             
-            # Validate and expand if necessary
             if self._needs_expansion(podcast, script):
-                script = await self._expand_script_async(podcast, script)
+                script = await self._expand_script_async(podcast, topic, script)
             
-            # Sanitize for TTS before returning
             return self._sanitize_for_tts(script)
             
         except Exception as e:
             raise Exception(f"Failed to generate script: {str(e)}")
             
     def _sanitize_for_tts(self, text: str) -> str:
-        """
-        Deterministic post-processing to strip Markdown and TTS-breaking characters.
-        Never trust the LLM to perfectly follow the 'No Markdown' rule.
-        """
-        # Remove markdown asterisks, underscores, hashes, and backticks
+        """Deterministic post-processing to strip Markdown and TTS-breaking characters."""
         text = re.sub(r'[*_#`]', '', text)
-        
-        # Remove any lingering stage directions like [pause], (sigh), or [Music]
         text = re.sub(r'\[.*?\]|\(.*?\)', '', text)
-        
-        # Replace common markdown list dashes with a space to preserve flow
         text = re.sub(r'^[-+]\s+', '', text, flags=re.MULTILINE)
-        
-        # Collapse multiple spaces or newlines into clean paragraph breaks
         text = re.sub(r'\n{3,}', '\n\n', text)
         text = re.sub(r' {2,}', ' ', text)
-        
         return text.strip()
     
     async def _fetch_articles(self, article_ids: List[ObjectId]) -> List[Dict]:
@@ -165,9 +139,12 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
         target_words = podcast['length_minutes'] * 150
         return word_count < target_words * 0.8
     
-    async def _expand_script_async(self, podcast: Dict, script: str) -> str:
-        """Async version of script expansion"""
+    async def _expand_script_async(self, podcast: Dict, topic: Dict, script: str) -> str:
+        """Async version of script expansion, preserving category lens"""
         style_config = self.STYLE_INSTRUCTIONS[podcast['style']]
+        category_key = topic.get('category', '').lower()
+        category_lens = self.CATEGORY_INSTRUCTIONS.get(category_key, self.CATEGORY_INSTRUCTIONS["default"])
+        
         word_count = len(script.split())
         target_words = podcast['length_minutes'] * 150
         
@@ -179,6 +156,8 @@ EXPAND by adding MORE DEPTH AND ANALYSIS, not just more words:
 - Include more specific examples and data points
 - Explore broader implications and connections
 - For {podcast['style'].upper()} level: {style_config['analysis']}
+
+CATEGORY LENS: {category_lens}
 
 REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary.
 
@@ -203,6 +182,10 @@ Generate an expanded version with significantly more analytical depth:"""
         """Build the prompt for script generation"""
         style_config = self.STYLE_INSTRUCTIONS[podcast['style']]
         
+        # Determine the Category Lens
+        category_key = topic.get('category', '').lower()
+        category_lens = self.CATEGORY_INSTRUCTIONS.get(category_key, self.CATEGORY_INSTRUCTIONS["default"])
+        
         # Format articles
         articles_text = "\n\n".join([
             f"**{a['title']}** (Source: {a['source']}, Date: {a['published']})\n{a['content'][:1000]}..."
@@ -226,6 +209,9 @@ TARGET LENGTH: {podcast['length_minutes']} minutes
 TARGET WORD COUNT: approximately {podcast['length_minutes'] * 150} words (spoken at ~150 words per minute)
 COMPREHENSION LEVEL: {podcast['style'].upper()}
 
+NARRATIVE LENS:
+{category_lens}
+
 STYLE PROFILE:
 - Audience: {style_config['audience']}
 - Approach: {style_config['approach']}
@@ -245,25 +231,20 @@ You have {len(articles)} articles covering this topic. Synthesize information fr
 CONSISTENT INTRO & OUTRO PATTERN:
 
 **Intro Pattern (10–15 seconds)** - Must mention "PodNova" and "I'm your host".  
-- Include a brief teaser of today's topic (a few words, engaging but not detailed).  
-- Transition naturally into the main content (e.g., "Let's get into it," "Here's what's happening," etc.).  
+- Include a brief teaser of today's topic.  
+- Transition naturally into the main content.  
 - Keep the tone warm, inviting, and consistent with your overall style.
 
 **Outro Pattern (10–15 seconds)** - Summarize the key takeaway in a concise, memorable way.  
 - Thank the listener.  
 - Mention "PodNova" and sign off.  
-- Keep the tone warm and appreciative.
 
-IMPORTANT:  
-- Do not copy the example phrases verbatim; instead, use them as a guide to create your own natural-sounding intro and outro.  
-- The core elements (PodNova, host mention, teaser, thanks, sign-off) must always be present.  
+SCRIPT STRUCTURE:
 
-SCRIPT STRUCTURE (between intro and outro, follow approximate timing):
-
-1. **Opening Hook** (next 15 seconds after intro) – Grab the listener with the most compelling angle: a surprising fact, a provocative question, or a vivid scene.
-2. **Context & Background** (~20% of total time) – Set the stage: What's happening and why does it matter now? Provide essential background for the target audience.
-3. **Core Analysis** (~50% of total time) – Synthesize the main developments from multiple sources. Go beyond surface facts. Use specific facts, figures, quotes, and attributions naturally.
-4. **Implications & What's Next** (~20% of total time) – Who is affected and how? What are the broader consequences?
+1. **Opening Hook** – Grab the listener with the most compelling angle: a surprising fact, a provocative question, or a vivid scene.
+2. **Context & Background** – Set the stage: What's happening and why does it matter now? Provide essential background.
+3. **Core Analysis** – Synthesize the main developments. Go beyond surface facts. Use specific facts, figures, quotes, and attributions naturally.
+4. **Implications & What's Next** – Who is affected and how? What are the broader consequences?
 
 Now, generate the podcast script. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
 """

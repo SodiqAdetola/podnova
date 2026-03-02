@@ -1,3 +1,4 @@
+// frontend/src/components/DiscussionThread.tsx
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -58,6 +59,8 @@ interface DiscussionThreadProps {
   discussionType?: "topic" | "community";
   category?: string;
   tags?: string[];
+  // ✅ ADDED: Prop to prevent scroll traps when used inside another screen
+  isNested?: boolean; 
 }
 
 const getCategoryColor = (category?: string): string => {
@@ -89,6 +92,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   discussionType = "community",
   category,
   tags = [],
+  isNested = true, // Default to true to prevent scroll traps automatically
 }) => {
   const { showPlayer } = useAudio();
   
@@ -338,6 +342,8 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
         setReplyText("");
         setReplyingTo(null);
         await loadReplies();
+        
+        // Even if scrollEnabled is false, programmatic scrolling still perfectly shifts the parent view down to the new comment!
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
@@ -484,7 +490,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
     
     const typeColors = isTopicDiscussion 
       ? { 
-          bg: categoryColor + "20", // 20% opacity of category color
+          bg: categoryColor + "20", 
           text: categoryColor,
           icon: "chatbubble-ellipses-outline" as const
         }
@@ -602,20 +608,23 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
   return (
     <TouchableWithoutFeedback onPress={dismissKeyboard}>
-      <View style={styles.container}>
+      {/* ✅ FLEX FIX: If it is nested, we remove flex:1 so it expands infinitely downwards */}
+      <View style={[styles.container, !isNested && { flex: 1 }]}>
+        
         {/* Fixed Header */}
         {renderHeader()}
 
         {/* Scrollable Replies */}
         <ScrollView
           ref={scrollViewRef}
-          style={styles.scrollView}
+          style={[styles.scrollView, !isNested && { flex: 1 }]}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            !isNested ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined
           }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={!isNested} // ✅ THE MAGIC FIX: Turns off the scroll trap when nested
         >
           {replies.length === 0 ? (
             <View style={styles.emptyReplies}>
@@ -630,7 +639,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           <View style={{ height: 20 }} />
         </ScrollView>
 
-        {/* Fixed Reply Input */}
+        {/* Fixed Reply Input (Will anchor to the bottom of the content stream) */}
         <View style={[
           styles.inputContainer,
           isKeyboardVisible && { marginBottom: keyboardHeight }
@@ -721,7 +730,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    // flex: 1 removed here to allow infinite height expansion
     backgroundColor: "#FFFFFF",
   },
   centerContainer: {
@@ -853,7 +862,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   scrollView: {
-    flex: 1,
+    // flex: 1 removed here to allow infinite height expansion
     backgroundColor: "#F9FAFB",
   },
   scrollContent: {

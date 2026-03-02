@@ -18,45 +18,66 @@ MAX_ARTICLE_AGE_HOURS = 48          # Discard articles older than this
 # ----------------------------------------------------------------------
 RSS_FEEDS = {
     "technology": [
-        # --- UK-Focused ---
-        {"name": "The Register", "url": "https://www.theregister.com/headlines.atom"},
+        # --- UK-Focused Enterprise & Government ---
         {"name": "Computer Weekly", "url": "https://www.computerweekly.com/rss/Latest-IT-news.xml"},
-        {"name": "BBC Technology", "url": "http://feeds.bbci.co.uk/news/technology/rss.xml"},
         {"name": "UK Gov Tech Blog", "url": "https://technology.blog.gov.uk/feed/"},
-        # --- Global ---
-        {"name": "VentureBeat", "url": "https://venturebeat.com/feed/"},
-        {"name": "Ars Technica", "url": "https://feeds.arstechnica.com/arstechnica/technology"}, 
-        {"name": "AP News - Technology", "url": "https://newsunrolled.com/rss/tech"}, 
+        
+        # --- Trade & Cybersecurity (High Signal) ---
+        {"name": "The Register - AI", "url": "https://www.theregister.com/ai/headlines.atom"},
+        {"name": "The Register - Security", "url": "https://www.theregister.com/security/headlines.atom"},
+        {"name": "The Register - Software", "url": "https://www.theregister.com/software/headlines.atom"},
+        
+        # --- Global: Emerging Tech, Quantum & Deep Tech ---
+        {"name": "MIT Technology Review", "url": "https://www.technologyreview.com/feed/"}, 
+        {"name": "IEEE Spectrum", "url": "https://spectrum.ieee.org/feeds/feed.rss"}, 
+        
+        # --- Global: AI & Cloud (Big Tech) ---
+        {"name": "TechCrunch - Enterprise", "url": "https://techcrunch.com/category/enterprise/feed/"}, 
+        {"name": "TechCrunch - AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
+        {"name": "VentureBeat - AI", "url": "https://venturebeat.com/category/ai/feed/"},
+        {"name": "Wired - Business Tech", "url": "https://www.wired.com/feed/category/business/latest/rss"},
+        
+        # --- Global: Tech Law, Regulation & Policy ---
+        {"name": "Ars Technica - Tech Policy", "url": "https://feeds.arstechnica.com/arstechnica/tech-policy"}, 
+        {"name": "Techdirt", "url": "https://www.techdirt.com/techdirt_rss.xml"}, 
+        
+        # --- Global: Tech in Medicine / BioTech ---
+        {"name": "MobiHealthNews", "url": "https://mobihealthnews.com/feed"}, 
+        {"name": "Fierce Healthcare - Tech", "url": "https://www.fiercehealthcare.com/rss/xml"} 
     ],
 
     "finance": [
-        # --- UK-Focused ---
-        {"name": "City A.M.", "url": "https://www.cityam.com/feed/"}, 
+        # --- UK-Focused: Markets, Corporate & Banking ---
+        {"name": "City A.M. - Markets", "url": "https://www.cityam.com/category/markets/feed/"}, 
+        {"name": "City A.M. - Finance", "url": "https://www.cityam.com/category/finance/feed/"}, 
+        {"name": "City A.M. - Banking", "url": "https://www.cityam.com/category/banking/feed/"},
+        {"name": "London Stock Exchange - News", "url": "https://www.londonstockexchange.com/news-article/rss-news-feed"},
+        
+        # --- UK-Focused: Broad Business News ---
         {"name": "Sky News - Business", "url": "https://feeds.skynews.com/feeds/rss/business.xml"}, 
         {"name": "BBC News - Business", "url": "http://feeds.bbci.co.uk/news/business/rss.xml"},
-        # --- Global ---
-        {
-            "name": "CNBC - Business News", 
-            "url": "https://www.cnbc.com/id/10001147/device/rss/rss.html" # Strict Business/Finance
-        },
-        {
-            "name": "CNBC - Economy", 
-            "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html" # Macro-Economy/Fed/BoE
-        },
-        {"name": "AP News - Business", "url": "https://newsunrolled.com/rss/business"}, 
-        {"name": "NPR Economy", "url": "https://feeds.npr.org/1017/rss.xml"},
+        
+        # --- Global (Market, Economic, Corporate Focus) ---
+        {"name": "WSJ - Markets", "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"}, 
+        {"name": "WSJ - Corporate Business", "url": "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml"},
+        {"name": "CNBC - Economy", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"},
+        {"name": "CNBC - Investing & Markets", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069"},
+        {"name": "Yahoo Finance - Global Markets", "url": "https://finance.yahoo.com/news/rssindex"},
     ],
 
     "politics": [
         # --- UK-Focused ---
         {"name": "BBC UK Politics", "url": "http://feeds.bbci.co.uk/news/politics/rss.xml"},
-        {"name": "UK Human Rights Blog", "url": "https://ukhumanrightsblog.com/feed/"},
         {"name": "Sky News - Politics", "url": "https://feeds.skynews.com/feeds/rss/politics.xml"},
+        {"name": "UK Human Rights Blog", "url": "https://ukhumanrightsblog.com/feed/"}, 
+        {"name": "Politico UK", "url": "https://www.politico.eu/uk/feed/"}, 
+        
         # --- Global ---
+        {"name": "BBC World News", "url": "http://feeds.bbci.co.uk/news/world/rss.xml"},
         {"name": "Chatham House Insights", "url": "https://www.chathamhouse.org/rss/insights"}, 
-        {"name": "Politico EU", "url": "https://www.politico.eu/feed/"},
         {"name": "United Nations News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml"},
-        {"name": "AP News - World", "url": "https://newsunrolled.com/rss/world"}, 
+        {"name": "Politico EU", "url": "https://www.politico.eu/feed/"}, 
+
     ]
 }
 
@@ -79,7 +100,20 @@ IMPORTANT_KEYWORDS = {
         "semiconductor", "chip manufacturing", "foundry", "process node",
         "antitrust", "regulation", "FTC", "EU Commission", "investigation",
     ],
-    # ... (Truncated here for brevity, keep your full list from your original file)
+    "finance": [
+        "stock market", "equity", "bond market", "interest rate", "inflation",
+        "recession", "economic growth", "GDP", "unemployment rate",
+        "corporate earnings", "merger", "acquisition", "IPO", "SPAC",
+        "banking regulation", "central bank", "Federal Reserve", "ECB",
+        "quantitative easing", "fiscal policy", "tax reform",
+    ],
+    "politics": [
+        "election", "parliament", "legislation", "policy", "diplomacy",
+        "international relations", "geopolitics", "human rights", "climate policy",
+        "trade agreement", "sanctions", "military conflict", "peace talks",
+        "prime minister", "president", "chancellor", "foreign secretary",
+        "congress", "senate", "house of representatives", "MP", "MP", "minister", "cabinet", "think tank", "NGO", "activist group"
+    ]
 }
 
 NOISE_KEYWORDS = [

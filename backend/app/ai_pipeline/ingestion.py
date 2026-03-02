@@ -5,7 +5,6 @@ Fetches articles from RSS feeds, filters for quality, deduplicates, and stores i
 """
 import ssl
 import hashlib
-import urllib.request
 import re
 import logging
 from datetime import datetime, timedelta, timezone
@@ -51,10 +50,12 @@ class ArticleIngestionService:
         asyncio.create_task(self._ensure_indexes())
 
     async def init_session(self):
-        """Initialize the shared aiohttp session for connection pooling."""
+        """Initialize the shared aiohttp session for connection pooling with anti-bot headers."""
         if not self.session:
             self.session = aiohttp.ClientSession(headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PodNova/1.0'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8'
             })
 
     async def _ensure_indexes(self):
@@ -68,21 +69,27 @@ class ArticleIngestionService:
         except Exception as e:
             logger.error(f"Error creating indexes: {e}")
 
-    def _fetch_feed_sync(self, feed_url: str) -> List[Dict]:
-        """Fetch and parse an RSS feed (sync - feedparser isn't async)"""
+    async def fetch_feed(self, feed_url: str) -> List[Dict]:
+        """Fetch RSS feed XML using secure session, then parse."""
         try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            feed = feedparser.parse(feed_url, handlers=[
-                urllib.request.HTTPSHandler(context=ssl_context)
-            ])
+            async with self.http_semaphore:
+                async with self.session.get(feed_url, timeout=15) as response:
+                    if response.status != 200:
+                        logger.warning(f"Failed to fetch RSS {feed_url}: HTTP {response.status}")
+                        return []
+                    # Read the raw XML content
+                    content = await response.read()
+            
+            # Parse the raw content (using to_thread as parsing can be CPU bound)
+            feed = await asyncio.to_thread(feedparser.parse, content)
             return feed.entries
+            
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout fetching feed {feed_url}")
+            return []
         except Exception as e:
             logger.error(f"Error fetching feed {feed_url}: {str(e)}")
             return []
-
-    async def fetch_feed(self, feed_url: str) -> List[Dict]:
-        """Async wrapper for feed fetching"""
-        return await asyncio.to_thread(self._fetch_feed_sync, feed_url)
 
     async def extract_full_content(self, url: str) -> Optional[str]:
         """Extract full article content from URL using shared aiohttp session"""

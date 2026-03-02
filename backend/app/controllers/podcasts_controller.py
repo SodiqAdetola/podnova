@@ -203,6 +203,15 @@ async def _generate_podcast_async(podcast_id: str):
                 "completed_at": datetime.now()
             }
         )
+        podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+        if podcast:
+            from app.services.notification_service import notification_service
+            await notification_service.create_podcast_ready_notification(
+                user_id=podcast["user_id"],
+                podcast_id=podcast_id,
+                podcast_title=f"{podcast['category'].title()} Briefing", # Generate a clean title
+                topic_title=podcast["topic_title"]
+            )
         
     except Exception as e:
         # Mark as failed

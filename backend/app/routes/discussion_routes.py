@@ -172,15 +172,10 @@ async def create_reply_endpoint(
     """
     Create a reply to a discussion
     
-    Features:
-    - AI analysis of factual vs opinion content (auto-generated)
+
     - @mentions (notifies mentioned users)
     - Nested replies (use parent_reply_id)
     
-    AI Analysis:
-    Each reply is automatically analyzed to estimate how factual vs opinionated 
-    it is. This is an AI-generated estimate, not a definitive fact-check.
-    The disclaimer is always included with the analysis.
     """
     try:
         print(f"\nPOST /discussions/{discussion_id}/replies called")

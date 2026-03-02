@@ -14,13 +14,11 @@ import traceback
 
 
 class NotificationService:
-    """Service for managing user notifications"""
+    """Service for managing user notifications with performance optimizations"""
     
     async def create_notification(self, request: CreateNotificationRequest) -> Optional[str]:
         """Create a new notification"""
         try:
-            print(f"📨 Creating {request.type} notification for user: {request.user_id}")
-            
             notification_data = {
                 "user_id": request.user_id,
                 "type": request.type.value,
@@ -43,7 +41,6 @@ class NotificationService:
             result = await db["notifications"].insert_one(notification_data)
             notification_id = str(result.inserted_id)
             
-            print(f"  ✅ Created notification: {notification_id}")
             return notification_id
             
         except Exception as e:
@@ -58,15 +55,21 @@ class NotificationService:
         limit: int = 50,
         skip: int = 0
     ) -> List[NotificationResponse]:
-        """Get notifications for a user"""
+        """Get notifications for a user with projection optimization"""
         try:
-            print(f"🔍 Getting notifications for user: {user_id}")
-            
             query = {"user_id": user_id}
             if unread_only:
                 query["is_read"] = False
             
-            cursor = db["notifications"].find(query).sort("created_at", -1).skip(skip).limit(limit)
+            # Use projection to limit data size over the wire
+            projection = {
+                "_id": 1, "type": 1, "priority": 1, "source_type": 1, 
+                "source_id": 1, "secondary_id": 1, "actor_username": 1,
+                "title": 1, "message": 1, "preview": 1, "action_path": 1,
+                "is_read": 1, "created_at": 1
+            }
+            
+            cursor = db["notifications"].find(query, projection).sort("created_at", -1).skip(skip).limit(limit)
             
             notifications = []
             async for notif in cursor:
@@ -74,15 +77,12 @@ class NotificationService:
                     notifications.append(self._format_notification(notif))
                 except Exception as e:
                     print(f"  ❌ Error formatting notification {notif.get('_id')}: {e}")
-                    traceback.print_exc()
                     continue
             
-            print(f"  ✅ Found {len(notifications)} notifications")
             return notifications
             
         except Exception as e:
             print(f"❌ Error in get_user_notifications: {e}")
-            traceback.print_exc()
             return []
     
     async def get_notification_count(self, user_id: str, unread_only: bool = True) -> int:
@@ -142,9 +142,9 @@ class NotificationService:
         except Exception as e:
             print(f"❌ Error in mark_all_as_read: {e}")
             return 0
-    
-    # --- Discussion Notifications ---
-    
+
+    # --- Specialized Creators ---
+
     async def create_reply_notification(
         self,
         discussion_owner_id: str,
@@ -154,8 +154,6 @@ class NotificationService:
         reply_author_name: str,
         reply_preview: str
     ) -> Optional[str]:
-        """Create notification when someone replies to your discussion"""
-        
         if discussion_owner_id == reply_author_id:
             return None
         
@@ -172,42 +170,8 @@ class NotificationService:
             preview=reply_preview[:100] if reply_preview else None,
             action_path=f"/discussion/{discussion_id}"
         )
-        
         return await self.create_notification(request)
-    
-    # --- Topic Notifications ---
-    
-    async def create_topic_update_notification(
-        self,
-        user_id: str,
-        topic_id: str,
-        topic_title: str,
-        update_type: str,
-        update_count: int
-    ) -> Optional[str]:
-        """Create notification for topic updates (watched topics)"""
-        
-        title = f"📰 Topic Update"
-        message = f"Your watched topic '{topic_title[:50]}' has {update_count} new {'update' if update_count == 1 else 'updates'}"
-        
-        request = CreateNotificationRequest(
-            user_id=user_id,
-            type=NotificationType.TOPIC_UPDATE,
-            priority=NotificationPriority.NORMAL,
-            source_type="topic",
-            source_id=topic_id,
-            actor_user_id=None,
-            actor_username=None,
-            title=title,
-            message=message,
-            preview=f"{update_count} new {'update' if update_count == 1 else 'updates'} available",
-            action_path=f"/topic/{topic_id}"
-        )
-        
-        return await self.create_notification(request)
-    
-    # --- Podcast Notifications ---
-    
+
     async def create_podcast_ready_notification(
         self,
         user_id: str,
@@ -215,26 +179,21 @@ class NotificationService:
         podcast_title: str,
         topic_title: str
     ) -> Optional[str]:
-        """Create notification when a generated podcast is ready"""
-        
         request = CreateNotificationRequest(
             user_id=user_id,
             type=NotificationType.PODCAST_READY,
             priority=NotificationPriority.HIGH,
             source_type="podcast",
             source_id=podcast_id,
-            actor_user_id=None,
-            actor_username=None,
             title="🎧 Your Podcast is Ready!",
             message=f"Your podcast '{podcast_title}' has been generated",
             preview=f"Based on: {topic_title[:60]}",
             action_path=f"/library"  
         )
-        
         return await self.create_notification(request)
-    
+
     def _format_time_ago(self, dt) -> str:
-        """Safely format datetime as relative time without timezone crashes"""
+        """Safely format datetime as relative time without crashes"""
         try:
             if isinstance(dt, str):
                 dt = datetime.fromisoformat(dt.replace('Z', '+00:00')).replace(tzinfo=None)
@@ -263,7 +222,6 @@ class NotificationService:
             return "Recently"
 
     def _format_notification(self, notif: Dict[str, Any]) -> NotificationResponse:
-        """Format raw notification from DB to response object safely"""
         created_at = notif.get("created_at") or datetime.utcnow()
         created_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
 

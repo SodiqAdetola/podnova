@@ -1,5 +1,5 @@
 // frontend/src/screens/Home.tsx
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { Category, Topic } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
@@ -25,96 +26,71 @@ const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   politics: "people-outline",
 };
 
+// --- API Fetching Functions ---
+const fetchCategories = async (): Promise<Category[]> => {
+  const res = await fetch(`${API_BASE_URL}/topics/categories`);
+  const data = await res.json();
+  return data.categories || data || [];
+};
+
+const fetchRecentTopics = async (categories: Category[]): Promise<Topic[]> => {
+  if (!categories || categories.length === 0) return [];
+  
+  const topicsPromises = categories.map((cat) =>
+    fetch(`${API_BASE_URL}/topics/categories/${cat.name}?sort_by=latest`)
+      .then((res) => res.json())
+      .then((data) => data.topics || data || [])
+      .catch(() => [])
+  );
+
+  const allTopics = await Promise.all(topicsPromises);
+  const flatTopics = allTopics.flat();
+  
+  return flatTopics
+    .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
+    .slice(0, 5);
+};
+
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [recentTopics, setRecentTopics] = useState<Topic[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const { 
+    data: categories = [], 
+    isLoading: isLoadingCategories,
+    refetch: refetchCategories
+  } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+    staleTime: 1000 * 60 * 5,
+  });
 
-  const loadData = async () => {
-    try {
-      console.log("Starting to load data...");
-      
-      const categoriesRes = await fetch(`${API_BASE_URL}/topics/categories`);
-      const categoriesData = await categoriesRes.json();
-      console.log("Categories response:", JSON.stringify(categoriesData, null, 2));
-      
-      const categoriesList = categoriesData.categories || categoriesData || [];
-      console.log("Categories list:", categoriesList);
-      
-      setCategories(categoriesList);
+  const { 
+    data: recentTopics = [], 
+    isLoading: isLoadingTopics,
+    isRefetching,
+    refetch: refetchTopics
+  } = useQuery({
+    queryKey: ['recentTopics', categories],
+    queryFn: () => fetchRecentTopics(categories),
+    enabled: categories.length > 0,
+    staleTime: 1000 * 60 * 2,
+  });
 
-      if (categoriesList.length > 0) {
-        const topicsPromises = categoriesList.map((cat: Category) =>
-          fetch(`${API_BASE_URL}/topics/categories/${cat.name}?sort_by=latest`)
-            .then((res) => res.json())
-            .then((data) => {
-              console.log(`Topics for ${cat.name}:`, data);
-              return data.topics || data || [];
-            })
-            .catch((err) => {
-              console.error(`Error fetching topics for ${cat.name}:`, err);
-              return [];
-            })
-        );
-
-        const allTopics = await Promise.all(topicsPromises);
-        const flatTopics = allTopics.flat();
-        console.log("Total topics:", flatTopics.length);
-        
-        const sortedTopics = flatTopics
-          .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
-          .slice(0, 5);
-        
-        setRecentTopics(sortedTopics);
-      }
-    } catch (error) {
-      console.error("Error loading data:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadData();
+  const onRefresh = async () => {
+    await Promise.all([refetchCategories(), refetchTopics()]);
   };
 
   const getCategoryColor = (name: string) => {
     switch (name.toLowerCase()) {
       case "technology":
-      case "tech":
-        return "#f16365ff";
-      case "finance":
-        return "#73aef2ff";
-      case "politics":
-        return "#8B5CF6";
-      default:
-        return "#6B7280";
+      case "tech": return "#f16365ff";
+      case "finance": return "#73aef2ff";
+      case "politics": return "#8B5CF6";
+      default: return "#6B7280";
     }
   };
 
-  const handleCategoryPress = (categoryName: string) => {
-    // Navigate to CategoryTopics which is in the tab navigator
-    // Use type assertion to bypass TypeScript strict checking
-    (navigation as any).navigate('MainTabs', {
-      screen: 'CategoryTopics',
-      params: { category: categoryName }
-    });
-  };
-
-  const handleTopicPress = (topicId: string) => {
-    // Navigate directly to TopicDetail (stack screen, no tab bar)
-    navigation.navigate('TopicDetail', { topicId });
-  };
-
-  if (loading) {
+  if (isLoadingCategories || isLoadingTopics) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#6366F1" />
@@ -125,7 +101,7 @@ const HomeScreen: React.FC = () => {
   return (
     <ScrollView
       style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />}
     >
       <View style={styles.header}>
         <Text style={styles.logo}>PODNOVA</Text>
@@ -142,19 +118,22 @@ const HomeScreen: React.FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Explore</Text>
 
-        {categories.map((category, index) => (
+        {categories.map((category) => (
           <TouchableOpacity
             key={category.name}
-            style={[
-              styles.categoryCard,
-              { borderLeftColor: getCategoryColor(category.name) }
-            ]}
-            onPress={() => handleCategoryPress(category.name)}
+            style={[styles.categoryCard, { borderLeftColor: getCategoryColor(category.name) }]}
+            onPress={() => (navigation as any).navigate('MainTabs', {
+              screen: 'CategoryTopics',
+              params: { category: category.name }
+            })}
           >
             <View style={styles.categoryIcon}>
-              <Ionicons name={CATEGORY_ICONS[category.name.toLowerCase()] ?? "grid-outline"} size={25} color={getCategoryColor(category.name)} />
+              <Ionicons 
+                name={CATEGORY_ICONS[category.name.toLowerCase()] ?? "grid-outline"} 
+                size={25} 
+                color={getCategoryColor(category.name)} 
+              />
             </View>
-            
             <View style={styles.categoryContent}>
               <Text style={styles.categoryName}>{category.display_name}</Text>
               <Text style={styles.categoryTrending}>
@@ -173,30 +152,37 @@ const HomeScreen: React.FC = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.topicsScrollContainer}
         >
-          {recentTopics.map((topic) => (
-            <TouchableOpacity
-              key={topic.id}
-              style={styles.topicCard}
-              onPress={() => handleTopicPress(topic.id)}
-            >
-              <View style={styles.topicHeader}>
-                <Text style={styles.topicTitle}>{topic.title}</Text>
-                <View>
-                  <Ionicons name="trending-up-outline" size={25} color="#10B981" />
+          {recentTopics.map((topic) => {
+            // ✅ SAFETY CHECK: Prevent "undefined" from being passed to the detail screen
+            const safeId = topic.id || (topic as any)._id;
+
+            return (
+              <TouchableOpacity
+                key={safeId || Math.random().toString()}
+                style={styles.topicCard}
+                onPress={() => {
+                  if (safeId) {
+                    navigation.navigate('TopicDetail', { topicId: safeId });
+                  }
+                }}
+              >
+                <View style={styles.topicHeader}>
+                  <Text style={styles.topicTitle}>{topic.title}</Text>
+                  <View>
+                    <Ionicons name="trending-up-outline" size={25} color="#10B981" />
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.topicMeta}>
-                {topic.source_count} Sources - {topic.time_ago}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text style={styles.topicMeta}>
+                  {topic.source_count} Sources - {topic.time_ago}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
     </ScrollView>
   );
 };
-
-export default HomeScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -318,3 +304,5 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
   },
 });
+
+export default HomeScreen;

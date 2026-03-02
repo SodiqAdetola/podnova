@@ -1,14 +1,14 @@
 // frontend/src/screens/CategoryTopics.tsx
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
   Image,
+  FlatList,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -17,18 +17,42 @@ import { CompositeNavigationProp } from "@react-navigation/native";
 import { MainTabParamList, MainStackParamList } from "../Navigator";
 import { Topic, SortOption } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import DiscussionsList from "../components/DiscussionsList";
 import CreateDiscussionModal from "../components/CreateDiscussionModal";
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const PAGE_LIMIT = 20;
 
 type TabType = "topics" | "discussions";
 
-// Composite navigation type that can navigate to both tab screens and stack screens
 type CategoryTopicsNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "CategoryTopics">,
   NativeStackNavigationProp<MainStackParamList>
 >;
+
+// --- API Fetching Function ---
+const fetchTopics = async ({ pageParam, queryKey }: any) => {
+  const [_, category, sortBy] = queryKey;
+  const skip = pageParam * PAGE_LIMIT;
+  
+  const response = await fetch(
+    `${API_BASE_URL}/topics/categories/${category}?sort_by=${sortBy}&limit=${PAGE_LIMIT}&skip=${skip}`
+  );
+  
+  if (!response.ok) {
+    throw new Error('Network response was not ok');
+  }
+  
+  const data = await response.json();
+  const rawTopics = data.topics || [];
+  
+  // ✅ FORCE MAP ID: Ensure every topic definitely has an 'id' string
+  return rawTopics.map((t: any) => ({
+    ...t,
+    id: t.id || t._id || Math.random().toString() // Fallback so flatlist keyExtractor never crashes
+  }));
+};
 
 const CategoryTopicsScreen: React.FC = () => {
   const navigation = useNavigation<CategoryTopicsNavigationProp>();
@@ -36,45 +60,32 @@ const CategoryTopicsScreen: React.FC = () => {
   const { category } = route.params as { category: string };
 
   const [activeTab, setActiveTab] = useState<TabType>("topics");
-  const [topics, setTopics] = useState<Topic[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>("latest");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [discussionsKey, setDiscussionsKey] = useState(0);
 
-  useEffect(() => {
-    if (activeTab === "topics") {
-      loadTopics();
-    }
-  }, [category, sortBy, activeTab]);
+  // --- TanStack Infinite Query ---
+  const {
+    data,
+    isLoading,
+    isRefetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch
+  } = useInfiniteQuery({
+    queryKey: ['categoryTopics', category, sortBy],
+    queryFn: fetchTopics,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === PAGE_LIMIT ? allPages.length : undefined;
+    },
+    staleTime: 1000 * 60 * 2, // Cache for 2 minutes
+    enabled: activeTab === "topics",
+  });
 
-  const loadTopics = async () => {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/topics/categories/${category}?sort_by=${sortBy}`
-      );
-      const data = await response.json();
-      setTopics(data.topics || []);
-      setImageErrors(new Set());
-    } catch (error) {
-      console.error("Error loading topics:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    if (activeTab === "topics") {
-      loadTopics();
-    } else {
-      setDiscussionsKey(prev => prev + 1);
-      setRefreshing(false);
-    }
-  };
+  const topics = data?.pages.flat() || [];
 
   const handleImageError = (topicId: string) => {
     setImageErrors((prev) => new Set(prev).add(topicId));
@@ -82,20 +93,6 @@ const CategoryTopicsScreen: React.FC = () => {
 
   const handleCreateSuccess = () => {
     setDiscussionsKey(prev => prev + 1);
-  };
-
-  const handleTopicPress = (topicId: string) => {
-    // Navigate to TopicDetail which is in the stack navigator (no tab bar)
-    navigation.navigate('TopicDetail', { topicId });
-  };
-
-  const handleBackPress = () => {
-    navigation.goBack();
-  };
-
-  const handleSearchPress = () => {
-    // Navigate to Search tab
-    navigation.navigate('Search');
   };
 
   const getSortButtonStyle = (option: SortOption) => {
@@ -114,7 +111,6 @@ const CategoryTopicsScreen: React.FC = () => {
         </View>
       );
     }
-
     return (
       <Image
         source={{ uri: topic.image_url }}
@@ -125,104 +121,76 @@ const CategoryTopicsScreen: React.FC = () => {
     );
   };
 
-  const renderTopicsTab = () => {
-    if (loading) {
-      return (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#6366F1" />
-        </View>
-      );
-    }
-
+  // --- Render List Items ---
+  const renderTopicItem = ({ item: topic }: { item: Topic }) => {
     return (
-      <View>
-        <View style={styles.sortContainer}>
-          <TouchableOpacity
-            style={getSortButtonStyle("latest")}
-            onPress={() => setSortBy("latest")}
-          >
-            <Text style={getSortTextStyle("latest")}>Latest</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={getSortButtonStyle("reliable")}
-            onPress={() => setSortBy("reliable")}
-          >
-            <Text style={getSortTextStyle("reliable")}>Reliable</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={getSortButtonStyle("most_discussed")}
-            onPress={() => setSortBy("most_discussed")}
-          >
-            <Text style={getSortTextStyle("most_discussed")}>Most Discussed</Text>
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.topicCard}
+        onPress={() => {
+          if (topic.id) {
+            navigation.navigate('TopicDetail', { topicId: topic.id });
+          } else {
+            console.error("Missing topic ID for:", topic.title);
+          }
+        }}
+      >
+        <View style={styles.topicContentRow}>
+          {renderTopicImage(topic)}
+          <View style={styles.topicContent}>
+            <Text style={styles.topicTitle} numberOfLines={2}>
+              {topic.title}
+            </Text>
+            <Text style={styles.topicSummary} numberOfLines={2}>
+              {topic.summary}
+            </Text>
+          </View>
         </View>
 
-        {topics.map((topic) => (
-          <TouchableOpacity
-            key={topic.id}
-            style={styles.topicCard}
-            onPress={() => handleTopicPress(topic.id)}
-          >
-            {/* Image and content row - matching search screen */}
-            <View style={styles.topicContentRow}>
-              {renderTopicImage(topic)}
-              <View style={styles.topicContent}>
-                <Text style={styles.topicTitle} numberOfLines={2}>
-                  {topic.title}
-                </Text>
-                <Text style={styles.topicSummary} numberOfLines={2}>
-                  {topic.summary}
-                </Text>
-              </View>
-            </View>
-
-            {/* Footer with clustered info - full width at bottom */}
-            <View style={styles.topicFooter}>
-              <View style={styles.clusteredBadge}>
-                <Ionicons name="newspaper-outline" size={10} color="#6B7280" />
-                <Text style={styles.clusteredText}>
-                  Clustered from {topic.article_count} {topic.article_count === 1 ? 'article' : 'articles'} • {topic.time_ago}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        {topics.length === 0 && !loading && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No topics available</Text>
+        <View style={styles.topicFooter}>
+          <View style={styles.clusteredBadge}>
+            <Ionicons name="newspaper-outline" size={10} color="#6B7280" />
+            <Text style={styles.clusteredText}>
+              Clustered from {topic.article_count} {topic.article_count === 1 ? 'article' : 'articles'} • {topic.time_ago}
+            </Text>
           </View>
-        )}
-      </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
-  const renderDiscussionsTab = () => {
+  const renderListHeader = () => (
+    <View style={styles.sortContainer}>
+      <TouchableOpacity style={getSortButtonStyle("latest")} onPress={() => setSortBy("latest")}>
+        <Text style={getSortTextStyle("latest")}>Latest</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={getSortButtonStyle("reliable")} onPress={() => setSortBy("reliable")}>
+        <Text style={getSortTextStyle("reliable")}>Reliable</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={getSortButtonStyle("most_discussed")} onPress={() => setSortBy("most_discussed")}>
+        <Text style={getSortTextStyle("most_discussed")}>Most Discussed</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderEmptyState = () => {
+    if (isLoading) return null;
     return (
-      <DiscussionsList
-        key={discussionsKey}
-        category={category}
-        onCreatePress={() => setShowCreateModal(true)}
-      />
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyText}>No topics available</Text>
+      </View>
     );
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBackPress}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {category.charAt(0).toUpperCase() + category.slice(1)}
         </Text>
-        <TouchableOpacity 
-          style={styles.searchButton}
-          onPress={handleSearchPress}
-        >
+        <TouchableOpacity style={styles.searchButton} onPress={() => navigation.navigate('Search')}>
           <Ionicons name="search" size={20} color="#6B7280" />
         </TouchableOpacity>
       </View>
@@ -247,21 +215,40 @@ const CategoryTopicsScreen: React.FC = () => {
       </View>
 
       {activeTab === "topics" ? (
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={onRefresh}
-              colors={["#6366F1"]}
-              tintColor="#6366F1"
-            />
-          }
-        >
-          {renderTopicsTab()}
-          <View style={styles.bottomPadding} />
-        </ScrollView>
+        isLoading && topics.length === 0 ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#6366F1" />
+          </View>
+        ) : (
+          <FlatList
+            data={topics}
+            keyExtractor={(item) => item.id}
+            renderItem={renderTopicItem}
+            ListHeaderComponent={renderListHeader}
+            ListEmptyComponent={renderEmptyState}
+            ListFooterComponent={() => (
+              <View style={{ paddingBottom: 80, paddingTop: 20 }}>
+                {isFetchingNextPage && <ActivityIndicator size="small" color="#6366F1" />}
+              </View>
+            )}
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) {
+                fetchNextPage();
+              }
+            }}
+            onEndReachedThreshold={0.5}
+            refreshControl={
+              <RefreshControl 
+                refreshing={isRefetching && !isFetchingNextPage} 
+                onRefresh={refetch}
+                colors={["#6366F1"]}
+                tintColor="#6366F1"
+              />
+            }
+          />
+        )
       ) : (
         <View style={styles.content}>
           <DiscussionsList
@@ -291,7 +278,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: 100,
   },
   header: {
     flexDirection: "row",
@@ -350,8 +336,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   content: {
-    flex: 1,
     paddingHorizontal: 16,
+    flexGrow: 1,
   },
   sortContainer: {
     flexDirection: "row",
@@ -455,9 +441,6 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
     paddingHorizontal: 32,
-  },
-  bottomPadding: {
-    height: 80,
   },
 });
 

@@ -1,4 +1,4 @@
-// frontend/src/screens/SearchScreen.tsx (updated topic card layout)
+// frontend/src/screens/SearchScreen.tsx
 
 import React, { useState, useEffect } from "react";
 import {
@@ -20,8 +20,10 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { getAuth } from "firebase/auth";
+import { useInfiniteQuery } from "@tanstack/react-query";
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const PAGE_LIMIT = 20;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
 
@@ -63,6 +65,41 @@ const CATEGORIES = [
 type SearchScope = "news" | "discussions";
 type DiscussionFilter = "all" | "topic" | "community";
 
+// --- API Fetching Function ---
+const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
+  const [_, query, scope, category, discFilter] = queryKey;
+  
+  if (!query) return [];
+
+  const skip = pageParam * PAGE_LIMIT;
+  const params = new URLSearchParams({
+    q: query, // ✅ FIXED: Now passes the search text for BOTH scopes
+    limit: PAGE_LIMIT.toString(),
+    skip: skip.toString()
+  });
+
+  if (category !== "all") {
+    params.append("category", category);
+  }
+
+  if (scope === "news") {
+    const response = await fetch(`${API_BASE_URL}/topics/search?${params.toString()}`);
+    if (!response.ok) throw new Error("Network error");
+    const data = await response.json();
+    return data.topics || [];
+  } else {
+    // scope === "discussions"
+    params.append("sort_by", "latest");
+    if (discFilter !== "all") {
+      params.append("discussion_type", discFilter);
+    }
+    const response = await fetch(`${API_BASE_URL}/discussions?${params.toString()}`);
+    if (!response.ok) throw new Error("Network error");
+    const data = await response.json();
+    return data.discussions || [];
+  }
+};
+
 const SearchScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
 
@@ -71,21 +108,36 @@ const SearchScreen: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchScope, setSearchScope] = useState<SearchScope>("news");
   const [discussionFilter, setDiscussionFilter] = useState<DiscussionFilter>("all");
+  
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [loadingResults, setLoadingResults] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  // Get current user ID from Firebase
+  // --- TanStack Infinite Query ---
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['search', submittedQuery, searchScope, selectedCategory, discussionFilter],
+    queryFn: fetchSearchResults,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === PAGE_LIMIT ? allPages.length : undefined;
+    },
+    enabled: !!submittedQuery, // Only run the query if there is a submitted search term
+    staleTime: 1000 * 60 * 5, // Cache results for 5 minutes
+  });
+
+  const searchResults = data?.pages.flat() || [];
+
+  // --- Auth & Recent Searches Logic ---
   useEffect(() => {
     const auth = getAuth();
     const user = auth.currentUser;
-    if (user) {
-      setUserId(user.uid);
-    } else {
-      setUserId(null);
-    }
+    setUserId(user ? user.uid : null);
 
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -95,11 +147,9 @@ const SearchScreen: React.FC = () => {
         setRecentSearches([]);
       }
     });
-
     return unsubscribe;
   }, []);
 
-  // Load recent searches when userId changes
   useEffect(() => {
     if (userId) {
       loadRecentSearches();
@@ -108,93 +158,16 @@ const SearchScreen: React.FC = () => {
     }
   }, [userId]);
 
-  useEffect(() => {
-    if (submittedQuery) {
-      performSearch();
-    } else {
-      setSearchResults([]);
-    }
-  }, [submittedQuery, selectedCategory, searchScope, discussionFilter]);
-
-  const getRecentSearchesKey = () => {
-    return userId ? `@podnova_recent_searches_${userId}` : null;
-  };
+  const getRecentSearchesKey = () => userId ? `@podnova_recent_searches_${userId}` : null;
 
   const loadRecentSearches = async () => {
     try {
       const key = getRecentSearchesKey();
       if (!key) return;
-
       const stored = await AsyncStorage.getItem(key);
-      if (stored) {
-        setRecentSearches(JSON.parse(stored));
-      } else {
-        setRecentSearches([]);
-      }
+      if (stored) setRecentSearches(JSON.parse(stored));
     } catch (error) {
       console.error("Error loading recent searches:", error);
-    }
-  };
-
-  const performSearch = async () => {
-    try {
-      setLoadingResults(true);
-
-      if (searchScope === "news") {
-        // Search for news topics
-        const params = new URLSearchParams({
-          q: submittedQuery,
-          limit: "30"
-        });
-
-        if (selectedCategory !== "all") {
-          params.append("category", selectedCategory);
-        }
-
-        const endpoint = `${API_BASE_URL}/topics/search?${params.toString()}`;
-        console.log("Searching news:", endpoint);
-
-        const response = await fetch(endpoint);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setSearchResults(data.topics || []);
-        } else {
-          setSearchResults([]);
-        }
-      } else {
-        // Search for discussions
-        const params = new URLSearchParams({
-          sort_by: "latest",
-          limit: "30"
-        });
-
-        // Add discussion type filter
-        if (discussionFilter !== "all") {
-          params.append("discussion_type", discussionFilter);
-        }
-
-        if (selectedCategory !== "all") {
-          params.append("category", selectedCategory);
-        }
-
-        const endpoint = `${API_BASE_URL}/discussions?${params.toString()}`;
-        console.log("Searching discussions:", endpoint);
-
-        const response = await fetch(endpoint);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setSearchResults(data.discussions || []);
-        } else {
-          setSearchResults([]);
-        }
-      }
-    } catch (error) {
-      console.error("Error performing search:", error);
-      setSearchResults([]);
-    } finally {
-      setLoadingResults(false);
     }
   };
 
@@ -202,7 +175,6 @@ const SearchScreen: React.FC = () => {
     try {
       const key = getRecentSearchesKey();
       if (!key) return;
-
       const trimmedQuery = query.trim();
       if (!trimmedQuery) return;
 
@@ -221,7 +193,6 @@ const SearchScreen: React.FC = () => {
   const handleSearchSubmit = () => {
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
-
     saveRecentSearch(trimmed);
     setSubmittedQuery(trimmed);
   };
@@ -235,7 +206,6 @@ const SearchScreen: React.FC = () => {
     try {
       const key = getRecentSearchesKey();
       if (!key) return;
-
       const updated = recentSearches.filter((s) => s !== query);
       setRecentSearches(updated);
       await AsyncStorage.setItem(key, JSON.stringify(updated));
@@ -248,7 +218,6 @@ const SearchScreen: React.FC = () => {
     try {
       const key = getRecentSearchesKey();
       if (!key) return;
-
       setRecentSearches([]);
       await AsyncStorage.removeItem(key);
     } catch (error) {
@@ -266,6 +235,12 @@ const SearchScreen: React.FC = () => {
     return cat?.color || "#6B7280";
   };
 
+  const getActiveCategoryColor = () => {
+    const cat = CATEGORIES.find(c => c.id === selectedCategory);
+    return cat?.color || "#6366F1";
+  };
+
+  // --- Render Functions ---
   const renderTopicImage = (topic: Topic) => {
     if (!topic.image_url || imageErrors.has(topic.id)) {
       return (
@@ -274,7 +249,6 @@ const SearchScreen: React.FC = () => {
         </View>
       );
     }
-
     return (
       <Image
         source={{ uri: topic.image_url }}
@@ -287,14 +261,12 @@ const SearchScreen: React.FC = () => {
 
   const renderTopicCard = ({ item }: { item: Topic }) => {
     const categoryColor = getCategoryColor(item.category);
-    
     return (
       <TouchableOpacity
         style={styles.resultCard}
         onPress={() => navigation.navigate("TopicDetail", { topicId: item.id })}
         activeOpacity={0.7}
       >
-        {/* Top row with category and article count - full width */}
         <View style={styles.topicTopRow}>
           <View style={styles.topicLeftSection}>
             <View style={[styles.categoryBadge, { backgroundColor: "white" }]}>
@@ -307,20 +279,14 @@ const SearchScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Image and content row */}
         <View style={styles.topicMiddleRow}>
           {renderTopicImage(item)}
           <View style={styles.topicContent}>
-            <Text style={styles.resultTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.resultSummary} numberOfLines={2}>
-              {item.summary}
-            </Text>
+            <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={styles.resultSummary} numberOfLines={2}>{item.summary}</Text>
           </View>
         </View>
 
-        {/* Tags section - full width */}
         {item.tags && item.tags.length > 0 && (
           <View style={styles.topicTagsRow}>
             {item.tags.slice(0, 3).map((tag, index) => (
@@ -334,100 +300,68 @@ const SearchScreen: React.FC = () => {
     );
   };
 
-const renderDiscussionCard = ({ item }: { item: Discussion }) => {
-  const categoryColor = getCategoryColor(item.category);
-  const isAutoGenerated = item.discussion_type === "topic";
-  
-  // Topic discussions have no border, community discussions have orange border
-  const cardStyle = isAutoGenerated 
-    ? styles.resultCard 
-    : [styles.resultCard, { borderLeftColor: "#F59E0B", borderLeftWidth: 4 }];
-  
-  return (
-    <TouchableOpacity
-      style={cardStyle}
-      onPress={() => navigation.navigate("DiscussionDetail", { discussionId: item.id })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.resultHeader}>
-        <View style={styles.resultHeaderLeft}>
-          <View
-            style={[
-              styles.discussionBadge,
-              {
-                backgroundColor: isAutoGenerated
-                  ? "white"
-                  : "#FEF3C7",
-              },
-            ]}
-          >
-            <Ionicons
-              name={isAutoGenerated ? "chatbubble-ellipses-outline" : "people-outline"}
-              size={10}
-              color={isAutoGenerated ? categoryColor : "#d68b0a"}
-            />
-            <Text
-              style={[
-                styles.discussionBadgeText,
-                { color: isAutoGenerated ? categoryColor : "#d68b0a" },
-              ]}
-            >
-              {isAutoGenerated ? "Podnova Topic Discussion" : "Community Discussion"}
-            </Text>
-          </View>
-          {item.category && (
-            <View
-              style={[
-                styles.miniCategoryBadge
-              ]}
-            >
-              <Text
-                style={[
-                  styles.miniCategoryText,
-                  { color: categoryColor },
-                ]}
-              >
-                {item.category}
+  const renderDiscussionCard = ({ item }: { item: Discussion }) => {
+    const categoryColor = getCategoryColor(item.category);
+    const isAutoGenerated = item.discussion_type === "topic";
+    const cardStyle = isAutoGenerated 
+      ? styles.resultCard 
+      : [styles.resultCard, { borderLeftColor: "#F59E0B", borderLeftWidth: 4 }];
+    
+    return (
+      <TouchableOpacity
+        style={cardStyle}
+        onPress={() => navigation.navigate("DiscussionDetail", { discussionId: item.id })}
+        activeOpacity={0.7}
+      >
+        <View style={styles.resultHeader}>
+          <View style={styles.resultHeaderLeft}>
+            <View style={[styles.discussionBadge, { backgroundColor: isAutoGenerated ? "white" : "#FEF3C7" }]}>
+              <Ionicons
+                name={isAutoGenerated ? "chatbubble-ellipses-outline" : "people-outline"}
+                size={10}
+                color={isAutoGenerated ? categoryColor : "#d68b0a"}
+              />
+              <Text style={[styles.discussionBadgeText, { color: isAutoGenerated ? categoryColor : "#d68b0a" }]}>
+                {isAutoGenerated ? "Podnova Topic Discussion" : "Community Discussion"}
               </Text>
             </View>
-          )}
+            {item.category && (
+              <View style={styles.miniCategoryBadge}>
+                <Text style={[styles.miniCategoryText, { color: categoryColor }]}>{item.category}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.metaInfo}>
+            <Ionicons name="chatbubble-outline" size={11} color="#6B7280" />
+            <Text style={styles.metaText}>{item.reply_count}</Text>
+            <Feather name="thumbs-up" size={11} color="#6B7280" style={styles.metaIcon} />
+            <Text style={styles.metaText}>{item.upvote_count}</Text>
+          </View>
         </View>
-        <View style={styles.metaInfo}>
-          <Ionicons name="chatbubble-outline" size={11} color="#6B7280" />
-          <Text style={styles.metaText}>{item.reply_count}</Text>
-          <Feather name="thumbs-up" size={11} color="#6B7280" style={styles.metaIcon} />
-          <Text style={styles.metaText}>{item.upvote_count}</Text>
+
+        <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.resultSummary} numberOfLines={2}>{item.description}</Text>
+
+        <View style={styles.resultFooter}>
+          <View style={styles.footerLeft}>
+            <Ionicons name="person-circle-outline" size={16} color="#9CA3AF" />
+            <Text style={styles.footerText}>{item.username}</Text>
+          </View>
+          <Text style={styles.footerText}>{item.time_ago}</Text>
         </View>
-      </View>
 
-      <Text style={styles.resultTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-
-      <Text style={styles.resultSummary} numberOfLines={2}>
-        {item.description}
-      </Text>
-
-      <View style={styles.resultFooter}>
-        <View style={styles.footerLeft}>
-          <Ionicons name="person-circle-outline" size={16} color="#9CA3AF" />
-          <Text style={styles.footerText}>{item.username}</Text>
-        </View>
-        <Text style={styles.footerText}>{item.time_ago}</Text>
-      </View>
-
-      {item.tags && item.tags.length > 0 && (
-        <View style={styles.tagsRow}>
-          {item.tags.slice(0, 3).map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-};
+        {item.tags && item.tags.length > 0 && (
+          <View style={styles.tagsRow}>
+            {item.tags.slice(0, 3).map((tag, index) => (
+              <View key={index} style={styles.tag}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderResult = ({ item }: { item: SearchResult }) => {
     if ('article_count' in item) {
@@ -435,11 +369,6 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
     } else {
       return renderDiscussionCard({ item: item as Discussion });
     }
-  };
-
-  const getActiveCategoryColor = () => {
-    const cat = CATEGORIES.find(c => c.id === selectedCategory);
-    return cat?.color || "#6366F1";
   };
 
   return (
@@ -454,7 +383,7 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
         </View>
       </View>
 
-      {/* Search Input */}
+      {/* Search Input Section */}
       <View style={styles.searchSection}>
         <View style={styles.searchInputContainer}>
           <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
@@ -481,46 +410,26 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
           )}
         </View>
 
-        {/* Search Scope Toggle */}
+        {/* Scope Toggle */}
         <View style={styles.scopeToggleContainer}>
           <TouchableOpacity
-            style={[
-              styles.scopeToggle,
-              searchScope === "news" && styles.scopeToggleActive
-            ]}
+            style={[styles.scopeToggle, searchScope === "news" && styles.scopeToggleActive]}
             onPress={() => setSearchScope("news")}
           >
-            <Ionicons 
-              name="newspaper-outline" 
-              size={16} 
-              color={searchScope === "news" ? "#6366F1" : "#6B7280"} 
-            />
-            <Text style={[
-              styles.scopeToggleText,
-              searchScope === "news" && styles.scopeToggleTextActive
-            ]}>News</Text>
+            <Ionicons name="newspaper-outline" size={16} color={searchScope === "news" ? "#6366F1" : "#6B7280"} />
+            <Text style={[styles.scopeToggleText, searchScope === "news" && styles.scopeToggleTextActive]}>News</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[
-              styles.scopeToggle,
-              searchScope === "discussions" && styles.scopeToggleActive
-            ]}
+            style={[styles.scopeToggle, searchScope === "discussions" && styles.scopeToggleActive]}
             onPress={() => setSearchScope("discussions")}
           >
-            <Ionicons 
-              name="chatbubbles-outline" 
-              size={16} 
-              color={searchScope === "discussions" ? "#6366F1" : "#6B7280"} 
-            />
-            <Text style={[
-              styles.scopeToggleText,
-              searchScope === "discussions" && styles.scopeToggleTextActive
-            ]}>Discussions</Text>
+            <Ionicons name="chatbubbles-outline" size={16} color={searchScope === "discussions" ? "#6366F1" : "#6B7280"} />
+            <Text style={[styles.scopeToggleText, searchScope === "discussions" && styles.scopeToggleTextActive]}>Discussions</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Category Filters - Always show */}
+        {/* Category Filters */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -539,17 +448,8 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
                 ]}
                 onPress={() => setSelectedCategory(cat.id)}
               >
-                <Ionicons
-                  name={cat.icon as any}
-                  size={16}
-                  color={isActive ? cat.color : "#6366F1"}
-                />
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    isActive && { color: cat.color, fontWeight: "600" },
-                  ]}
-                >
+                <Ionicons name={cat.icon as any} size={16} color={isActive ? cat.color : "#6366F1"} />
+                <Text style={[styles.categoryChipText, isActive && { color: cat.color, fontWeight: "600" }]}>
                   {cat.name}
                 </Text>
               </TouchableOpacity>
@@ -557,65 +457,45 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
           })}
         </ScrollView>
 
-        {/* Discussion Type Filters - Only show when searching discussions */}
+        {/* Discussion Type Filters */}
         {searchScope === "discussions" && (
           <View style={styles.discussionFiltersContainer}>
             <TouchableOpacity
-              style={[
-                styles.discussionFilter,
-                discussionFilter === "all" && styles.discussionFilterActive
-              ]}
+              style={[styles.discussionFilter, discussionFilter === "all" && styles.discussionFilterActive]}
               onPress={() => setDiscussionFilter("all")}
             >
-              <Text style={[
-                styles.discussionFilterText,
-                discussionFilter === "all" && styles.discussionFilterTextActive
-              ]}>All</Text>
+              <Text style={[styles.discussionFilterText, discussionFilter === "all" && styles.discussionFilterTextActive]}>All</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[
-                styles.discussionFilter,
-                discussionFilter === "topic" && styles.discussionFilterActive
-              ]}
+              style={[styles.discussionFilter, discussionFilter === "topic" && styles.discussionFilterActive]}
               onPress={() => setDiscussionFilter("topic")}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={14} color={discussionFilter === "topic" ? "#6366F1" : "#6B7280"} />
-              <Text style={[
-                styles.discussionFilterText,
-                discussionFilter === "topic" && styles.discussionFilterTextActive
-              ]}>Auto</Text>
+              <Text style={[styles.discussionFilterText, discussionFilter === "topic" && styles.discussionFilterTextActive]}>Auto</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[
-                styles.discussionFilter,
-                discussionFilter === "community" && styles.discussionFilterActive
-              ]}
+              style={[styles.discussionFilter, discussionFilter === "community" && styles.discussionFilterActive]}
               onPress={() => setDiscussionFilter("community")}
             >
               <Ionicons name="people-outline" size={14} color={discussionFilter === "community" ? "#6366F1" : "#6B7280"} />
-              <Text style={[
-                styles.discussionFilterText,
-                discussionFilter === "community" && styles.discussionFilterTextActive
-              ]}>Community</Text>
+              <Text style={[styles.discussionFilterText, discussionFilter === "community" && styles.discussionFilterTextActive]}>Community</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* Content */}
+      {/* Main Content Area */}
       {!userId ? (
         <View style={styles.emptyState}>
           <Ionicons name="log-in-outline" size={64} color="#E5E7EB" />
           <Text style={styles.emptyTitle}>Sign in to Search</Text>
-          <Text style={styles.emptyText}>
-            Please sign in to search and save your search history
-          </Text>
+          <Text style={styles.emptyText}>Please sign in to search and save your search history</Text>
         </View>
       ) : !submittedQuery ? (
         <View style={styles.content}>
-          {recentSearches.length > 0 && (
+          {recentSearches.length > 0 ? (
             <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Recent Searches</Text>
@@ -646,19 +526,15 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
                 </TouchableOpacity>
               ))}
             </>
-          )}
-
-          {recentSearches.length === 0 && (
+          ) : (
             <View style={styles.emptyState}>
               <Ionicons name="search-outline" size={64} color="#E5E7EB" />
               <Text style={styles.emptyTitle}>Start Searching</Text>
-              <Text style={styles.emptyText}>
-                Search for news or join discussions
-              </Text>
+              <Text style={styles.emptyText}>Search for news or join discussions</Text>
             </View>
           )}
         </View>
-      ) : loadingResults ? (
+      ) : isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={getActiveCategoryColor()} />
           <Text style={styles.loadingText}>Searching...</Text>
@@ -667,9 +543,7 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
         <View style={styles.emptyState}>
           <Ionicons name="search-outline" size={64} color="#E5E7EB" />
           <Text style={styles.emptyTitle}>No Results Found</Text>
-          <Text style={styles.emptyText}>
-            Try different keywords or adjust your filters
-          </Text>
+          <Text style={styles.emptyText}>Try different keywords or adjust your filters</Text>
         </View>
       ) : (
         <FlatList
@@ -678,6 +552,12 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.resultsList}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) {
+              fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.5}
           ListHeaderComponent={
             <View style={styles.resultsHeader}>
               <Text style={[styles.resultsCount, { color: getActiveCategoryColor() }]}>
@@ -686,6 +566,11 @@ const renderDiscussionCard = ({ item }: { item: Discussion }) => {
               <Text style={styles.resultsQuery}>for "{submittedQuery}"</Text>
             </View>
           }
+          ListFooterComponent={() => (
+            <View style={{ paddingVertical: 20 }}>
+              {isFetchingNextPage && <ActivityIndicator size="small" color="#6366F1" />}
+            </View>
+          )}
         />
       )}
     </View>
@@ -868,6 +753,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 40,
+    paddingTop: 80,
   },
   emptyTitle: {
     fontSize: 18,
@@ -894,6 +780,7 @@ const styles = StyleSheet.create({
   },
   resultsList: {
     padding: 16,
+    paddingBottom: 40,
   },
   resultsHeader: {
     flexDirection: "row",
@@ -978,6 +865,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   categoryText: {
     fontSize: 11,
@@ -990,7 +879,7 @@ const styles = StyleSheet.create({
     gap: 2,
     backgroundColor: "#F3F4F6",
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 4,
   },
   sourceText: {

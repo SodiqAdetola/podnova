@@ -1,6 +1,6 @@
 // frontend/src/contexts/AudioContext.tsx
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Podcast } from '../types/podcasts';
@@ -35,8 +35,6 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [showPlayer, setShowPlayer] = useState(false);
-  
-  const positionUpdateInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize audio mode
   useEffect(() => {
@@ -47,31 +45,6 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       shouldDuckAndroid: true,
     });
   }, []);
-
-  // Position updater
-  useEffect(() => {
-    if (sound && isPlaying) {
-      positionUpdateInterval.current = setInterval(async () => {
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded) {
-          setPosition(status.positionMillis);
-          setDuration(status.durationMillis || 0);
-        }
-      }, 500);
-    } else {
-      if (positionUpdateInterval.current) {
-        clearInterval(positionUpdateInterval.current);
-        positionUpdateInterval.current = null;
-      }
-    }
-
-    return () => {
-      if (positionUpdateInterval.current) {
-        clearInterval(positionUpdateInterval.current);
-        positionUpdateInterval.current = null;
-      }
-    };
-  }, [sound, isPlaying]);
 
   // Save position periodically
   useEffect(() => {
@@ -109,9 +82,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 0;
   };
 
+  // Highly optimized native event listener
   const onPlaybackStatusUpdate = (status: any) => {
     if (status.isLoaded) {
       setIsPlaying(status.isPlaying);
+      setPosition(status.positionMillis);
+      setDuration(status.durationMillis || 0);
 
       if (status.didJustFinish) {
         setIsPlaying(false);
@@ -136,10 +112,14 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSound(null);
       }
 
-      // Load new podcast
+      // Load new podcast with native progress polling (500ms)
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: podcast.audio_url! },
-        { shouldPlay: false, rate: playbackRate },
+        { 
+          shouldPlay: false, 
+          rate: playbackRate,
+          progressUpdateIntervalMillis: 500 
+        },
         onPlaybackStatusUpdate
       );
 

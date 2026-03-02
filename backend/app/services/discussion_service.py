@@ -123,13 +123,22 @@ class DiscussionService:
         sort_by: str = "latest",
         limit: int = 20,
         skip: int = 0,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        search_query: Optional[str] = None # ✅ ADDED: Accept search query to bypass filters
     ) -> List[Dict]:
         """Get discussions with filtering and sorting"""
         try:
-            print(f"🔍 Getting discussions with filters: type={discussion_type}, topic={topic_id}, category={category}")
+            print(f"🔍 Getting discussions with filters: type={discussion_type}, topic={topic_id}, category={category}, search={search_query}")
             
             query = {"is_active": True}
+            
+            # Apply search text if provided
+            if search_query:
+                query["$or"] = [
+                    {"title": {"$regex": search_query, "$options": "i"}},
+                    {"description": {"$regex": search_query, "$options": "i"}},
+                    {"tags": {"$in": [re.compile(search_query, re.IGNORECASE)]}}
+                ]
             
             if topic_id:
                 query["topic_id"] = topic_id
@@ -140,17 +149,27 @@ class DiscussionService:
             if discussion_type:
                 query["discussion_type"] = discussion_type
                 
-            # ✅ NEW LOGIC: Hide empty auto-created topic discussions in main feeds.
-            # We skip this rule if topic_id is provided, so the Topic Detail screen can still load empty ones to post the first reply.
-            if not topic_id:
-                if discussion_type == "topic":
-                    query["reply_count"] = {"$gt": 0}
-                elif not discussion_type:
-                    # If fetching all discussions, include all community posts, but only active topic posts
-                    query["$or"] = [
-                        {"discussion_type": {"$ne": "topic"}},
-                        {"discussion_type": "topic", "reply_count": {"$gt": 0}}
+            # ✅ NEW LOGIC: Hide empty auto-created topic discussions ONLY in main feeds.
+            # We skip this rule if it is a direct search OR a direct topic_id lookup.
+            if not topic_id and not search_query:
+                # If we already have an $or block (we shouldn't based on the above logic, but just in case)
+                if "$or" in query:
+                    # Very rare edge case, but safe to wrap in an $and
+                    query["$and"] = [
+                        {"$or": query.pop("$or")},
+                        {"$or": [
+                            {"discussion_type": {"$ne": "topic"}},
+                            {"discussion_type": "topic", "reply_count": {"$gt": 0}}
+                        ]}
                     ]
+                else:
+                    if discussion_type == "topic":
+                        query["reply_count"] = {"$gt": 0}
+                    elif not discussion_type:
+                        query["$or"] = [
+                            {"discussion_type": {"$ne": "topic"}},
+                            {"discussion_type": "topic", "reply_count": {"$gt": 0}}
+                        ]
             
             # Sorting
             if sort_by == "latest":

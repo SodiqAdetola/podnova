@@ -1,6 +1,6 @@
 # app/routes/notification_routes.py
 from fastapi import APIRouter, HTTPException, status, Query, Depends
-from typing import Optional
+from typing import Optional 
 from app.middleware.firebase_auth import require_firebase_token
 from app.controllers import notification_controller
 import traceback

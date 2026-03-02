@@ -9,27 +9,34 @@ from app.models.notification import (
     NotificationPriority,
     CreateNotificationRequest
 )
+import traceback
 
 class NotificationService:
     async def create_notification(self, req: CreateNotificationRequest) -> str:
         """Create a standard notification document"""
-        doc = {
-            "user_id": req.user_id,
-            "type": req.type.value,
-            "priority": req.priority.value,
-            "source_type": req.source_type,
-            "source_id": req.source_id,
-            "secondary_id": req.secondary_id,
-            "actor_username": req.actor_username,
-            "title": req.title,
-            "message": req.message,
-            "preview": req.preview,
-            "action_path": req.action_path,
-            "is_read": False,
-            "created_at": datetime.utcnow()
-        }
-        res = await db["notifications"].insert_one(doc)
-        return str(res.inserted_id)
+        try:
+            doc = {
+                "user_id": req.user_id,
+                "type": req.type.value,
+                "priority": req.priority.value,
+                "source_type": req.source_type,
+                "source_id": req.source_id,
+                "secondary_id": req.secondary_id,
+                "actor_user_id": getattr(req, "actor_user_id", None),
+                "actor_username": req.actor_username,
+                "title": req.title,
+                "message": req.message,
+                "preview": req.preview,
+                "action_path": req.action_path,
+                "is_read": False,
+                "created_at": datetime.utcnow()
+            }
+            res = await db["notifications"].insert_one(doc)
+            return str(res.inserted_id)
+        except Exception as e:
+            print(f"❌ Error creating notification: {e}")
+            traceback.print_exc()
+            return None
 
     async def get_user_notifications(self, user_id: str, unread_only: bool, limit: int, skip: int) -> List[NotificationResponse]:
         """Fetch notifications using optimized projection and index-hinted sorting"""
@@ -47,13 +54,15 @@ class NotificationService:
             "message": 1, 
             "is_read": 1, 
             "created_at": 1, 
-            "actor_username": 1
+            "actor_username": 1,
+            "preview": 1,
+            "action_path": 1,
+            "secondary_id": 1
         }
 
-        # Uses the {user_id: 1, created_at: -1} index automatically
         cursor = db["notifications"].find(query, projection).sort("created_at", -1).skip(skip).limit(limit)
         
-        # List comprehension for faster processing than .append()
+        # List comprehension for faster processing
         return [self._format_notification(n) async for n in cursor]
 
     async def get_notification_count(self, user_id: str, unread_only: bool) -> int:
@@ -81,20 +90,91 @@ class NotificationService:
         )
         return res.modified_count
 
+    # --- SPECIALIZED CREATORS ---
+
+    async def create_podcast_ready_notification(
+        self, user_id: str, podcast_id: str, podcast_title: str, topic_title: str
+    ) -> Optional[str]:
+        """Triggered when the background podcast generation finishes"""
+        req = CreateNotificationRequest(
+            user_id=user_id,
+            type=NotificationType.PODCAST_READY,
+            priority=NotificationPriority.HIGH,
+            source_type="podcast",
+            source_id=podcast_id,
+            title="🎧 Your Podcast is Ready!",
+            message=f"Your podcast '{podcast_title}' has been generated.",
+            preview=f"Based on: {topic_title[:60]}",
+            action_path="/library"
+        )
+        return await self.create_notification(req)
+
+    async def create_reply_notification(
+        self, discussion_owner_id: str, discussion_id: str, discussion_title: str, 
+        reply_author_id: str, reply_author_name: str, reply_preview: str
+    ) -> Optional[str]:
+        """Triggered when a user gets a reply in a discussion"""
+        if discussion_owner_id == reply_author_id:
+            return None
+        
+        req = CreateNotificationRequest(
+            user_id=discussion_owner_id,
+            type=NotificationType.REPLY,
+            priority=NotificationPriority.NORMAL,
+            source_type="discussion",
+            source_id=discussion_id,
+            actor_user_id=reply_author_id,
+            actor_username=reply_author_name,
+            title="New Reply",
+            message=f"{reply_author_name} replied to your discussion",
+            preview=reply_preview[:100] if reply_preview else None,
+            action_path=f"/discussion/{discussion_id}"
+        )
+        return await self.create_notification(req)
+
+    async def create_topic_update_notification(
+        self, user_id: str, topic_id: str, topic_title: str, update_type: str, update_count: int
+    ) -> Optional[str]:
+        """Triggered when a watched topic receives significant updates"""
+        req = CreateNotificationRequest(
+            user_id=user_id,
+            type=NotificationType.TOPIC_UPDATE,
+            priority=NotificationPriority.NORMAL,
+            source_type="topic",
+            source_id=topic_id,
+            title="📰 Topic Update",
+            message=f"Your watched topic '{topic_title[:50]}' has {update_count} new {'update' if update_count == 1 else 'updates'}",
+            preview=f"{update_count} new {'update' if update_count == 1 else 'updates'} available",
+            action_path=f"/topic/{topic_id}"
+        )
+        return await self.create_notification(req)
+
+    # --- FORMATTERS ---
+
     def _format_time_ago(self, dt: datetime) -> str:
         """Human-readable time difference"""
-        diff = datetime.utcnow() - dt.replace(tzinfo=None)
-        if diff.days > 0: 
-            return f"{diff.days}d ago"
-        elif diff.seconds // 3600 > 0: 
-            return f"{diff.seconds // 3600}h ago"
-        elif diff.seconds // 60 > 0: 
-            return f"{diff.seconds // 60}m ago"
-        return "Just now"
+        try:
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt.replace('Z', '+00:00')).replace(tzinfo=None)
+            elif hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+                
+            diff = datetime.utcnow() - dt
+            if diff.days > 0: 
+                return f"{diff.days}d ago"
+            elif diff.seconds // 3600 > 0: 
+                return f"{diff.seconds // 3600}h ago"
+            elif diff.seconds // 60 > 0: 
+                return f"{diff.seconds // 60}m ago"
+            return "Just now"
+        except Exception:
+            return "Recently"
 
     def _format_notification(self, n: Dict) -> NotificationResponse:
         """Map DB dictionary to Pydantic Response Model"""
-        dt = n["created_at"]
+        dt = n.get("created_at", datetime.utcnow())
+        dt_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+        
         return NotificationResponse(
             id=str(n["_id"]),
             type=NotificationType(n["type"]),
@@ -104,7 +184,7 @@ class NotificationService:
             title=n.get("title", ""),
             message=n.get("message", ""),
             is_read=n.get("is_read", False),
-            created_at=dt.isoformat(),
+            created_at=dt_str,
             time_ago=self._format_time_ago(dt),
             secondary_id=n.get("secondary_id"),
             actor_username=n.get("actor_username"),

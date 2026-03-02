@@ -6,7 +6,6 @@ Manages longitudinal topic development with intelligent snapshot creation
 Tracks significant updates and regenerates titles/summaries when needed
 """
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Tuple, Any
 from bson import ObjectId
 import motor.motor_asyncio
@@ -24,9 +23,6 @@ from app.config import MONGODB_URI, MONGODB_DB_NAME
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Timezone Configuration
-UK_TZ = ZoneInfo("Europe/London")
 
 # Model configuration
 EMBEDDING_MODEL = "gemini-embedding-001"
@@ -95,6 +91,35 @@ class TopicHistoryService:
             logger.info("Database indexes verified")
         except Exception as e:
             logger.error(f"Error creating indexes: {e}")
+
+    # ✅ ADDED: The missing retrieval function to send data to the frontend
+    async def get_topic_timeline(self, topic_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Fetch the formatted history timeline for a topic"""
+        try:
+            cursor = self.history_collection.find({"topic_id": ObjectId(topic_id)}).sort("created_at", -1).limit(limit)
+            timeline = []
+            
+            async for point in cursor:
+                created_at = point.get("created_at") or datetime.utcnow()
+                
+                timeline.append({
+                    "id": str(point["_id"]),
+                    "history_type": point.get("history_type", "periodic"),
+                    "created_at": created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at),
+                    "title": point.get("title", ""),
+                    "summary": point.get("summary", ""),
+                    "key_insights": point.get("key_insights", []),
+                    "article_count": point.get("article_count", 0),
+                    "sources": point.get("sources", []),
+                    "confidence": point.get("confidence", 0),
+                    "significance_score": point.get("significance_score", 0),
+                    "was_regenerated": point.get("was_regenerated", False),
+                    "development_note": point.get("development_note")
+                })
+            return timeline
+        except Exception as e:
+            logger.error(f"Error fetching topic timeline: {e}")
+            return []
     
     def cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         try:
@@ -163,12 +188,12 @@ class TopicHistoryService:
         
         total_score += drift_score * weights["embedding_drift"]
         
-        # 5. TIME FACTOR (Timezone Safe)
-        last_history_time = last_history.get("created_at", datetime.now(UK_TZ))
-        if last_history_time.tzinfo is None:
-            last_history_time = last_history_time.replace(tzinfo=UK_TZ)
+        # 5. TIME FACTOR
+        last_history_time = last_history.get("created_at", datetime.utcnow())
+        if last_history_time.tzinfo is not None:
+            last_history_time = last_history_time.replace(tzinfo=None)
             
-        time_elapsed = (datetime.now(UK_TZ) - last_history_time).total_seconds() / 3600
+        time_elapsed = (datetime.utcnow() - last_history_time).total_seconds() / 3600
         time_score = min(1.0, time_elapsed / self.config.TIME_ELAPSED_HOURS)
         breakdown["time_factor"] = {"score": time_score, "hours_elapsed": time_elapsed}
         total_score += time_score * weights["time_factor"]
@@ -196,7 +221,7 @@ class TopicHistoryService:
         return "major_update"
     
     async def regenerate_topic_metadata(self, topic_id: str, history_type: str) -> Dict[str, Any]:
-        """Regenerate title, summary, and insights using Async Gemini with Structured Outputs"""
+        """Regenerate title, summary, and insights using Async Gemini"""
         if not self.gemini_client:
             return {"error": "Gemini API not configured"}
         
@@ -216,7 +241,7 @@ class TopicHistoryService:
             
             article_texts = []
             for article in articles[:10]:
-                date_str = str(article.get("published_date", datetime.now(UK_TZ)))
+                date_str = str(article.get("published_date", datetime.utcnow()))
                 desc = article.get('description', article.get('content', 'No content'))
                 article_texts.append(f"Title: {article.get('title')}\nSource: {article.get('source')}\nDate: {date_str}\nContent: {desc}\n")
             
@@ -234,7 +259,6 @@ Articles:
 
 RULES: MAX 10 WORDS FOR TITLE. Be specific."""
 
-            # FIXED: Async call & guaranteed JSON output
             response = await self.gemini_client.aio.models.generate_content(
                 model=TEXT_MODEL,
                 contents=prompt,
@@ -250,7 +274,7 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
                 "summary": result["summary"],
                 "key_insights": result["key_insights"],
                 "confidence": result.get("confidence_score", 70) / 100.0,
-                "last_regenerated": datetime.now(UK_TZ),
+                "last_regenerated": datetime.utcnow(),
                 "development_note": result.get("development_note")
             }
             
@@ -267,10 +291,11 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
             if not topic:
                 return None
             
+            # ✅ FIXED: Use datetime.utcnow() to prevent PyMongo Timezone crashes
             history_doc = {
                 "topic_id": ObjectId(topic_id),
                 "history_type": history_type,
-                "created_at": datetime.now(UK_TZ),
+                "created_at": datetime.utcnow(),
                 "title": topic.get("title"),
                 "summary": topic.get("summary"),
                 "key_insights": topic.get("key_insights", []),
@@ -280,7 +305,7 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
                 "centroid_embedding": topic.get("centroid_embedding"),
                 "category": topic.get("category"),
                 "image_url": topic.get("image_url"),
-                "significance_score": significance_breakdown.get("total_score"),
+                "significance_score": significance_breakdown.get("total_score", 1.0),
                 "significance_breakdown": significance_breakdown,
                 "was_regenerated": regenerated_metadata is not None,
                 "development_note": regenerated_metadata.get("development_note") if isinstance(regenerated_metadata, dict) else None
@@ -291,12 +316,14 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
             
             await self.topics_collection.update_one(
                 {"_id": ObjectId(topic_id)},
-                {"$set": {"last_history_point": datetime.now(UK_TZ), "history_point_count": history_count}}
+                {"$set": {"last_history_point": datetime.utcnow(), "history_point_count": history_count}}
             )
+            logger.info(f"✅ Successfully saved history point '{history_type}' for {topic_id}")
             return str(result.inserted_id)
             
         except Exception as e:
-            logger.error(f"Error creating history point: {e}")
+            logger.error(f"❌ Error creating history point: {e}")
+            traceback.print_exc()
             return None
     
     async def check_and_create_history(self, topic_id: str) -> Optional[Dict[str, Any]]:
@@ -343,19 +370,14 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
             return None
     
     async def run_history_check_cycle(self) -> Dict[str, Any]:
-        """
-        FIXED: Uses cursor streaming instead of inefficient .skip().limit() pagination.
-        This saves memory and runs significantly faster.
-        """
-        logger.info(f"Topic History Check Cycle Started at {datetime.now(UK_TZ).strftime('%H:%M:%S %Z')}")
+        logger.info(f"Topic History Check Cycle Started at {datetime.utcnow().strftime('%H:%M:%S UTC')}")
         
         stats = {
             "topics_checked": 0, "histories_created": 0, "by_type": {}, 
-            "regenerations": 0, "start_time": datetime.now(UK_TZ), "errors": 0
+            "regenerations": 0, "start_time": datetime.utcnow(), "errors": 0
         }
         
         try:
-            # Stream cursor directly
             cursor = self.topics_collection.find({"status": "active", "has_title": True})
             
             async for topic in cursor:
@@ -371,7 +393,6 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
                         if result.get("was_regenerated"):
                             stats["regenerations"] += 1
                             
-                    # Small yield to prevent event loop starvation on massive databases
                     await asyncio.sleep(0.01)
                     
                 except Exception as e:
@@ -382,7 +403,7 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
             logger.error(f"Error in history check cycle: {e}")
             stats["errors"] += 1
         
-        stats["end_time"] = datetime.now(UK_TZ)
+        stats["end_time"] = datetime.utcnow()
         stats["duration_seconds"] = (stats["end_time"] - stats["start_time"]).total_seconds()
         
         logger.info(f"Summary: {stats['topics_checked']} checked, {stats['histories_created']} histories created.")

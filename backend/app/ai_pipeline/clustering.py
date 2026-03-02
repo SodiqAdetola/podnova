@@ -2,14 +2,11 @@
 """
 PodNova Clustering Module
 FULLY ASYNC VERSION with Motor
-NOW WITH INTEGRATED TOPIC HISTORY TRACKING, AUTOMATIC DISCUSSIONS, O(1) CENTROID MATH,
-AND BULLETPROOF TITLE GENERATION.
 """
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import os
 import json
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from typing import List, Dict, Optional, Any
 import numpy as np
 import motor.motor_asyncio
@@ -32,9 +29,6 @@ TOPIC_INACTIVE_DAYS = 90
 EMBEDDING_MODEL = "gemini-embedding-001"
 TEXT_MODEL = "gemini-2.5-flash"
 
-# Timezone
-UK_TZ = ZoneInfo("Europe/London")
-
 # Initialize Gemini client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -45,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 class ClusteringService:
     def __init__(self, mongo_uri: str, db_name: str):
-        """Initialize the clustering service with Motor async client"""
         self.client_db = motor.motor_asyncio.AsyncIOMotorClient(
             mongo_uri, 
             tlsCAFile=certifi.where(),
@@ -62,7 +55,6 @@ class ClusteringService:
         asyncio.create_task(self._ensure_indexes())
     
     async def _ensure_indexes(self):
-        """Create indexes for efficient queries"""
         try:
             await self.topics_collection.create_index("category")
             await self.topics_collection.create_index("last_updated")
@@ -73,7 +65,6 @@ class ClusteringService:
             logger.error(f"Error creating indexes: {e}")
     
     async def compute_embedding(self, text: str) -> Optional[np.ndarray]:
-        """Compute embedding for given text using Async Gemini"""
         try:
             response = await client.aio.models.embed_content(
                 model=EMBEDDING_MODEL,
@@ -92,22 +83,20 @@ class ClusteringService:
             return None
     
     def cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calculate cosine similarity between two vectors"""
         dot_product = np.dot(vec1, vec2)
         norm_product = np.linalg.norm(vec1) * np.linalg.norm(vec2)
         return float(dot_product / norm_product) if norm_product != 0 else 0.0
     
     async def check_and_resurrect_topic(self, topic: Dict[str, Any]) -> bool:
-        """Check if a stale topic should be resurrected"""
         if topic.get("status") != "stale":
             return False
         
         stale_since = topic.get("stale_since")
         if stale_since:
-            if stale_since.tzinfo is None:
-                stale_since = stale_since.replace(tzinfo=UK_TZ)
+            if stale_since.tzinfo is not None:
+                stale_since = stale_since.replace(tzinfo=None)
                 
-            days_stale = (datetime.now(UK_TZ) - stale_since).days
+            days_stale = (datetime.utcnow() - stale_since).days
             if days_stale > self.maintenance_service.config.MAX_RESURRECTION_AGE_DAYS:
                 return False
         
@@ -116,7 +105,7 @@ class ClusteringService:
             {
                 "$set": {
                     "status": "active",
-                    "resurrected_at": datetime.now(UK_TZ)
+                    "resurrected_at": datetime.utcnow()
                 },
                 "$unset": {"stale_since": ""}
             }
@@ -124,7 +113,6 @@ class ClusteringService:
         return True
     
     async def find_matching_topic(self, article_embedding: np.ndarray, category: str) -> Optional[Dict[str, Any]]:
-        """Find existing topic that matches the article embedding"""
         best_match = None
         best_similarity = 0.0
         
@@ -163,21 +151,19 @@ class ClusteringService:
         return best_match
     
     def calculate_new_centroid(self, old_centroid: List[float], new_embedding: np.ndarray, current_count: int) -> np.ndarray:
-        """O(1) Mathematical Centroid Update."""
         old_vec = np.array(old_centroid)
         new_vec = ((old_vec * current_count) + new_embedding) / (current_count + 1)
         return new_vec
 
     async def create_new_topic(self, article_doc: Dict[str, Any], article_embedding: np.ndarray) -> str:
-        """Create a new topic seeded with this article"""
         topic_doc = {
             "category": article_doc["category"],
             "article_ids": [article_doc["_id"]],
             "sources": [article_doc["source"]],
             "centroid_embedding": article_embedding.tolist(),
             "confidence": 0.5,
-            "created_at": datetime.now(UK_TZ),
-            "last_updated": datetime.now(UK_TZ),
+            "created_at": datetime.utcnow(),
+            "last_updated": datetime.utcnow(),
             "status": "active",
             "article_count": 1,
             "has_title": False,
@@ -206,7 +192,6 @@ class ClusteringService:
         article_doc: Dict[str, Any],
         article_embedding: np.ndarray
     ) -> None:
-        """Add article to existing topic and update metadata"""
         topic_id = topic["_id"]
         article_ids = topic.get("article_ids", [])
         sources = set(topic.get("sources", []))
@@ -223,8 +208,6 @@ class ClusteringService:
         )
         
         confidence = topic.get("confidence", 0.5)
-        # Fix 1: Provide a small confidence bump even if it's not a new source
-        # This allows heavily reported single-source topics to eventually get a title.
         if is_new_source:
             confidence = min(1.0, confidence + 0.1)
         else:
@@ -235,7 +218,7 @@ class ClusteringService:
             "sources": list(sources),
             "centroid_embedding": new_centroid.tolist(),
             "confidence": confidence,
-            "last_updated": datetime.now(UK_TZ),
+            "last_updated": datetime.utcnow(),
             "article_count": len(article_ids)
         }
         
@@ -260,7 +243,6 @@ class ClusteringService:
             await self.maintenance_service.trim_topic_articles(str(topic_id))
     
     async def create_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str, category: str) -> Optional[str]:
-        """Automatically create a discussion for a topic when it becomes active."""
         try:
             discussion_id = await create_or_get_topic_discussion(
                 topic_id=str(topic_id),
@@ -279,7 +261,6 @@ class ClusteringService:
         return None
     
     async def generate_topic_title(self, topic_id: str) -> bool:
-        """Generate title and summary for a topic using Async Gemini LLM"""
         try:
             topic = await self.topics_collection.find_one({"_id": topic_id})
             if not topic:
@@ -300,7 +281,6 @@ class ClusteringService:
             
             combined_articles = "\n---\n".join(article_texts)
             
-            # User's highly detailed, few-shot prompt restored
             prompt = f"""Write a clear, straightforward headline for a news podcast. Use simple words that everyone can understand.
 
 Category: {topic.get('category', 'general').upper()}
@@ -330,14 +310,10 @@ RULES FOR THE HEADLINE:
 • "Paradigm shift in tech landscape" (jargon, meaningless)
 
 Generate a JSON object with:
-
-- **title** (string, MAX 10 WORDS): Clear, straightforward headline following the rules above.
-
-- **summary** (string, 2-3 sentences): Clear overview of what happened and why it matters (MAKE THIS INCLUSIVE FOR ALL COMPREHENSION LEVELS).
-
+- **title** (string, MAX 10 WORDS): Clear, straightforward headline.
+- **summary** (string, 2-3 sentences): Clear overview of what happened.
 - **key_insights** (array, 3-5 strings): Specific, concrete takeaways.
-
-- **confidence_score** (integer, 0-100): How reliable is this information? Be strict - only give high scores for well-known, reputable sources with clear facts.
+- **confidence_score** (integer, 0-100): How reliable is this information.
 
 JSON only, no markdown:"""
 
@@ -349,7 +325,6 @@ JSON only, no markdown:"""
                 )
             )
             
-            # Bulletproof JSON Cleaning
             raw_text = response.text.strip()
             if raw_text.startswith("```json"):
                 raw_text = raw_text.replace("```json", "", 1)
@@ -362,16 +337,10 @@ JSON only, no markdown:"""
             
             result = json.loads(raw_text.strip())
             
-            # SAFETY CHECK: Ensure the LLM actually returned a dictionary
-            if not isinstance(result, dict):
-                logger.error(f"  LLM returned a {type(result).__name__} instead of a dict. Raw output: {raw_text}")
+            if not isinstance(result, dict) or not result.get("title"):
                 return False
                 
             title = result.get("title")
-            
-            if not title:
-                logger.error("  JSON response was missing the 'title' key.")
-                return False
             
             await self.topics_collection.update_one(
                 {"_id": topic_id},
@@ -381,12 +350,13 @@ JSON only, no markdown:"""
                         "summary": result.get("summary", ""),
                         "key_insights": result.get("key_insights", []),
                         "has_title": True,
-                        "title_generated_at": datetime.now(UK_TZ),
+                        "title_generated_at": datetime.utcnow(),
                         "confidence": result.get("confidence_score", 70) / 100.0
                     }
                 }
             )
             
+            # ✅ THIS WILL NOW WORK BECAUSE TIMEZONES ARE FIXED
             await self.history_service.create_history_point(
                 str(topic_id), "initial", {"total_score": 1.0, "type": "initial_title"}, result
             )
@@ -400,15 +370,11 @@ JSON only, no markdown:"""
             logger.info(f"  Generated title: {title}")
             return True
             
-        except json.JSONDecodeError as e:
-            logger.error(f"  JSON parsing error (Title gen): {e}")
-            return False
         except Exception as e:
             logger.error(f"  Error generating topic title: {str(e)}")
             return False
     
     async def assign_to_topic(self, article_doc: Dict[str, Any]) -> Optional[str]:
-        """Main function: compute embedding and assign article to topic"""
         text_for_embedding = f"{article_doc['title']} {article_doc.get('description', '')}"
         
         embedding = await self.compute_embedding(text_for_embedding)
@@ -430,11 +396,10 @@ JSON only, no markdown:"""
             return await self.create_new_topic(article_doc, embedding)
     
     async def process_pending_articles(self) -> Dict[str, Any]:
-        """Process all articles with status 'pending_clustering'"""
-        logger.info(f"Starting Clustering at {datetime.now(UK_TZ).strftime('%H:%M:%S')}")
+        logger.info(f"Starting Clustering at {datetime.utcnow().strftime('%H:%M:%S UTC')}")
         
         cursor = self.articles_collection.find({"status": "pending_clustering"})
-        stats = {"processed": 0, "start_time": datetime.now(UK_TZ)}
+        stats = {"processed": 0, "start_time": datetime.utcnow()}
         
         async for article in cursor:
             try:
@@ -444,7 +409,6 @@ JSON only, no markdown:"""
             except Exception as e:
                 logger.error(f"Error assigning article: {e}")
         
-        # Generate titles for ready topics
         ready_cursor = self.topics_collection.find({
             "has_title": False,
             "status": "active",
@@ -455,14 +419,12 @@ JSON only, no markdown:"""
         async for topic in ready_cursor:
             success = await self.generate_topic_title(topic["_id"])
             if success:
-                # API Rate Limiter to protect against 429 Too Many Requests
                 await asyncio.sleep(4) 
         
         return stats
     
     async def mark_inactive_topics(self):
-        """Mark topics as inactive if not updated recently"""
-        cutoff_date = datetime.now(UK_TZ) - timedelta(days=TOPIC_INACTIVE_DAYS)
+        cutoff_date = datetime.utcnow() - timedelta(days=TOPIC_INACTIVE_DAYS)
         await self.topics_collection.update_many(
             {"last_updated": {"$lt": cutoff_date}, "status": "active"},
             {"$set": {"status": "inactive"}}

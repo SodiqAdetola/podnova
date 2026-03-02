@@ -1,3 +1,4 @@
+// frontend/src/screens/TopicDetail.tsx
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -33,12 +34,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
 type TopicDetailNavigationProp = NativeStackNavigationProp<MainStackParamList>;
-
-// Interface for discussion data
-interface DiscussionData {
-  id: string;
-  reply_count: number;
-}
 
 const TopicDetailScreen: React.FC = () => {
   const navigation = useNavigation<TopicDetailNavigationProp>();
@@ -79,14 +74,37 @@ const TopicDetailScreen: React.FC = () => {
 
   const loadTopic = async () => {
     try {
+      if (!topicId || topicId === "undefined" || topicId.includes("undefined")) {
+        console.error("Invalid topic ID passed to screen:", topicId);
+        setTopic(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      console.log("Fetching topic detail for:", topicId);
       const response = await fetch(`${API_BASE_URL}/topics/${topicId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load topic: ${response.status}`);
+      }
+      
       const data = await response.json();
+      
+      // Map _id to id if necessary
+      if (data && data._id && !data.id) {
+        data.id = data._id;
+      }
+      
       setTopic(data);
       
-      // After loading the topic, fetch the discussion for it
-      await fetchTopicDiscussion();
+      // Fetch discussion using the confirmed safe ID
+      if (data.id) {
+        await fetchTopicDiscussion(data.id);
+      }
     } catch (error) {
-      console.error("Error loading topic:", error);
+      console.error("Error loading topic details:", error);
+      setTopic(null); 
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -98,30 +116,23 @@ const TopicDetailScreen: React.FC = () => {
     loadTopic();
   };
 
-  const fetchTopicDiscussion = async () => {
+  const fetchTopicDiscussion = async (safeTopicId: string) => {
     try {
       setLoadingDiscussion(true);
       const token = await getAuthToken();
       
-      if (!token) {
-        console.log("No auth token for fetching discussion");
-        return;
-      }
+      if (!token) return;
 
       const response = await fetch(
-        `${API_BASE_URL}/discussions?topic_id=${topicId}&discussion_type=topic`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        `${API_BASE_URL}/discussions?topic_id=${safeTopicId}&discussion_type=topic`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.ok) {
         const data = await response.json();
         if (data.discussions && data.discussions.length > 0) {
           const discussion = data.discussions[0];
-          setDiscussionId(discussion.id);
+          setDiscussionId(discussion.id || discussion._id);
           setReplyCount(discussion.reply_count || 0);
         }
       }
@@ -348,7 +359,6 @@ const TopicDetailScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -364,7 +374,6 @@ const TopicDetailScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
@@ -377,10 +386,8 @@ const TopicDetailScreen: React.FC = () => {
           { paddingBottom: miniPlayerHeight + 20 }
         ]}
       >
-        {/* Hero Section */}
         {renderHeroImage()}
 
-        {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.topicTitle}>{topic.title}</Text>
           <View style={styles.metadata}>
@@ -396,19 +403,14 @@ const TopicDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Stats Grid */}
         {renderStats()}
-
-        {/* Action Buttons */}
         {renderActionButtons()}
 
-        {/* Summary Section */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Summary</Text>
           <Text style={styles.summaryText}>{topic.summary}</Text>
         </View>
 
-        {/* Key Insights with Feather check-circle icons */}
         {topic.key_insights && topic.key_insights.length > 0 && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Key Insights</Text>
@@ -421,7 +423,6 @@ const TopicDetailScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Tags */}
         {topic.tags && topic.tags.length > 0 && (
           <View style={styles.tagsContainer}>
             {topic.tags.map((tag, index) => (
@@ -432,14 +433,10 @@ const TopicDetailScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Articles Section - Collapsible */}
         {renderArticlesSection()}
-
-        {/* Discussion Section - Non-collapsible, takes more space */}
         {renderDiscussionSection()}
       </ScrollView>
 
-      {/* Modals */}
       {topic && (
         <>
           <PodcastGeneratorModal
@@ -451,7 +448,6 @@ const TopicDetailScreen: React.FC = () => {
               article_count: topic.article_count,
             }}
           />
-
           <TopicHistoryModal
             visible={showHistoryTimeline}
             onClose={() => setShowHistoryTimeline(false)}
@@ -683,7 +679,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#4B5563",
   },
-  // Articles Section
   articlesSection: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -753,9 +748,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
   },
-  // Discussion Section - Non-collapsible
   discussionSection: {
-    marginBottom: 0,
+    marginTop: 40,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,

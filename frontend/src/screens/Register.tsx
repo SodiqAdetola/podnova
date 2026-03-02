@@ -1,5 +1,4 @@
-// frontend/src/screens/RegisterScreen.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
@@ -25,17 +24,79 @@ type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com';
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
-  const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  
+  // Username availability states
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  
+  // Debounce username check
+  useEffect(() => {
+    const checkUsername = async () => {
+      if (!username.trim() || username.length < 3) {
+        setUsernameAvailable(null);
+        setUsernameError(username.length > 0 ? "Username must be at least 3 characters" : null);
+        return;
+      }
+
+      setCheckingUsername(true);
+      setUsernameError(null);
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/users/check-username/${encodeURIComponent(username.trim())}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setUsernameAvailable(data.available);
+          setUsernameError(data.available ? null : "Username is already taken");
+        } else {
+          setUsernameAvailable(null);
+          setUsernameError("Could not check username availability");
+        }
+      } catch (error) {
+        console.error("Error checking username:", error);
+        setUsernameAvailable(null);
+        setUsernameError("Network error checking username");
+      } finally {
+        setCheckingUsername(false);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      if (username) {
+        checkUsername();
+      }
+    }, 500); // Debounce for 500ms
+
+    return () => clearTimeout(timer);
+  }, [username]);
 
   const handleRegister = async () => {
-    if (!fullName.trim()) {
+    // Validate username
+    if (!username.trim()) {
       Alert.alert("Missing Information", "Please enter your username.");
+      return;
+    }
+
+    if (username.length < 3) {
+      Alert.alert("Invalid Username", "Username must be at least 3 characters.");
+      return;
+    }
+
+    if (usernameAvailable === false) {
+      Alert.alert("Username Taken", "This username is already taken. Please choose another one.");
+      return;
+    }
+
+    if (usernameAvailable === null && !usernameError) {
+      Alert.alert("Please wait", "Still checking username availability...");
       return;
     }
 
@@ -84,7 +145,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       const firebaseUser = cred.user;
 
       await updateProfile(firebaseUser, {
-        displayName: fullName.trim(),
+        displayName: username.trim(),
       });
 
       const token = await firebaseUser.getIdToken();
@@ -140,6 +201,19 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const getUsernameIcon = () => {
+    if (checkingUsername) {
+      return <ActivityIndicator size="small" color="#6366F1" />;
+    }
+    if (usernameAvailable === true) {
+      return <Ionicons name="checkmark-circle" size={20} color="#10B981" />;
+    }
+    if (usernameAvailable === false || usernameError) {
+      return <Ionicons name="close-circle" size={20} color="#EF4444" />;
+    }
+    return <Ionicons name="person-outline" size={20} color="#9CA3AF" />;
+  };
+
   return (
     <KeyboardAvoidingView 
       style={styles.container} 
@@ -177,21 +251,35 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Form Section */}
         <View style={styles.formContainer}>
-          {/* Full Name Input */}
+          {/* Username Input */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Username</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[
+              styles.inputWrapper,
+              usernameAvailable === false && styles.inputWrapperError,
+              usernameAvailable === true && styles.inputWrapperSuccess
+            ]}>
               <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="JohnDoe"
                 placeholderTextColor="#9CA3AF"
-                value={fullName}
-                onChangeText={setFullName}
+                value={username}
+                onChangeText={setUsername}
                 autoCapitalize="words"
                 editable={!loading}
               />
+              <View style={styles.usernameStatus}>
+                {getUsernameIcon()}
+              </View>
             </View>
+            {usernameError && (
+              <Text style={styles.errorText}>{usernameError}</Text>
+            )}
+            {usernameAvailable === true && (
+              <Text style={styles.successText}>Username is available!</Text>
+            )}
+            <Text style={styles.hintText}>Minimum 3 characters</Text>
           </View>
 
           {/* Email Input */}
@@ -287,13 +375,19 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
           {/* Create Account Button */}
           <TouchableOpacity
-            style={[styles.createButton, loading && styles.createButtonDisabled]}
+            style={[
+              styles.createButton, 
+              (loading || checkingUsername || usernameAvailable === false) && styles.createButtonDisabled
+            ]}
             onPress={handleRegister}
-            disabled={loading}
+            disabled={loading || checkingUsername || usernameAvailable === false}
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={loading ? ['#9CA3AF', '#6B7280'] : ['#8B5CF6', '#6366F1']}
+              colors={(loading || checkingUsername || usernameAvailable === false) 
+                ? ['#9CA3AF', '#6B7280'] 
+                : ['#8B5CF6', '#6366F1']
+              }
               style={styles.createButtonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -402,6 +496,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 50,
   },
+  inputWrapperError: {
+    borderColor: "#EF4444",
+    backgroundColor: "#FEF2F2",
+  },
+  inputWrapperSuccess: {
+    borderColor: "#10B981",
+    backgroundColor: "#F0FDF4",
+  },
   inputIcon: {
     marginRight: 12,
   },
@@ -411,8 +513,30 @@ const styles = StyleSheet.create({
     color: "#111827",
     height: "100%",
   },
+  usernameStatus: {
+    marginLeft: 8,
+  },
   eyeIcon: {
     padding: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#EF4444",
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  successText: {
+    fontSize: 12,
+    color: "#10B981",
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  hintText: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginTop: 4,
+    marginLeft: 4,
   },
   requirementsContainer: {
     backgroundColor: "#F0FDF4",

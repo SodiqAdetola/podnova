@@ -1,4 +1,3 @@
-# app/models/notification.py
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
@@ -87,3 +86,10 @@ class CreateNotificationRequest(BaseModel):
     message: str
     preview: Optional[str] = None
     action_path: Optional[str] = None
+
+class NotificationListResponse(BaseModel):
+    notifications: List[NotificationResponse]
+    total: int
+    unread_count: int
+    page: int
+    limit: int

@@ -12,7 +12,6 @@ from app.models.discussion import (
 )
 from app.services.ai_analysis_service import ai_analysis_service
 from app.services.notification_service import notification_service
-from app.models.notification import NotificationType
 import re
 import traceback
 
@@ -285,7 +284,6 @@ class DiscussionService:
             print(f"❌ Error in get_discussion_by_id: {e}")
             traceback.print_exc()
             return None
-    
 
     async def create_reply(
         self,
@@ -323,7 +321,6 @@ class DiscussionService:
             result = await db["replies"].insert_one(reply_data)
             reply_data["id"] = str(result.inserted_id)
             
-            # Update discussion reply count and last activity
             await db["discussions"].update_one(
                 {"_id": ObjectId(discussion_id)},
                 {
@@ -334,18 +331,23 @@ class DiscussionService:
             
             print(f"Created reply: {result.inserted_id}")
             
-            # Create notification for discussion owner (if not their own reply)
-            if discussion and discussion.get("user_id") and discussion["user_id"] != user_id:
-                from app.services.notification_service import notification_service
-                
-                await notification_service.create_reply_notification(
-                    discussion_owner_id=discussion["user_id"],
-                    discussion_id=discussion_id,
-                    discussion_title=discussion.get("title", "Discussion"),
-                    reply_author_id=user_id,
-                    reply_author_name=username,
-                    reply_preview=content[:100]
-                )
+            # PROTECTED NOTIFICATION BLOCK
+            try:
+                # We only notify if the discussion belongs to a real user (not AI)
+                # AND the user replying is NOT the owner of the discussion.
+                owner_id = discussion.get("user_id")
+                if owner_id and owner_id != user_id:
+                    print(f"🔔 Triggering reply notification for user: {owner_id}")
+                    await notification_service.create_reply_notification(
+                        discussion_owner_id=owner_id,
+                        discussion_id=discussion_id,
+                        discussion_title=discussion.get("title", "Discussion"),
+                        reply_author_id=user_id,
+                        reply_author_name=username,
+                        reply_preview=content[:100]
+                    )
+            except Exception as notif_e:
+                print(f"⚠️ Non-fatal error creating reply notification: {notif_e}")
             
             return Reply(**reply_data)
             
@@ -584,8 +586,5 @@ class DiscussionService:
         except Exception as e:
             print(f"⚠️ Error formatting time: {e}")
             return "Unknown"
-
- 
-
 
 discussion_service = DiscussionService()

@@ -1,3 +1,4 @@
+# app/controllers/podcast_controller.py
 """
 PodNova Podcast Generation Controller
 Orchestrates podcast generation workflow using service layer
@@ -7,13 +8,15 @@ from typing import Dict, Optional, List
 from bson import ObjectId
 import asyncio
 from enum import Enum
+import traceback
 
 from app.db import db
 from app.services.script_service import ScriptService
 from app.services.audio_service import AudioService
 from app.services.storage_service import StorageService
 from app.services.user_service import UserService
-from app.monitor import thread_monitor  # Import from monitor.py instead of main
+from app.services.notification_service import notification_service
+from app.monitor import thread_monitor
 
 
 class PodcastStyle(str, Enum):
@@ -81,32 +84,22 @@ async def create_podcast(
     custom_prompt: Optional[str] = None,
     focus_areas: Optional[List[str]] = None
 ) -> Dict:
-    """
-    Create a new podcast generation job
-    Uses user preferences as defaults if parameters not provided
-    """
-    # Fetch user profile for defaults
+    """Create a new podcast generation job"""
     user_profile = await user_service.get_user_profile(user_id)
     
-    # Apply user preferences as defaults
     if user_profile:
         prefs = user_profile.preferences
-        
         if length_minutes is None:
             length_minutes = PODCAST_LENGTH_MAP.get(prefs.default_podcast_length, 5)
-        
         if style is None:
             style = TONE_TO_STYLE_MAP.get(prefs.default_tone, PodcastStyle.STANDARD)
-        
         if voice is None:
             voice = PodcastVoice.CALM_FEMALE
     else:
-        # Fallback defaults
         voice = voice or PodcastVoice.CALM_FEMALE
         style = style or PodcastStyle.STANDARD
         length_minutes = length_minutes or 5
     
-    # Verify topic exists
     try:
         topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
     except:
@@ -115,12 +108,11 @@ async def create_podcast(
     if not topic:
         raise ValueError("Topic not found")
     
-    # Create podcast document
     podcast_doc = {
         "user_id": user_id,
         "topic_id": ObjectId(topic_id),
         "topic_title": topic["title"],
-        "category": topic["category"],
+        "category": topic.get("category", "general"),
         "status": PodcastStatus.PENDING,
         "voice": voice,
         "style": style,
@@ -141,7 +133,6 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = result.inserted_id
     
-    # Start async generation task
     asyncio.create_task(_generate_podcast_async(str(podcast_id)))
     
     return {
@@ -157,42 +148,34 @@ async def create_podcast(
 
 async def _generate_podcast_async(podcast_id: str):
     """Async task to generate podcast script and audio"""
-    thread_monitor.start_task()  # Track thread usage
+    thread_monitor.start_task()
     try:
-        # Update status: generating script
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         
-        # Generate script using script service
         script = await script_service.generate_script(podcast_id)
         
-        # Update status: generating audio
         await _update_podcast_status(
             podcast_id, 
             PodcastStatus.GENERATING_AUDIO,
             {"script": script}
         )
         
-        # Generate audio using audio service
         audio_data, duration = await _generate_audio_for_podcast(podcast_id, script)
         
-        # Update status: uploading
         await _update_podcast_status(
             podcast_id,
             PodcastStatus.UPLOADING,
             {"duration_seconds": duration}
         )
         
-        # Upload to Firebase using storage service
         audio_url, transcript_url = await storage_service.upload_podcast_files(
             podcast_id,
             audio_data,
             script
         )
         
-        # Calculate credits used
         credits_used = max(1, int(duration / 60))
         
-        # Mark as completed
         await _update_podcast_status(
             podcast_id,
             PodcastStatus.COMPLETED,
@@ -203,25 +186,35 @@ async def _generate_podcast_async(podcast_id: str):
                 "completed_at": datetime.now()
             }
         )
-        podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
-        if podcast:
-            from app.services.notification_service import notification_service
-            await notification_service.create_podcast_ready_notification(
-                user_id=podcast["user_id"],
-                podcast_id=podcast_id,
-                podcast_title=f"{podcast['category'].title()} Briefing", # Generate a clean title
-                topic_title=podcast["topic_title"]
-            )
+        
+        # PROTECTED NOTIFICATION BLOCK
+        try:
+            print(f"🔔 Attempting to trigger podcast notification for {podcast_id}")
+            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+            if podcast:
+                category_name = str(podcast.get("category") or "General").title()
+                topic_title = str(podcast.get("topic_title", "Your Podcast"))
+                
+                await notification_service.create_podcast_ready_notification(
+                    user_id=podcast["user_id"],
+                    podcast_id=podcast_id,
+                    podcast_title=f"{category_name} Briefing", 
+                    topic_title=topic_title
+                )
+                print(f"  ✅ Podcast notification queued successfully")
+        except Exception as notif_e:
+            print(f"⚠️ Non-fatal error creating podcast notification: {notif_e}")
+            traceback.print_exc()
         
     except Exception as e:
-        # Mark as failed
+        print(f"❌ Fatal error in podcast generation: {e}")
         await _update_podcast_status(
             podcast_id,
             PodcastStatus.FAILED,
             {"error_message": str(e)}
         )
     finally:
-        thread_monitor.end_task()  # Stop tracking
+        thread_monitor.end_task()
 
 
 async def _update_podcast_status(
@@ -229,12 +222,10 @@ async def _update_podcast_status(
     status: PodcastStatus,
     additional_fields: Optional[Dict] = None
 ):
-    """Helper to update podcast status"""
     update_fields = {
         "status": status,
         "updated_at": datetime.now()
     }
-    
     if additional_fields:
         update_fields.update(additional_fields)
     
@@ -245,15 +236,12 @@ async def _update_podcast_status(
 
 
 async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[bytes, int]:
-    """Generate audio for podcast using audio service"""
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]
     
-    # Get user's speaking rate preference
     user_profile = await user_service.get_user_profile(podcast["user_id"])
-    speaking_rate = 1.0  # Default speaking rate
+    speaking_rate = 1.0  
     
-    # Generate audio
     return await audio_service.generate_audio(script, voice_name, speaking_rate)
 
 

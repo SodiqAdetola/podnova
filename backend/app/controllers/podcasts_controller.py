@@ -131,13 +131,13 @@ async def create_podcast(
     }
     
     result = await db["podcasts"].insert_one(podcast_doc)
-    podcast_id = result.inserted_id
+    podcast_id = str(result.inserted_id)
     
-    # Launch background task with only the podcast ID
-    asyncio.create_task(_generate_podcast_async(str(podcast_id)))
+    # ✅ FIXED: Only pass the podcast_id to match the updated background task signature
+    asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {
-        "id": str(podcast_id),
+        "id": podcast_id,
         "status": PodcastStatus.PENDING,
         "topic_id": topic_id,
         "topic_title": topic["title"],
@@ -151,6 +151,12 @@ async def _generate_podcast_async(podcast_id: str):
     """Async task to generate podcast script and audio"""
     thread_monitor.start_task()
     try:
+        # Fetch the initial podcast document
+        podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+        if not podcast:
+            print(f"❌ Podcast {podcast_id} not found in DB. Aborting.")
+            return
+
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         
         script = await script_service.generate_script(podcast_id)
@@ -192,13 +198,12 @@ async def _generate_podcast_async(podcast_id: str):
         try:
             print(f"🔔 Attempting to trigger podcast notification for {podcast_id}")
             
-            # Fetch fresh podcast document to get exactly what we need
-            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
-            if podcast:
-                topic_title = str(podcast.get("topic_title", "Recent News"))
-                user_id_str = str(podcast.get("user_id"))
+            # Fetch fresh podcast document to ensure we have the absolute latest data
+            final_podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+            if final_podcast:
+                topic_title = str(final_podcast.get("topic_title", "Recent News"))
+                user_id_str = str(final_podcast.get("user_id"))
                 
-                # ✅ FIXED: Now passes exactly the 3 arguments the service expects
                 await notification_service.create_podcast_ready_notification(
                     user_id=user_id_str,
                     podcast_id=podcast_id,
@@ -244,7 +249,6 @@ async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[byt
     
     user_profile = await user_service.get_user_profile(podcast["user_id"])
     
-    # Safely get speaking rate, default to 1.0 if any part of the chain fails
     try:
         speaking_rate = user_service.calculate_speaking_rate(user_profile)
     except Exception:
@@ -259,11 +263,36 @@ async def get_user_podcasts(
     limit: int = 50,
     skip: int = 0
 ) -> List[Dict]:
-    """Get all podcasts for a user"""
+    """Get all podcasts for a user, automatically failing zombie jobs"""
     query = {"user_id": user_id}
     if status:
         query["status"] = status
     
+    # ZOMBIE CLEANUP: If a podcast has been "generating" for more than 15 minutes, fail it.
+    fifteen_mins_ago = datetime.utcnow().timestamp() - 900
+    zombie_query = {
+        "user_id": user_id,
+        "status": {"$in": [PodcastStatus.PENDING, PodcastStatus.GENERATING_SCRIPT, PodcastStatus.GENERATING_AUDIO, PodcastStatus.UPLOADING]},
+    }
+    
+    # We find zombies and mark them failed so the UI doesn't spin forever
+    zombies = db["podcasts"].find(zombie_query)
+    async for zombie in zombies:
+        zombie_time = zombie.get("updated_at")
+        if zombie_time:
+            if isinstance(zombie_time, datetime):
+                z_ts = zombie_time.timestamp()
+            elif isinstance(zombie_time, str):
+                z_ts = datetime.fromisoformat(zombie_time.replace("Z", "+00:00")).timestamp()
+            else:
+                continue
+                
+            if z_ts < fifteen_mins_ago:
+                await db["podcasts"].update_one(
+                    {"_id": zombie["_id"]},
+                    {"$set": {"status": PodcastStatus.FAILED, "error_message": "Generation timed out."}}
+                )
+
     podcasts = []
     cursor = db["podcasts"].find(query).sort("created_at", -1).skip(skip).limit(limit)
     
@@ -368,7 +397,7 @@ async def regenerate_podcast(
         {"$set": update_fields}
     )
     
-    # Start regeneration
+    # ✅ FIXED: Only pass podcast_id
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {

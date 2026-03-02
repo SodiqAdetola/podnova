@@ -74,6 +74,7 @@ class NotificationService:
                     notifications.append(self._format_notification(notif))
                 except Exception as e:
                     print(f"  ❌ Error formatting notification {notif.get('_id')}: {e}")
+                    traceback.print_exc()
                     continue
             
             print(f"  ✅ Found {len(notifications)} notifications")
@@ -155,7 +156,6 @@ class NotificationService:
     ) -> Optional[str]:
         """Create notification when someone replies to your discussion"""
         
-        # Don't notify users about their own replies
         if discussion_owner_id == reply_author_id:
             return None
         
@@ -182,7 +182,7 @@ class NotificationService:
         user_id: str,
         topic_id: str,
         topic_title: str,
-        update_type: str,  # "history", "new_articles"
+        update_type: str,
         update_count: int
     ) -> Optional[str]:
         """Create notification for topic updates (watched topics)"""
@@ -228,32 +228,60 @@ class NotificationService:
             title="🎧 Your Podcast is Ready!",
             message=f"Your podcast '{podcast_title}' has been generated",
             preview=f"Based on: {topic_title[:60]}",
-            action_path=f"/library"  # Navigate to library
+            action_path=f"/library"  
         )
         
         return await self.create_notification(request)
     
+    def _format_time_ago(self, dt) -> str:
+        """Safely format datetime as relative time without timezone crashes"""
+        try:
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt.replace('Z', '+00:00')).replace(tzinfo=None)
+            elif hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+                
+            if not isinstance(dt, datetime):
+                return "Recently"
+                
+            now = datetime.utcnow()
+            diff = now - dt
+            
+            if diff.days > 0:
+                return f"{diff.days}d ago" if diff.days > 1 else "1d ago"
+            
+            hours = diff.seconds // 3600
+            if hours > 0:
+                return f"{hours}h ago" if hours > 1 else "1h ago"
+            
+            minutes = diff.seconds // 60
+            if minutes > 0:
+                return f"{minutes}m ago" if minutes > 1 else "1m ago"
+            
+            return "Just now"
+        except Exception:
+            return "Recently"
+
     def _format_notification(self, notif: Dict[str, Any]) -> NotificationResponse:
-        """Format raw notification from DB to response object"""
-        from app.services.discussion_service import DiscussionService
-        
-        discussion_service = DiscussionService()
-        
+        """Format raw notification from DB to response object safely"""
+        created_at = notif.get("created_at") or datetime.utcnow()
+        created_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
+
         return NotificationResponse(
             id=str(notif["_id"]),
             type=NotificationType(notif["type"]),
             priority=NotificationPriority(notif["priority"]),
-            source_type=notif["source_type"],
-            source_id=notif["source_id"],
+            source_type=notif.get("source_type", "system"),
+            source_id=notif.get("source_id", ""),
             secondary_id=notif.get("secondary_id"),
             actor_username=notif.get("actor_username"),
-            title=notif["title"],
-            message=notif["message"],
+            title=notif.get("title", "Notification"),
+            message=notif.get("message", ""),
             preview=notif.get("preview"),
             action_path=notif.get("action_path"),
-            is_read=notif["is_read"],
-            created_at=notif["created_at"].isoformat() if isinstance(notif["created_at"], datetime) else notif["created_at"],
-            time_ago=discussion_service._format_time_ago(notif["created_at"])
+            is_read=notif.get("is_read", False),
+            created_at=created_at_str,
+            time_ago=self._format_time_ago(created_at)
         )
 
 notification_service = NotificationService()

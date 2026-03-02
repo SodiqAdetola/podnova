@@ -62,8 +62,16 @@ class NotificationService:
 
         cursor = db["notifications"].find(query, projection).sort("created_at", -1).skip(skip).limit(limit)
         
-        # List comprehension for faster processing
-        return [self._format_notification(n) async for n in cursor]
+        notifications = []
+        async for n in cursor:
+            # ✅ SHIELD: Safely parse each item. If one is broken, skip it, don't crash the whole screen!
+            try:
+                notifications.append(self._format_notification(n))
+            except Exception as e:
+                print(f"⚠️ Skipping malformed legacy notification {n.get('_id')}: {e}")
+                continue
+                
+        return notifications
 
     async def get_notification_count(self, user_id: str, unread_only: bool) -> int:
         """High-speed document counting using metadata index"""
@@ -90,7 +98,7 @@ class NotificationService:
         )
         return res.modified_count
 
-    # --- SPECIALIZED CREATORS ---
+    # --- RESTORED SPECIALIZED CREATORS ---
 
     async def create_podcast_ready_notification(
         self, user_id: str, podcast_id: str, podcast_title: str, topic_title: str
@@ -171,17 +179,28 @@ class NotificationService:
             return "Recently"
 
     def _format_notification(self, n: Dict) -> NotificationResponse:
-        """Map DB dictionary to Pydantic Response Model"""
+        """Map DB dictionary to Pydantic Response Model safely"""
         dt = n.get("created_at", datetime.utcnow())
         dt_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
         
+        # ✅ SHIELD: Protect against old invalid strings in your database
+        try:
+            n_type = NotificationType(n.get("type", "topic_update"))
+        except ValueError:
+            n_type = NotificationType.TOPIC_UPDATE
+            
+        try:
+            n_priority = NotificationPriority(n.get("priority", "normal"))
+        except ValueError:
+            n_priority = NotificationPriority.NORMAL
+
         return NotificationResponse(
             id=str(n["_id"]),
-            type=NotificationType(n["type"]),
-            priority=NotificationPriority(n["priority"]),
+            type=n_type,
+            priority=n_priority,
             source_type=n.get("source_type", "system"),
             source_id=n.get("source_id", ""),
-            title=n.get("title", ""),
+            title=n.get("title", "Update"),
             message=n.get("message", ""),
             is_read=n.get("is_read", False),
             created_at=dt_str,

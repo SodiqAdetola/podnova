@@ -101,18 +101,21 @@ class NotificationService:
     # --- RESTORED SPECIALIZED CREATORS ---
 
     async def create_podcast_ready_notification(
-        self, user_id: str, podcast_id: str, podcast_title: str, topic_title: str
+        self, user_id: str, podcast_id: str, topic_title: str
     ) -> Optional[str]:
         """Triggered when the background podcast generation finishes"""
+        # ✅ FIXED: Now safely uses exactly the data schema you provided
         req = CreateNotificationRequest(
             user_id=user_id,
             type=NotificationType.PODCAST_READY,
             priority=NotificationPriority.HIGH,
             source_type="podcast",
             source_id=podcast_id,
+            actor_user_id=None,
+            actor_username=None,
             title="🎧 Your Podcast is Ready!",
-            message=f"Your podcast '{podcast_title}' has been generated.",
-            preview=f"Based on: {topic_title[:60]}",
+            message=f"Your podcast on '{topic_title[:50]}...' has been generated.",
+            preview="Tap here to listen in your library.",
             action_path="/library"
         )
         return await self.create_notification(req)

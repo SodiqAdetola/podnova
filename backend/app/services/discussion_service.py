@@ -124,45 +124,93 @@ class DiscussionService:
         limit: int = 20,
         skip: int = 0,
         user_id: Optional[str] = None,
-        search_query: Optional[str] = None # ✅ ADDED: Accept search query to bypass filters
+        search_query: Optional[str] = None
     ) -> List[Dict]:
-        """Get discussions with filtering and sorting"""
+        """Get discussions using Atlas Search for smart matching"""
         try:
             print(f"🔍 Getting discussions with filters: type={discussion_type}, topic={topic_id}, category={category}, search={search_query}")
             
-            query = {"is_active": True}
-            
-            # Apply search text if provided
+            # If search query exists, we MUST use an aggregation pipeline with $search as the very first stage
             if search_query:
-                query["$or"] = [
-                    {"title": {"$regex": search_query, "$options": "i"}},
-                    {"description": {"$regex": search_query, "$options": "i"}},
-                    {"tags": {"$in": [re.compile(search_query, re.IGNORECASE)]}}
-                ]
-            
-            if topic_id:
-                query["topic_id"] = topic_id
-            
-            if category:
-                query["category"] = category
+                pipeline = []
                 
-            if discussion_type:
-                query["discussion_type"] = discussion_type
+                # 1. SMART SEARCH STAGE
+                pipeline.append({
+                    "$search": {
+                        "index": "default", # Must match the name you set in Atlas
+                        "text": {
+                            "query": search_query,
+                            "path": ["title", "description", "tags"],
+                            "fuzzy": {"maxEdits": 1} # 👈 This adds typo tolerance!
+                        }
+                    }
+                })
                 
-            # ✅ NEW LOGIC: Hide empty auto-created topic discussions ONLY in main feeds.
-            # We skip this rule if it is a direct search OR a direct topic_id lookup.
-            if not topic_id and not search_query:
-                # If we already have an $or block (we shouldn't based on the above logic, but just in case)
-                if "$or" in query:
-                    # Very rare edge case, but safe to wrap in an $and
-                    query["$and"] = [
-                        {"$or": query.pop("$or")},
-                        {"$or": [
-                            {"discussion_type": {"$ne": "topic"}},
-                            {"discussion_type": "topic", "reply_count": {"$gt": 0}}
-                        ]}
-                    ]
-                else:
+                # 2. FILTER STAGE
+                match_stage = {"is_active": True}
+                if topic_id: match_stage["topic_id"] = topic_id
+                if category: match_stage["category"] = category
+                if discussion_type: match_stage["discussion_type"] = discussion_type
+                
+                pipeline.append({"$match": match_stage})
+                
+                # 3. SORT STAGE (Sort by how relevant the match is, overriding other sorts)
+                pipeline.append({"$sort": {"score": {"$meta": "textScore"}}})
+                
+                # 4. PAGINATION
+                pipeline.append({"$skip": skip})
+                pipeline.append({"$limit": limit})
+                
+                # Add score projection so we can see it (optional)
+                pipeline.append({"$project": {"score": {"$meta": "textScore"}, "document": "$$ROOT"}})
+                
+                cursor = db["discussions"].aggregate(pipeline)
+                
+                discussions = []
+                async for item in cursor:
+                    try:
+                        disc = item["document"]
+                        disc["_id"] = disc.pop("_id") # Fix ID nesting from projection
+                        
+                        user_has_upvoted = False
+                        if user_id:
+                            upvote = await db["discussion_upvotes"].find_one({"discussion_id": str(disc["_id"]), "user_id": user_id})
+                            user_has_upvoted = upvote is not None
+                        
+                        discussions.append({
+                            "id": str(disc["_id"]),
+                            "title": disc["title"],
+                            "description": disc["description"],
+                            "discussion_type": disc["discussion_type"],
+                            "topic_id": disc.get("topic_id"),
+                            "category": disc.get("category"),
+                            "tags": disc.get("tags", []),
+                            "user_id": disc.get("user_id"),
+                            "username": disc.get("username", "PodNova AI"),
+                            "reply_count": disc.get("reply_count", 0),
+                            "upvote_count": disc.get("upvote_count", 0),
+                            "view_count": disc.get("unique_view_count", 0),
+                            "created_at": disc["created_at"].isoformat() if isinstance(disc["created_at"], datetime) else disc["created_at"],
+                            "last_activity": disc["last_activity"].isoformat() if isinstance(disc["last_activity"], datetime) else disc["last_activity"],
+                            "is_pinned": disc.get("is_pinned", False),
+                            "is_auto_created": disc.get("is_auto_created", False),
+                            "time_ago": self._format_time_ago(disc["created_at"]),
+                            "user_has_upvoted": user_has_upvoted,
+                            "relevance_score": item.get("score", 0) # Expose how good the match was
+                        })
+                    except Exception as e:
+                        continue
+                return discussions
+                
+            # --- IF NO SEARCH QUERY, USE STANDARD FAST QUERY ---
+            else:
+                query = {"is_active": True}
+                if topic_id: query["topic_id"] = topic_id
+                if category: query["category"] = category
+                if discussion_type: query["discussion_type"] = discussion_type
+                
+                # Apply feed filter for empty auto-generated posts
+                if not topic_id:
                     if discussion_type == "topic":
                         query["reply_count"] = {"$gt": 0}
                     elif not discussion_type:
@@ -170,63 +218,53 @@ class DiscussionService:
                             {"discussion_type": {"$ne": "topic"}},
                             {"discussion_type": "topic", "reply_count": {"$gt": 0}}
                         ]
-            
-            # Sorting
-            if sort_by == "latest":
-                sort = [("last_activity", -1)]
-            elif sort_by == "most_discussed":
-                sort = [("reply_count", -1)]
-            elif sort_by == "most_viewed":
-                sort = [("unique_view_count", -1)]  # Sort by unique views
-            else:
-                sort = [("created_at", -1)]
-            
-            cursor = db["discussions"].find(query).sort(sort).skip(skip).limit(limit)
-            
-            discussions = []
-            async for disc in cursor:
-                try:
-                    # Check if user has upvoted (if user_id provided)
-                    user_has_upvoted = False
-                    if user_id:
-                        upvote = await db["discussion_upvotes"].find_one({
-                            "discussion_id": str(disc["_id"]),
-                            "user_id": user_id
+                
+                # Standard Sorting
+                if sort_by == "latest": sort = [("last_activity", -1)]
+                elif sort_by == "most_discussed": sort = [("reply_count", -1)]
+                elif sort_by == "most_viewed": sort = [("unique_view_count", -1)]
+                else: sort = [("created_at", -1)]
+                
+                cursor = db["discussions"].find(query).sort(sort).skip(skip).limit(limit)
+                
+                # ... (Keep your exact same standard cursor mapping block here)
+                discussions = []
+                async for disc in cursor:
+                    try:
+                        user_has_upvoted = False
+                        if user_id:
+                            upvote = await db["discussion_upvotes"].find_one({"discussion_id": str(disc["_id"]), "user_id": user_id})
+                            user_has_upvoted = upvote is not None
+                        
+                        discussions.append({
+                            "id": str(disc["_id"]),
+                            "title": disc["title"],
+                            "description": disc["description"],
+                            "discussion_type": disc["discussion_type"],
+                            "topic_id": disc.get("topic_id"),
+                            "category": disc.get("category"),
+                            "tags": disc.get("tags", []),
+                            "user_id": disc.get("user_id"),
+                            "username": disc.get("username", "PodNova AI"),
+                            "reply_count": disc.get("reply_count", 0),
+                            "upvote_count": disc.get("upvote_count", 0),
+                            "view_count": disc.get("unique_view_count", 0),
+                            "created_at": disc["created_at"].isoformat() if isinstance(disc["created_at"], datetime) else disc["created_at"],
+                            "last_activity": disc["last_activity"].isoformat() if isinstance(disc["last_activity"], datetime) else disc["last_activity"],
+                            "is_pinned": disc.get("is_pinned", False),
+                            "is_auto_created": disc.get("is_auto_created", False),
+                            "time_ago": self._format_time_ago(disc["created_at"]),
+                            "user_has_upvoted": user_has_upvoted
                         })
-                        user_has_upvoted = upvote is not None
-                    
-                    discussions.append({
-                        "id": str(disc["_id"]),
-                        "title": disc["title"],
-                        "description": disc["description"],
-                        "discussion_type": disc["discussion_type"],
-                        "topic_id": disc.get("topic_id"),
-                        "category": disc.get("category"),
-                        "tags": disc.get("tags", []),
-                        "user_id": disc.get("user_id"),
-                        "username": disc.get("username", "PodNova AI"),
-                        "reply_count": disc.get("reply_count", 0),
-                        "upvote_count": disc.get("upvote_count", 0),
-                        "view_count": disc.get("unique_view_count", 0),  # Return unique view count
-                        "created_at": disc["created_at"].isoformat() if isinstance(disc["created_at"], datetime) else disc["created_at"],
-                        "last_activity": disc["last_activity"].isoformat() if isinstance(disc["last_activity"], datetime) else disc["last_activity"],
-                        "is_pinned": disc.get("is_pinned", False),
-                        "is_auto_created": disc.get("is_auto_created", False),
-                        "time_ago": self._format_time_ago(disc["created_at"]),
-                        "user_has_upvoted": user_has_upvoted
-                    })
-                except Exception as e:
-                    print(f"  ❌ Error processing discussion {disc.get('_id')}: {e}")
-                    continue
-            
-            print(f"  ✅ Returning {len(discussions)} discussions")
-            return discussions
-            
+                    except Exception as e:
+                        continue
+                return discussions
+                
         except Exception as e:
             print(f"❌ Error in get_discussions: {e}")
             traceback.print_exc()
             return []
-    
+
     async def get_discussion_by_id(
         self,
         discussion_id: str,

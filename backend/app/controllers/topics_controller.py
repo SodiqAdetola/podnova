@@ -275,53 +275,95 @@ def _extract_tags(topic: Dict) -> List[str]:
     return tags
 
 
-async def search_topics(query: str, category: Optional[str] = None, limit: int = 50) -> Dict:
-    """Search topics by query string across multiple fields"""
-    from app.db import db
-    
-    search_query = {
-        "status": "active",
-        "has_title": True
-    }
-    
-    if category and category != "all":
-        search_query["category"] = category
-    
-    search_pattern = {"$regex": query, "$options": "i"}
-    search_query["$or"] = [
-        {"title": search_pattern},
-        {"summary": search_pattern},
-        {"category": search_pattern}
-    ]
-    
-    cursor = db["topics"].find(search_query).limit(limit)
-    
-    topics = []
-    async for topic in cursor:
-        try:
-            last_updated = topic.get("last_updated") or datetime.utcnow()
-            time_ago = _format_time_ago(last_updated)
-            tags = _extract_tags(topic)
+async def search_topics(query: str, category: Optional[str] = None, limit: int = 50, skip: int = 0) -> Dict:
+    """
+    Search topics by query string using MongoDB Atlas Full-Text Search.
+    Provides typo tolerance and relevance scoring.
+    """
+    try:
+        print(f"🔍 Smart searching topics for: '{query}', category: {category}")
+        
+        pipeline = []
+        
+        # 1. ATLAS SEARCH STAGE
+        # This must be the first stage in the pipeline
+        search_stage = {
+            "$search": {
+                "index": "default",  # Ensure you created this index on the 'topics' collection
+                "text": {
+                    "query": query,
+                    "path": ["title", "summary", "category"],
+                    "fuzzy": {"maxEdits": 1} # 👈 Adds typo tolerance
+                }
+            }
+        }
+        pipeline.append(search_stage)
+        
+        # 2. MATCH STAGE (Filters)
+        match_query = {
+            "status": "active",
+            "has_title": True
+        }
+        if category and category.lower() != "all":
+            match_query["category"] = category.lower()
             
-            last_updated_str = last_updated.isoformat() if hasattr(last_updated, 'isoformat') else str(last_updated)
-            
-            topics.append({
-                "id": str(topic["_id"]),
-                "title": topic.get("title") or "Untitled",
-                "summary": topic.get("summary") or "",
-                "category": topic.get("category") or "general",
-                "article_count": topic.get("article_count") or 0,
-                "confidence_score": topic.get("confidence") or 0,
-                "last_updated": last_updated_str,
-                "time_ago": time_ago,
-                "tags": tags,
-                "image_url": topic.get("image_url"),
-                "history_point_count": topic.get("history_point_count") or 0,
-                "development_note": topic.get("development_note")
-            })
-        except Exception as e:
-            print(f"Error mapping search topic {topic.get('_id')}: {e}")
-            continue
+        pipeline.append({"$match": match_query})
+        
+        # 3. SCORE & PROJECTION STAGE
+        # We sort by the search score (relevance)
+        pipeline.append({"$sort": {"score": {"$meta": "searchScore"}}})
+        
+        # 4. PAGINATION
+        pipeline.append({"$skip": skip})
+        pipeline.append({"$limit": limit})
+        
+        # Project the results and the score
+        pipeline.append({
+            "$project": {
+                "score": {"$meta": "searchScore"},
+                "document": "$$ROOT"
+            }
+        })
+        
+        cursor = db["topics"].aggregate(pipeline)
+        
+        topics = []
+        async for item in cursor:
+            try:
+                topic = item["document"]
+                last_updated = topic.get("last_updated") or datetime.utcnow()
+                
+                topics.append({
+                    "id": str(topic["_id"]),
+                    "title": topic.get("title") or "Untitled",
+                    "summary": topic.get("summary") or "",
+                    "category": topic.get("category") or "general",
+                    "article_count": topic.get("article_count") or 0,
+                    "confidence_score": topic.get("confidence") or 0,
+                    "last_updated": last_updated.isoformat() if hasattr(last_updated, 'isoformat') else str(last_updated),
+                    "time_ago": _format_time_ago(last_updated),
+                    "tags": _extract_tags(topic),
+                    "image_url": topic.get("image_url"),
+                    "history_point_count": topic.get("history_point_count") or 0,
+                    "development_note": topic.get("development_note"),
+                    "search_relevance": item.get("score", 0)
+                })
+            except Exception as e:
+                print(f"Error mapping search topic result: {e}")
+                continue
+                
+        return {
+            "query": query,
+            "category": category or "all",
+            "topics": topics,
+            "count": len(topics)
+        }
+
+    except Exception as e:
+        print(f"❌ Error in search_topics: {e}")
+        traceback.print_exc()
+        # Fallback to empty results instead of crashing the frontend
+        return {"query": query, "topics": [], "count": 0, "error": str(e)}
             
     return {
         "query": query,

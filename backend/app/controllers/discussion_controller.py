@@ -53,6 +53,7 @@ async def get_discussions(
     sort_by: str = "latest",
     limit: int = 20,
     skip: int = 0,
+    q: Optional[str] = None,
     user_id: Optional[str] = None
 ) -> List[Dict]:
     """Get discussions with filters"""
@@ -64,7 +65,8 @@ async def get_discussions(
         sort_by=sort_by,
         limit=limit,
         skip=skip,
-        user_id=user_id
+        user_id=user_id,
+        search_query=q
     )
 
 

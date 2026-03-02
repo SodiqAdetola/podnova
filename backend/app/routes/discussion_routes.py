@@ -26,6 +26,7 @@ async def list_discussions(
     sort_by: str = Query("latest", regex="^(latest|most_discussed)$"),
     limit: int = Query(20, ge=1, le=50),
     skip: int = Query(0, ge=0),
+    q: Optional[str] = Query(None, description="Search query"),
     firebase_user: Optional[dict] = Depends(verify_firebase_token)
 ):
     """

@@ -14,7 +14,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { auth } from "../firebase/config";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { MainTabParamList, MainStackParamList } from "../Navigator";
 
 const { height } = Dimensions.get("window");
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
@@ -58,12 +61,18 @@ const STYLES = [
   { id: "expert", name: "Expert", description: "Technical & comprehensive" },
 ];
 
+// Combine both navigators so TypeScript knows about nested routes
+type ModalNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<MainStackParamList>,
+  BottomTabNavigationProp<MainTabParamList>
+>;
+
 const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   visible,
   onClose,
   topic,
 }) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<ModalNavigationProp>();
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState("calm_female");
   const [selectedStyle, setSelectedStyle] = useState("standard");
@@ -73,9 +82,8 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   const [generating, setGenerating] = useState(false);
   const [generationStarted, setGenerationStarted] = useState(false);
   const [podcastId, setPodcastId] = useState<string | null>(null);
-  const [estimatedTime, setEstimatedTime] = useState(60); // Default 60 seconds
+  const [estimatedTime, setEstimatedTime] = useState(60);
 
-  // Load preferences when modal opens
   useEffect(() => {
     if (visible) {
       setGenerationStarted(false);
@@ -101,7 +109,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
         const profile = await response.json();
         const prefs = profile.preferences;
 
-        // Always set values from preferences
         setSelectedVoice(prefs.default_voice || "calm_female");
         setSelectedStyle(TONE_TO_STYLE[prefs.default_tone] || "standard");
         setLengthMinutes(LENGTH_TO_MINUTES[prefs.default_podcast_length] || 5);
@@ -119,8 +126,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     try {
       const token = await auth.currentUser?.getIdToken(true);
       if (!token) throw new Error("User not authenticated");
-
-      console.log("Sending generation request for topic:", topic.id);
       
       const response = await fetch(`${API_BASE_URL}/podcasts/generate`, {
         method: "POST",
@@ -139,13 +144,8 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Generation started:", data);
-        
-        // Set the podcast ID and estimated time from response
         setPodcastId(data.id);
         setEstimatedTime(data.estimated_time_seconds || lengthMinutes * 60);
-        
-        // Show success screen immediately
         setGenerationStarted(true);
         setGenerating(false);
       } else {
@@ -160,6 +160,16 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
+  // Safe close that just hides the modal and resets state
+  const resetAndClose = () => {
+    setCustomPrompt("");
+    setShowAdvanced(false);
+    setGenerationStarted(false);
+    setGenerating(false);
+    setPodcastId(null);
+    onClose();
+  };
+
   const handleClose = () => {
     if (generating) {
       Alert.alert(
@@ -167,33 +177,19 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
         "Your podcast is still being generated. Closing this window won't cancel it. You can check progress in the Library tab.",
         [
           { text: "Stay Here", style: "cancel" },
-          { 
-            text: "Close Anyway", 
-            onPress: () => {
-              setCustomPrompt("");
-              setShowAdvanced(false);
-              setGenerationStarted(false);
-              setGenerating(false);
-              setPodcastId(null);
-              onClose();
-            }
-          }
+          { text: "Close Anyway", onPress: resetAndClose }
         ]
       );
     } else {
-      setCustomPrompt("");
-      setShowAdvanced(false);
-      setGenerationStarted(false);
-      setGenerating(false);
-      setPodcastId(null);
-      onClose();
+      resetAndClose();
     }
   };
 
-  const handleGoToLibrary = () => {
-    handleClose();
-    // Navigate to library tab
-    navigation.navigate('Library' as never);
+  // Routes to the Tabs navigator, then to the Library screen
+const handleGoToLibrary = () => {
+    resetAndClose();
+    // Use 'as any' to bypass the strict Stack param types for nested tab navigation
+    (navigation as any).navigate("MainTabs", { screen: "Library" });
   };
 
   const renderVoiceSelector = () => (
@@ -335,6 +331,9 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     );
   };
 
+  // ----------------------------------------------------
+  // SUCCESS SCREEN UI
+  // ----------------------------------------------------
   if (generationStarted) {
     return (
       <Modal
@@ -352,9 +351,16 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             <Text style={styles.successMessage}>
               Your podcast is being generated in the background. Estimated time: {Math.round(estimatedTime / 60)} min {estimatedTime % 60} sec.
             </Text>
+            
+            {/* Clickable Library Text */}
             <Text style={styles.successInstruction}>
-              You can track progress in the <Text style={styles.bold}>Library</Text> tab.
+              You can track progress in the{' '}
+              <Text style={styles.clickableLink} onPress={handleGoToLibrary}>
+                Library
+              </Text>{' '}
+              tab.
             </Text>
+
             <View style={styles.successButtonContainer}>
               <TouchableOpacity 
                 style={[styles.successButton, styles.secondaryButton]} 
@@ -362,6 +368,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
               >
                 <Text style={styles.secondaryButtonText}>Close</Text>
               </TouchableOpacity>
+              
               <TouchableOpacity 
                 style={styles.successButton} 
                 onPress={handleGoToLibrary}
@@ -375,6 +382,9 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     );
   }
 
+  // ----------------------------------------------------
+  // MAIN MODAL UI
+  // ----------------------------------------------------
   return (
     <Modal
       visible={visible}
@@ -384,7 +394,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     >
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
-          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#6B7280" />
@@ -393,7 +402,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             <View style={styles.placeholder} />
           </View>
 
-          {/* Loading State */}
           {loadingPreferences ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#6366F1" />
@@ -401,12 +409,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             </View>
           ) : (
             <>
-              {/* Content */}
-              <ScrollView
-                style={styles.content}
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Topic Info */}
+              <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={styles.topicInfo}>
                   <Text style={styles.topicLabel}>Topic</Text>
                   <Text style={styles.topicTitle}>{topic.title}</Text>
@@ -418,7 +421,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
                 {renderLengthSlider()}
                 {renderAdvancedControls()}
 
-                {/* Estimate */}
                 <View style={styles.estimate}>
                   <Text style={styles.estimateText}>
                     Estimated time: {lengthMinutes * 12}s
@@ -426,7 +428,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
                 </View>
               </ScrollView>
 
-              {/* Generate Button */}
               <View style={styles.footer}>
                 <TouchableOpacity
                   style={[
@@ -717,9 +718,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 32,
   },
-  bold: {
+  clickableLink: {
     fontWeight: "700",
     color: "#6366F1",
+    textDecorationLine: "underline",
   },
   successButtonContainer: {
     flexDirection: "row",

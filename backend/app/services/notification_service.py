@@ -10,10 +10,66 @@ from app.models.notification import (
     CreateNotificationRequest
 )
 import traceback
+import logging
+
+# NEW: Import Expo Push SDK
+from exponent_server_sdk import (
+    DeviceNotRegisteredError,
+    PushClient,
+    PushMessage,
+    PushServerError,
+)
+
+logger = logging.getLogger(__name__)
 
 class NotificationService:
+    
+    # NEW: Helper function to trigger the actual device push
+    async def _send_push_notification(self, user_id: str, title: str, message: str, data: dict):
+        """Looks up user push token and fires the notification to Expo."""
+        try:
+            # Look up the user by their ID (assuming user_id is firebase_uid)
+            user = await db["users"].find_one({"firebase_uid": user_id})
+            
+            if not user:
+                return
+                
+            # Check preferences to respect user opt-outs
+            prefs = user.get("preferences", {})
+            if prefs.get("push_notifications") is False:
+                return
+
+            token = user.get("expo_push_token")
+            if not token:
+                return
+
+            # Fire to Apple/Google via Expo
+            PushClient().publish(
+                PushMessage(
+                    to=token,
+                    title=title,
+                    body=message,
+                    data=data,
+                    sound="default",
+                    badge=1 # Increments the red dot on the iOS app icon
+                )
+            )
+            logger.info(f"Push notification sent to {user_id}")
+            
+        except DeviceNotRegisteredError:
+            # Token is dead (user uninstalled). Clean it up.
+            await db["users"].update_one(
+                {"firebase_uid": user_id},
+                {"$set": {"expo_push_token": None}}
+            )
+            logger.warning(f"Cleaned up dead push token for {user_id}")
+        except PushServerError as exc:
+            logger.error(f"Expo Server Error: {exc.errors}")
+        except Exception as exc:
+            logger.error(f"Push Notification Failed: {str(exc)}")
+
     async def create_notification(self, req: CreateNotificationRequest) -> str:
-        """Create a standard notification document"""
+        """Create a standard notification document AND fire a push notification"""
         try:
             doc = {
                 "user_id": req.user_id,
@@ -32,6 +88,19 @@ class NotificationService:
                 "created_at": datetime.utcnow()
             }
             res = await db["notifications"].insert_one(doc)
+            
+            # NEW: Trigger the push notification in the background
+            await self._send_push_notification(
+                user_id=req.user_id,
+                title=req.title,
+                message=req.message,
+                data={
+                    "source_type": req.source_type,
+                    "source_id": req.source_id,
+                    "action_path": req.action_path
+                }
+            )
+            
             return str(res.inserted_id)
         except Exception as e:
             print(f"❌ Error creating notification: {e}")
@@ -104,7 +173,6 @@ class NotificationService:
         self, user_id: str, podcast_id: str, topic_title: str
     ) -> Optional[str]:
         """Triggered when the background podcast generation finishes"""
-        # ✅ FIXED: Now safely uses exactly the data schema you provided
         req = CreateNotificationRequest(
             user_id=user_id,
             type=NotificationType.PODCAST_READY,
@@ -186,7 +254,6 @@ class NotificationService:
         dt = n.get("created_at", datetime.utcnow())
         dt_str = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
         
-        # ✅ SHIELD: Protect against old invalid strings in your database
         try:
             n_type = NotificationType(n.get("type", "topic_update"))
         except ValueError:

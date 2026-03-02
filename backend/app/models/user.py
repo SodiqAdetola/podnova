@@ -45,6 +45,7 @@ class UserProfile(BaseModel):
     username: str
     created_at: datetime
     preferences: UserPreferences
+    expo_push_token: Optional[str] = None # Added push token field
     
     class Config:
         schema_extra = {
@@ -54,6 +55,7 @@ class UserProfile(BaseModel):
                 "email": "user@example.com",
                 "username": "john_doe",
                 "created_at": "2024-01-01T00:00:00",
+                "expo_push_token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
                 "preferences": {
                     "default_categories": ["technology"],
                     "default_podcast_length": "short",
@@ -65,3 +67,7 @@ class UserProfile(BaseModel):
                 }
             }
         }
+
+# Model for the incoming push token request
+class PushTokenRequest(BaseModel):
+    token: str

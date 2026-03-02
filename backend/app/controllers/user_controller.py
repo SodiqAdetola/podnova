@@ -36,6 +36,7 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
         "username": username,
         "created_at": datetime.utcnow(),
         "preferences": default_prefs.dict(),
+        "expo_push_token": None  # NEW: Initialize empty push token for new users
     }
 
     result = await db["users"].insert_one(profile_data)
@@ -92,3 +93,16 @@ async def update_user_preferences(
     updated_user["id"] = str(updated_user["_id"])
     
     return UserProfile(**updated_user)
+
+
+# Function to save the push token
+async def save_push_token(firebase_uid: str, token: str) -> bool:
+    """
+    Save the Expo push token to the user's profile.
+    This allows the backend to target this specific device.
+    """
+    result = await db["users"].update_one(
+        {"firebase_uid": firebase_uid},
+        {"$set": {"expo_push_token": token}}
+    )
+    return result.modified_count > 0 or result.matched_count > 0

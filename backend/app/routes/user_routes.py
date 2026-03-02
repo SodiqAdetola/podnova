@@ -4,9 +4,10 @@ from app.middleware.firebase_auth import verify_firebase_token
 from app.controllers.user_controller import (
     create_user_profile,
     get_user_profile,
-    update_user_preferences
+    update_user_preferences,
+    save_push_token  # <-- ADDED
 )
-from app.models.user import UserProfile, UserPreferences
+from app.models.user import UserProfile, UserPreferences, PushTokenRequest  # <-- ADDED
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -104,6 +105,27 @@ async def update_preferences(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+# Save Push Token
+@router.post("/push-token")
+async def register_push_token(
+    request: PushTokenRequest,
+    firebase_user=Depends(verify_firebase_token)
+):
+    """
+    Register an Expo Push Token for the current user.
+    This allows the backend to send background notifications.
+    """
+    try:
+        await save_push_token(firebase_user["uid"], request.token)
+        return {"status": "success", "message": "Push token registered successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save push token: {str(e)}"
+        )
+
 
 
 @router.get("/stats")

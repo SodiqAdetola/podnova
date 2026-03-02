@@ -131,14 +131,26 @@ class DiscussionService:
             
             query = {"is_active": True}
             
-            if discussion_type:
-                query["discussion_type"] = discussion_type
-            
             if topic_id:
                 query["topic_id"] = topic_id
             
             if category:
                 query["category"] = category
+                
+            if discussion_type:
+                query["discussion_type"] = discussion_type
+                
+            # ✅ NEW LOGIC: Hide empty auto-created topic discussions in main feeds.
+            # We skip this rule if topic_id is provided, so the Topic Detail screen can still load empty ones to post the first reply.
+            if not topic_id:
+                if discussion_type == "topic":
+                    query["reply_count"] = {"$gt": 0}
+                elif not discussion_type:
+                    # If fetching all discussions, include all community posts, but only active topic posts
+                    query["$or"] = [
+                        {"discussion_type": {"$ne": "topic"}},
+                        {"discussion_type": "topic", "reply_count": {"$gt": 0}}
+                    ]
             
             # Sorting
             if sort_by == "latest":

@@ -121,8 +121,8 @@ async def create_podcast(
         "focus_areas": focus_areas or [],
         "estimated_credits": length_minutes,
         "credits_used": 0,
-        "created_at": datetime.now(),
-        "updated_at": datetime.now(),
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
         "script": None,
         "audio_url": None,
         "transcript_url": None,
@@ -133,6 +133,7 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = result.inserted_id
     
+    # Launch background task with only the podcast ID
     asyncio.create_task(_generate_podcast_async(str(podcast_id)))
     
     return {
@@ -146,74 +147,77 @@ async def create_podcast(
     }
 
 
-async def _generate_podcast_async(
-    podcast_id: str, 
-    topic_id: str, 
-    user_id: str, 
-    duration_pref: str, 
-    focus_pref: str,
-    style_pref: str
-):
-    """Background task to generate podcast content and audio"""
+async def _generate_podcast_async(podcast_id: str):
+    """Async task to generate podcast script and audio"""
+    thread_monitor.start_task()
     try:
-        from app.db import db
-        from app.services.notification_service import notification_service
+        await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         
-        print(f"🎙️ Starting podcast generation for podcast_id: {podcast_id}")
-
-        # =========================================================
-        # [YOUR EXISTING AI GENERATION & AUDIO LOGIC GOES HERE]
-        # (Assuming you generate audio_url, transcript_url, etc.)
-        # =========================================================
-
-        # Mocking variables to ensure the code below makes sense if they were generated
-        audio_url = "https://example.com/audio.mp3" 
-        transcript_url = "https://example.com/transcript.txt"
-        duration_seconds = 300
-
-        # 1. Update the podcast document to completed
-        await db["podcasts"].update_one(
-            {"_id": ObjectId(podcast_id)},
+        script = await script_service.generate_script(podcast_id)
+        
+        await _update_podcast_status(
+            podcast_id, 
+            PodcastStatus.GENERATING_AUDIO,
+            {"script": script}
+        )
+        
+        audio_data, duration = await _generate_audio_for_podcast(podcast_id, script)
+        
+        await _update_podcast_status(
+            podcast_id,
+            PodcastStatus.UPLOADING,
+            {"duration_seconds": duration}
+        )
+        
+        audio_url, transcript_url = await storage_service.upload_podcast_files(
+            podcast_id,
+            audio_data,
+            script
+        )
+        
+        credits_used = max(1, int(duration / 60))
+        
+        await _update_podcast_status(
+            podcast_id,
+            PodcastStatus.COMPLETED,
             {
-                "$set": {
-                    "status": "completed",
-                    "audio_url": audio_url,
-                    "transcript_url": transcript_url,
-                    "duration_seconds": duration_seconds,
-                    "completed_at": datetime.utcnow()
-                }
+                "audio_url": audio_url,
+                "transcript_url": transcript_url,
+                "credits_used": credits_used,
+                "completed_at": datetime.utcnow()
             }
         )
-
-        print(f"✅ Podcast generation complete. Triggering notification...")
-
-        # 2. ✅ FIXED: Fetch the updated podcast document to get the exact fields
-        podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
         
-        if podcast:
-            # Extract the exact fields based on your DB schema
-            user_id_str = podcast.get("user_id")
-            topic_title_str = podcast.get("topic_title", "Recent News")
-            podcast_id_str = str(podcast.get("_id")) # Convert ObjectId to string
+        # PROTECTED NOTIFICATION BLOCK
+        try:
+            print(f"🔔 Attempting to trigger podcast notification for {podcast_id}")
             
-            # 3. Trigger the notification using exactly what the service expects
-            await notification_service.create_podcast_ready_notification(
-                user_id=user_id_str,
-                podcast_id=podcast_id_str,
-                topic_title=topic_title_str
-            )
-
-    except Exception as e:
-        print(f"❌ Error in podcast generation: {e}")
-        import traceback
-        traceback.print_exc()
+            # Fetch fresh podcast document to get exactly what we need
+            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+            if podcast:
+                topic_title = str(podcast.get("topic_title", "Recent News"))
+                user_id_str = str(podcast.get("user_id"))
+                
+                # ✅ FIXED: Now passes exactly the 3 arguments the service expects
+                await notification_service.create_podcast_ready_notification(
+                    user_id=user_id_str,
+                    podcast_id=podcast_id,
+                    topic_title=topic_title
+                )
+                print(f"  ✅ Podcast notification queued successfully")
+        except Exception as notif_e:
+            print(f"⚠️ Non-fatal error creating podcast notification: {notif_e}")
+            traceback.print_exc()
         
-        # Update status to failed
-        from app.db import db
-        await db["podcasts"].update_one(
-            {"_id": ObjectId(podcast_id)},
-            {"$set": {"status": "failed", "error": str(e)}}
+    except Exception as e:
+        print(f"❌ Fatal error in podcast generation: {e}")
+        await _update_podcast_status(
+            podcast_id,
+            PodcastStatus.FAILED,
+            {"error_message": str(e)}
         )
+    finally:
+        thread_monitor.end_task()
 
 
 async def _update_podcast_status(
@@ -223,7 +227,7 @@ async def _update_podcast_status(
 ):
     update_fields = {
         "status": status,
-        "updated_at": datetime.now()
+        "updated_at": datetime.utcnow()
     }
     if additional_fields:
         update_fields.update(additional_fields)
@@ -239,8 +243,13 @@ async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[byt
     voice_name = VOICE_CONFIGS[podcast["voice"]]
     
     user_profile = await user_service.get_user_profile(podcast["user_id"])
-    speaking_rate = 1.0  
     
+    # Safely get speaking rate, default to 1.0 if any part of the chain fails
+    try:
+        speaking_rate = user_service.calculate_speaking_rate(user_profile)
+    except Exception:
+        speaking_rate = 1.0
+        
     return await audio_service.generate_audio(script, voice_name, speaking_rate)
 
 
@@ -273,8 +282,8 @@ async def get_user_podcasts(
             "transcript_url": podcast.get("transcript_url"),
             "script": podcast.get("script"),
             "credits_used": podcast.get("credits_used", 0),
-            "created_at": podcast["created_at"].isoformat(),
-            "completed_at": podcast.get("completed_at").isoformat() if podcast.get("completed_at") else None,
+            "created_at": podcast["created_at"].isoformat() if isinstance(podcast.get("created_at"), datetime) else podcast.get("created_at"),
+            "completed_at": podcast["completed_at"].isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
             "error_message": podcast.get("error_message")
         })
     
@@ -309,9 +318,9 @@ async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
         "transcript_url": podcast.get("transcript_url"),
         "estimated_credits": podcast.get("estimated_credits", 0),
         "credits_used": podcast.get("credits_used", 0),
-        "created_at": podcast["created_at"].isoformat(),
-        "updated_at": podcast["updated_at"].isoformat(),
-        "completed_at": podcast.get("completed_at").isoformat() if podcast.get("completed_at") else None,
+        "created_at": podcast["created_at"].isoformat() if isinstance(podcast.get("created_at"), datetime) else podcast.get("created_at"),
+        "updated_at": podcast["updated_at"].isoformat() if isinstance(podcast.get("updated_at"), datetime) else podcast.get("updated_at"),
+        "completed_at": podcast["completed_at"].isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
         "error_message": podcast.get("error_message")
     }
 
@@ -330,7 +339,7 @@ async def regenerate_podcast(
         raise ValueError("Podcast not found")
     
     # Update settings if provided
-    update_fields = {"updated_at": datetime.now(), "status": PodcastStatus.PENDING}
+    update_fields = {"updated_at": datetime.utcnow(), "status": PodcastStatus.PENDING}
     
     if voice:
         update_fields["voice"] = voice

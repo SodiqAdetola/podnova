@@ -59,7 +59,6 @@ interface DiscussionThreadProps {
   discussionType?: "topic" | "community";
   category?: string;
   tags?: string[];
-  // ✅ ADDED: Prop to prevent scroll traps when used inside another screen
   isNested?: boolean; 
 }
 
@@ -67,14 +66,10 @@ const getCategoryColor = (category?: string): string => {
   if (!category) return "#8B5CF6";
   switch (category.toLowerCase()) {
     case "technology":
-    case "tech":
-      return "#f16365ff";
-    case "finance":
-      return "#73aef2ff";
-    case "politics":
-      return "#8B5CF6";
-    default:
-      return "#8B5CF6";
+    case "tech": return "#f16365ff";
+    case "finance": return "#73aef2ff";
+    case "politics": return "#8B5CF6";
+    default: return "#8B5CF6";
   }
 };
 
@@ -92,7 +87,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   discussionType = "community",
   category,
   tags = [],
-  isNested = true, // Default to true to prevent scroll traps automatically
+  isNested = true, 
 }) => {
   const { showPlayer } = useAudio();
   
@@ -104,8 +99,14 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+  
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [replyToDelete, setReplyToDelete] = useState<string | null>(null);
+  
+  // NEW: Moderation States
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [selectedReply, setSelectedReply] = useState<Reply | null>(null);
+
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -113,7 +114,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
-  // Keyboard listener with dynamic padding based on mini player
+  // Keyboard listener
   useEffect(() => {
     const keyboardWillShowListener = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -165,18 +166,13 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
       const token = await getAuthToken();
       
       if (!token) {
-        console.log("No authenticated user");
         setLoading(false);
         return;
       }
 
       const response = await fetch(
         `${API_BASE_URL}/discussions/${discussionId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.ok) {
@@ -221,6 +217,59 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
     loadReplies();
   };
 
+  // --- NEW: MODERATION ACTIONS ---
+  const handleReportContent = async () => {
+    if (!selectedReply) return;
+    
+    // We instantly close the menu and show a "Thank you" to make the app feel responsive
+    setShowActionMenu(false);
+    
+    try {
+      const token = await getAuthToken();
+      await fetch(`${API_BASE_URL}/discussions/replies/${selectedReply.id}/report`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      Alert.alert("Report Submitted", "Thank you for keeping PodNova safe. Our moderation team will review this content shortly.");
+    } catch (error) {
+      console.error("Error reporting:", error);
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!selectedReply) return;
+    
+    setShowActionMenu(false);
+    
+    Alert.alert(
+      "Block User", 
+      `Are you sure you want to block ${selectedReply.username}? You will no longer see their content.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Block", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await getAuthToken();
+              await fetch(`${API_BASE_URL}/users/block/${selectedReply.user_id}`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              
+              // Optimistically remove their replies from the feed
+              Alert.alert("User Blocked", `${selectedReply.username} has been blocked.`);
+              loadReplies(); 
+            } catch (error) {
+              console.error("Error blocking user:", error);
+            }
+          }
+        }
+      ]
+    );
+  };
+  // ------------------------------
+
   const handleUpvoteReply = async (replyId: string) => {
     try {
       const token = await getAuthToken();
@@ -228,12 +277,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
       const response = await fetch(
         `${API_BASE_URL}/discussions/replies/${replyId}/upvote`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.ok) {
@@ -244,16 +288,11 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
               return {
                 ...reply,
                 is_upvoted_by_user: data.upvoted,
-                upvote_count: data.upvoted
-                  ? reply.upvote_count + 1
-                  : reply.upvote_count - 1,
+                upvote_count: data.upvoted ? reply.upvote_count + 1 : reply.upvote_count - 1,
               };
             }
             if (reply.replies) {
-              return {
-                ...reply,
-                replies: updateReplyInTree(reply.replies)
-              };
+              return { ...reply, replies: updateReplyInTree(reply.replies) };
             }
             return reply;
           });
@@ -274,12 +313,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
       const response = await fetch(
         `${API_BASE_URL}/discussions/replies/${replyToDelete}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.ok) {
@@ -287,12 +321,8 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
         if (result.success) {
           const removeReplyFromTree = (repliesList: Reply[]): Reply[] => {
             return repliesList.filter(reply => {
-              if (reply.id === replyToDelete) {
-                return false;
-              }
-              if (reply.replies) {
-                reply.replies = removeReplyFromTree(reply.replies);
-              }
+              if (reply.id === replyToDelete) return false;
+              if (reply.replies) reply.replies = removeReplyFromTree(reply.replies);
               return true;
             });
           };
@@ -301,13 +331,9 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
         } else {
           Alert.alert("Error", result.message || "Failed to delete reply");
         }
-      } else {
-        const error = await response.json();
-        Alert.alert("Error", error.detail || "Failed to delete reply");
       }
     } catch (error) {
       console.error("Error deleting reply:", error);
-      Alert.alert("Error", "Failed to delete reply");
     } finally {
       setShowDeleteModal(false);
       setReplyToDelete(null);
@@ -333,34 +359,22 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
         setReplyText("");
         setReplyingTo(null);
         await loadReplies();
-        
-        // Even if scrollEnabled is false, programmatic scrolling still perfectly shifts the parent view down to the new comment!
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
-      } else {
-        const errorText = await response.text();
-        Alert.alert("Error", `Failed to post reply: ${errorText}`);
       }
     } catch (error) {
       console.error("Error submitting reply:", error);
-      Alert.alert("Error", "Failed to post reply");
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const dismissKeyboard = () => {
-    Keyboard.dismiss();
   };
 
   const toggleThread = (replyId: string) => {
@@ -372,15 +386,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
       newExpanded.add(replyId);
     }
     setExpandedThreads(newExpanded);
-  };
-
-  const toggleDescription = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsDescriptionExpanded(!isDescriptionExpanded);
-  };
-
-  const focusInput = () => {
-    inputRef.current?.focus();
   };
 
   const renderReply = (reply: Reply, depth: number = 0) => {
@@ -397,23 +402,20 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
               <Ionicons name="person-circle-outline" size={16} color="#6B7280" />
               <Text style={styles.replyUsername}>{reply.username}</Text>
               <Text style={styles.replyTime}>• {reply.time_ago}</Text>
-              {reply.is_edited && (
-                <Text style={styles.editedBadge}>(edited)</Text>
-              )}
+              {reply.is_edited && <Text style={styles.editedBadge}>(edited)</Text>}
             </View>
 
             <View style={styles.replyHeaderRight}>
-              {isOwnReply && (
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => {
-                    setReplyToDelete(reply.id);
-                    setShowDeleteModal(true);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#9CA3AF" />
-                </TouchableOpacity>
-              )}
+              {/* NEW: Universal Action Menu Trigger */}
+              <TouchableOpacity
+                style={styles.optionsMenuButton}
+                onPress={() => {
+                  setSelectedReply(reply);
+                  setShowActionMenu(true);
+                }}
+              >
+                <Ionicons name="ellipsis-horizontal" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -423,49 +425,22 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           {/* Reply Actions Row */}
           <View style={styles.replyActionsRow}>
             <View style={styles.replyActionsLeft}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleUpvoteReply(reply.id)}
-              >
-                <Feather
-                  name="thumbs-up"
-                  size={14}
-                  color={reply.is_upvoted_by_user ? "#6366F1" : "#9CA3AF"}
-                />
-                <Text
-                  style={[
-                    styles.actionText,
-                    reply.is_upvoted_by_user && styles.actionTextActive,
-                  ]}
-                >
+              <TouchableOpacity style={styles.actionButton} onPress={() => handleUpvoteReply(reply.id)}>
+                <Feather name="thumbs-up" size={14} color={reply.is_upvoted_by_user ? "#6366F1" : "#9CA3AF"} />
+                <Text style={[styles.actionText, reply.is_upvoted_by_user && styles.actionTextActive]}>
                   {reply.upvote_count}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  setReplyingTo(reply);
-                  focusInput();
-                }}
-              >
+              <TouchableOpacity style={styles.actionButton} onPress={() => { setReplyingTo(reply); inputRef.current?.focus(); }}>
                 <Ionicons name="return-down-forward-outline" size={14} color="#9CA3AF" />
                 <Text style={styles.actionText}>Reply</Text>
               </TouchableOpacity>
 
               {hasReplies && (
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => toggleThread(reply.id)}
-                >
-                  <Ionicons
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={14}
-                    color="#9CA3AF"
-                  />
-                  <Text style={styles.actionText}>
-                    {reply.replies?.length}
-                  </Text>
+                <TouchableOpacity style={styles.actionButton} onPress={() => toggleThread(reply.id)}>
+                  <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color="#9CA3AF" />
+                  <Text style={styles.actionText}>{reply.replies?.length}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -483,22 +458,15 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   };
 
   const renderHeader = () => {
+    // ... [KEEP EXACTLY THE SAME] ...
     if (!title) return null;
 
     const categoryColor = getCategoryColor(category);
     const isTopicDiscussion = discussionType === "topic";
     
     const typeColors = isTopicDiscussion 
-      ? { 
-          bg: categoryColor + "20", 
-          text: categoryColor,
-          icon: "chatbubble-ellipses-outline" as const
-        }
-      : { 
-          bg: "#FEF3C7", 
-          text: "#F59E0B",
-          icon: "people-outline" as const
-        };
+      ? { bg: categoryColor + "20", text: categoryColor, icon: "chatbubble-ellipses-outline" as const }
+      : { bg: "#FEF3C7", text: "#F59E0B", icon: "people-outline" as const };
 
     const typeText = isTopicDiscussion ? "Topic Discussion" : "Community Discussion";
 
@@ -508,15 +476,11 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
         <View style={styles.typeBadge}>
           <View style={[styles.typeBadgeInner, { backgroundColor: typeColors.bg }]}>
             <Ionicons name={typeColors.icon} size={12} color={typeColors.text} />
-            <Text style={[styles.typeBadgeText, { color: typeColors.text }]}>
-              {typeText}
-            </Text>
+            <Text style={[styles.typeBadgeText, { color: typeColors.text }]}>{typeText}</Text>
           </View>
           {isTopicDiscussion && category && (
             <View style={[styles.categoryBadge, { backgroundColor: categoryColor + "15" }]}>
-              <Text style={[styles.categoryBadgeText, { color: categoryColor }]}>
-                {category}
-              </Text>
+              <Text style={[styles.categoryBadgeText, { color: categoryColor }]}>{category}</Text>
             </View>
           )}
         </View>
@@ -527,17 +491,12 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
         {/* Description with toggle */}
         {description && (
           <View style={styles.descriptionContainer}>
-            <Text 
-              style={styles.description}
-              numberOfLines={isDescriptionExpanded ? undefined : 2}
-            >
+            <Text style={styles.description} numberOfLines={isDescriptionExpanded ? undefined : 2}>
               {description}
             </Text>
             {description.length > 100 && (
-              <TouchableOpacity onPress={toggleDescription} activeOpacity={0.7}>
-                <Text style={styles.showMoreText}>
-                  {isDescriptionExpanded ? 'Show less' : 'Show more'}
-                </Text>
+              <TouchableOpacity onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)} activeOpacity={0.7}>
+                <Text style={styles.showMoreText}>{isDescriptionExpanded ? 'Show less' : 'Show more'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -576,62 +535,41 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
                 <Text style={styles.metadataItemText}>{replyCount}</Text>
               </View>
             )}
-            <TouchableOpacity 
-              style={styles.upvoteButton}
-              onPress={onUpvote}
-            >
-              <Feather
-                name="thumbs-up"
-                size={12}
-                color={userHasUpvoted ? "#6366F1" : "#9CA3AF"}
-              />
-              <Text style={[styles.upvoteText, userHasUpvoted && styles.upvoteTextActive]}>
-                {upvoteCount}
-              </Text>
+            <TouchableOpacity style={styles.upvoteButton} onPress={onUpvote}>
+              <Feather name="thumbs-up" size={12} color={userHasUpvoted ? "#6366F1" : "#9CA3AF"} />
+              <Text style={[styles.upvoteText, userHasUpvoted && styles.upvoteTextActive]}>{upvoteCount}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Divider */}
         <View style={styles.divider} />
       </View>
     );
   };
 
   if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
-    );
+    return <View style={styles.centerContainer}><ActivityIndicator size="large" color="#6366F1" /></View>;
   }
 
   return (
-    <TouchableWithoutFeedback onPress={dismissKeyboard}>
-      {/* ✅ FLEX FIX: If it is nested, we remove flex:1 so it expands infinitely downwards */}
+    <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
       <View style={[styles.container, !isNested && { flex: 1 }]}>
         
-        {/* Fixed Header */}
         {renderHeader()}
 
-        {/* Scrollable Replies */}
         <ScrollView
           ref={scrollViewRef}
           style={[styles.scrollView, !isNested && { flex: 1 }]}
-          refreshControl={
-            !isNested ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined
-          }
+          refreshControl={!isNested ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={!isNested} // ✅ THE MAGIC FIX: Turns off the scroll trap when nested
+          scrollEnabled={!isNested} 
         >
           {replies.length === 0 ? (
             <View style={styles.emptyReplies}>
               <Ionicons name="chatbubbles-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyRepliesText}>
-                No replies yet. Be the first to share your thoughts!
-              </Text>
+              <Text style={styles.emptyRepliesText}>No replies yet. Be the first to share your thoughts!</Text>
             </View>
           ) : (
             replies.map(reply => renderReply(reply))
@@ -639,18 +577,12 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           <View style={{ height: 20 }} />
         </ScrollView>
 
-        {/* Fixed Reply Input (Will anchor to the bottom of the content stream) */}
-        <View style={[
-          styles.inputContainer,
-          isKeyboardVisible && { marginBottom: keyboardHeight }
-        ]}>
+        <View style={[styles.inputContainer, isKeyboardVisible && { marginBottom: keyboardHeight }]}>
           {replyingTo && (
             <View style={styles.replyingToBanner}>
               <View style={styles.replyingToContent}>
                 <Ionicons name="return-down-forward" size={12} color="#6366F1" />
-                <Text style={styles.replyingToText} numberOfLines={1}>
-                  Replying to {replyingTo.username}
-                </Text>
+                <Text style={styles.replyingToText} numberOfLines={1}>Replying to {replyingTo.username}</Text>
               </View>
               <TouchableOpacity onPress={() => setReplyingTo(null)}>
                 <Ionicons name="close-circle" size={16} color="#9CA3AF" />
@@ -670,29 +602,68 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
               maxLength={1000}
             />
             <TouchableOpacity
-              style={[
-                styles.sendButton,
-                (!replyText.trim() || submitting) && styles.sendButtonDisabled,
-              ]}
+              style={[styles.sendButton, (!replyText.trim() || submitting) && styles.sendButtonDisabled]}
               onPress={handleSubmitReply}
               disabled={!replyText.trim() || submitting}
             >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Ionicons name="send" size={16} color="#FFFFFF" />
-              )}
+              {submitting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="send" size={16} color="#FFFFFF" />}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Delete Confirmation Modal */}
+        {/* MODERATION ACTION MENU */}
         <Modal
-          visible={showDeleteModal}
+          visible={showActionMenu}
           transparent
-          animationType="fade"
-          onRequestClose={() => setShowDeleteModal(false)}
+          animationType="slide"
+          onRequestClose={() => setShowActionMenu(false)}
         >
+          <TouchableOpacity 
+            style={styles.bottomSheetOverlay} 
+            activeOpacity={1} 
+            onPress={() => setShowActionMenu(false)}
+          >
+            <View style={styles.bottomSheetContainer}>
+              <View style={styles.bottomSheetHandle} />
+              
+              {/* Only show delete if it's their own reply */}
+              {selectedReply?.user_id === currentUser ? (
+                <TouchableOpacity 
+                  style={styles.actionSheetButton}
+                  onPress={() => {
+                    setShowActionMenu(false);
+                    setReplyToDelete(selectedReply.id);
+                    setShowDeleteModal(true);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  <Text style={[styles.actionSheetText, { color: "#EF4444" }]}>Delete Reply</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.actionSheetButton} onPress={handleReportContent}>
+                    <Ionicons name="flag-outline" size={20} color="#111827" />
+                    <Text style={styles.actionSheetText}>Report Content</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.actionSheetButton} onPress={handleBlockUser}>
+                    <Ionicons name="ban-outline" size={20} color="#EF4444" />
+                    <Text style={[styles.actionSheetText, { color: "#EF4444" }]}>Block User</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <View style={styles.actionSheetDivider} />
+
+              <TouchableOpacity style={styles.actionSheetCancel} onPress={() => setShowActionMenu(false)}>
+                <Text style={styles.actionSheetCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* DELETE CONFIRMATION MODAL */}
+        <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
           <TouchableWithoutFeedback onPress={() => setShowDeleteModal(false)}>
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback onPress={() => {}}>
@@ -701,20 +672,12 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
                     <Ionicons name="warning" size={32} color="#EF4444" />
                     <Text style={styles.deleteModalTitle}>Delete Reply</Text>
                   </View>
-                  <Text style={styles.deleteModalText}>
-                    Are you sure you want to delete this reply? This action cannot be undone.
-                  </Text>
+                  <Text style={styles.deleteModalText}>Are you sure you want to delete this reply? This action cannot be undone.</Text>
                   <View style={styles.deleteModalButtons}>
-                    <TouchableOpacity
-                      style={[styles.deleteModalButton, styles.cancelButton]}
-                      onPress={() => setShowDeleteModal(false)}
-                    >
+                    <TouchableOpacity style={[styles.deleteModalButton, styles.cancelButton]} onPress={() => setShowDeleteModal(false)}>
                       <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.deleteModalButton, styles.confirmDeleteButton]}
-                      onPress={handleDeleteReply}
-                    >
+                    <TouchableOpacity style={[styles.deleteModalButton, styles.confirmDeleteButton]} onPress={handleDeleteReply}>
                       <Text style={styles.confirmDeleteText}>Delete</Text>
                     </TouchableOpacity>
                   </View>
@@ -723,6 +686,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
             </View>
           </TouchableWithoutFeedback>
         </Modal>
+
       </View>
     </TouchableWithoutFeedback>
   );
@@ -862,7 +826,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   scrollView: {
-    // flex: 1 removed here to allow infinite height expansion
     backgroundColor: "#F9FAFB",
   },
   scrollContent: {
@@ -1079,6 +1042,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  bottomSheetContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 12,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  actionSheetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 12,
+  },
+  actionSheetText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#111827",
+  },
+  actionSheetDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 8,
+  },
+  actionSheetCancel: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  actionSheetCancelText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  optionsMenuButton: {
+    padding: 4,
   },
 });
 

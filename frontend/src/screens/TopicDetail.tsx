@@ -355,7 +355,7 @@ const TopicDetailScreen: React.FC = () => {
     );
   }
 
-  const miniPlayerHeight = showPlayer ? 70 : 0;
+  const miniPlayerHeight = showPlayer ? 75 : 0;
 
   return (
     <View style={styles.container}>
@@ -755,7 +755,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F3F4F6",
     overflow: "hidden",
-    minHeight: 500,
   },
   discussionHeader: {
     flexDirection: "row",
@@ -777,7 +776,6 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   discussionContent: {
-    minHeight: 600,
     backgroundColor: "#F9FAFB",
   },
   replyCountBadge: {

@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: "#FFFFFF",
-    padding: 16,
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
@@ -377,15 +377,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   notificationTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 4,
   },
   notificationPreview: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#6B7280",
-    lineHeight: 20,
     marginBottom: 4,
   },
   notificationTime: {

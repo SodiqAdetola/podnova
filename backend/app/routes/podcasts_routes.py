@@ -82,7 +82,8 @@ async def generate_podcast(
 
 @router.post("/generate-custom")
 async def generate_custom_podcast_endpoint(
-    files: Optional[List[UploadFile]] = File(None),
+    # REMOVED Optional, and set default to []
+    files: List[UploadFile] = File(default=[]), 
     custom_prompt: Optional[str] = Form(""),
     voice: str = Form(PodcastVoice.CALM_FEMALE),
     style: str = Form(PodcastStyle.STANDARD),
@@ -99,7 +100,7 @@ async def generate_custom_podcast_endpoint(
         # FastAPI handles the multipart parsing automatically
         result = await create_custom_podcast(
             user_id=user_uid,
-            files=files or [],
+            files=files, # No longer need 'or []' because it defaults to []
             custom_prompt=custom_prompt or "",
             voice=voice,
             style=style,

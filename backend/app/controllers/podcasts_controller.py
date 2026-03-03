@@ -136,7 +136,7 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
     
-    # ✅ FIXED: Only pass the podcast_id to match the updated background task signature
+    # Only pass the podcast_id to match the updated background task signature
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {
@@ -460,7 +460,7 @@ async def regenerate_podcast(
         {"$set": update_fields}
     )
     
-    # ✅ FIXED: Only pass podcast_id
+    # Only pass podcast_id
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {

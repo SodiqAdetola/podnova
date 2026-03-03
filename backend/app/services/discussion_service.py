@@ -10,7 +10,6 @@ from app.models.discussion import (
     DiscussionType
 )
 from app.services.notification_service import notification_service
-import re
 import traceback
 
 class DiscussionService:
@@ -101,27 +100,37 @@ class DiscussionService:
             print(f"🔍 Getting discussions with filters: type={discussion_type}, topic={topic_id}, category={category}, search={search_query}")
             
             # --- SCENARIO A: SEARCH MODE ---
-            # If the user is actively searching, bypass the "must have replies" filter
             if search_query and search_query.strip():
-                print(f"🔎 SEARCH MODE: '{search_query}' (Ignoring reply count)")
-                query = {
-                    "is_active": True,
-                    "$or": [
-                        {"title": {"$regex": search_query, "$options": "i"}},
-                        {"description": {"$regex": search_query, "$options": "i"}},
-                        {"tags": {"$in": [re.compile(search_query, re.IGNORECASE)]}}
-                    ]
-                }
-                if category and category != "all": query["category"] = category
-                if discussion_type and discussion_type != "all": query["discussion_type"] = discussion_type
+                print(f"🔎 SMART SEARCH MODE: '{search_query}'")
                 
-                # We specifically DO NOT add any reply_count logic here.
+                pipeline = [
+                    {
+                        "$search": {
+                            "index": "default", # Requires Atlas Search Index named 'default' on 'discussions' collection
+                            "text": {
+                                "query": search_query,
+                                "path": ["title", "description", "category", "tags"],
+                                "fuzzy": {"maxEdits": 1}
+                            }
+                        }
+                    }
+                ]
                 
-                cursor = db["discussions"].find(query).sort("last_activity", -1).skip(skip).limit(limit)
+                match_query = {"is_active": True}
+                if category and category != "all": 
+                    match_query["category"] = category
+                if discussion_type and discussion_type != "all": 
+                    match_query["discussion_type"] = discussion_type
+                    
+                pipeline.append({"$match": match_query})
+                pipeline.append({"$sort": {"score": {"$meta": "searchScore"}}})
+                pipeline.append({"$skip": skip})
+                pipeline.append({"$limit": limit})
+                
+                cursor = db["discussions"].aggregate(pipeline)
                 return await self._process_cursor(cursor, user_id)
 
             # --- SCENARIO B: FEED MODE ---
-            # If browsing organically, hide auto-posts that have 0 replies to keep feed clean.
             else:
                 query = {"is_active": True}
                 if topic_id:
@@ -155,6 +164,7 @@ class DiscussionService:
         discussions = []
         async for disc in cursor:
             try:
+                # Handle edge case where aggregate returns doc differently than find
                 d_id = str(disc["_id"])
                 user_has_upvoted = False
                 if user_id:
@@ -266,17 +276,14 @@ class DiscussionService:
                 target_user_id = None
                 is_nested = False
                 
-                # 1. If replying to a specific comment, target the comment's author
                 if parent_reply_id:
                     parent_reply = await db["replies"].find_one({"_id": ObjectId(parent_reply_id)})
                     if parent_reply:
                         target_user_id = parent_reply.get("user_id")
                         is_nested = True
-                # 2. Otherwise, target the creator of the main discussion
                 else:
                     target_user_id = discussion.get("user_id")
 
-                # If we have a valid target (and they aren't replying to themselves), fire!
                 if target_user_id and target_user_id != user_id:
                     await notification_service.create_reply_notification(
                         discussion_owner_id=target_user_id,
@@ -285,7 +292,7 @@ class DiscussionService:
                         reply_author_id=user_id,
                         reply_author_name=username,
                         reply_preview=content[:100],
-                        is_nested_reply=is_nested # Pass this new flag
+                        is_nested_reply=is_nested
                     )
             except Exception as e:
                 print(f"Error triggering reply notification: {e}")
@@ -320,19 +327,15 @@ class DiscussionService:
         try:
             blocked_users = []
             
-            # 1. Fetch the current user's blocked list
             if user_id:
                 user_doc = await db["users"].find_one({"firebase_uid": user_id})
                 if user_doc:
                     blocked_users = user_doc.get("blocked_users", [])
 
-            # 2. Build a strict query
             query = {
                 "discussion_id": discussion_id,
                 "is_deleted": False,
-                # Filter out any replies written by blocked users
                 "user_id": {"$nin": blocked_users}, 
-                # Auto-hide content with 5 or more reports
                 "$or": [
                     {"report_count": {"$exists": False}},
                     {"report_count": {"$lt": 5}}
@@ -368,7 +371,6 @@ class DiscussionService:
                     
             return replies
         except Exception as e:
-            import traceback
             traceback.print_exc()
             return []
 

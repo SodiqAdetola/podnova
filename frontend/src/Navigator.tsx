@@ -23,6 +23,7 @@ import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
 
 import * as Notifications from 'expo-notifications';
+import * as Linking from 'expo-linking';
 
 /* -------------------- TYPES -------------------- */
 
@@ -62,6 +63,23 @@ const TAB_ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Io
   Create: ["add", "add"],
   Library: ["library", "library-outline"],
   Profile: ["person", "person-outline"],
+};
+
+/* -------------------- DEEP LINKING CONFIG -------------------- */
+
+const linking = {
+  // Listen for both the podnova:// custom scheme and the https:// Universal Links
+  prefixes: [Linking.createURL('/'), 'https://podnova.app'],
+  config: {
+    screens: {
+      // Maps exactly to your MainStackParamList
+      TopicDetail: 'topic/:topicId',
+      DiscussionDetail: 'discussion/:discussionId',
+      
+      // Fallback: If a URL doesn't match anything above, just open the Home Tabs
+      MainTabs: '*', 
+    },
+  },
 };
 
 /* -------------------- AUTH STACK -------------------- */
@@ -209,9 +227,10 @@ const RootAppOverlay: React.FC = () => {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Navigation Layer */}
+      {/* Navigation Layer with Deep Linking Injected */}
       <NavigationContainer
         ref={navigationRef}
+        linking={linking} // <-- THIS IS THE CRITICAL ADDITION
         onReady={() => {
           setCurrentRouteName(navigationRef.getCurrentRoute()?.name ?? "Home");
         }}
@@ -251,9 +270,9 @@ export default RootAppOverlay;
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 70,
+    height: 80,
     paddingBottom: 5,
-    paddingTop: 5,
+    paddingTop: 10,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",

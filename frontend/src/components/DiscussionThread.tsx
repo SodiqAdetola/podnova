@@ -103,7 +103,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [replyToDelete, setReplyToDelete] = useState<string | null>(null);
   
-  // NEW: Moderation States
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [selectedReply, setSelectedReply] = useState<Reply | null>(null);
 
@@ -114,33 +113,26 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
-  // Keyboard listener
+  // Cross-platform keyboard listener
   useEffect(() => {
-    const keyboardWillShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        if (showPlayer) {
-          setKeyboardHeight(260);
-        } else {
-          setKeyboardHeight(e.endCoordinates.height);
-        }
-        setIsKeyboardVisible(true);
-      }
-    );
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const keyboardWillHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-        setIsKeyboardVisible(false);
-      }
-    );
+    const keyboardShowListener = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      setIsKeyboardVisible(true);
+    });
+
+    const keyboardHideListener = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      setIsKeyboardVisible(false);
+    });
 
     return () => {
-      keyboardWillShowListener.remove();
-      keyboardWillHideListener.remove();
+      keyboardShowListener.remove();
+      keyboardHideListener.remove();
     };
-  }, [showPlayer]);
+  }, []);
 
   const getAuthToken = async (): Promise<string | null> => {
     const auth = getAuth();
@@ -217,11 +209,9 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
     loadReplies();
   };
 
-  // --- NEW: MODERATION ACTIONS ---
   const handleReportContent = async () => {
     if (!selectedReply) return;
     
-    // We instantly close the menu and show a "Thank you" to make the app feel responsive
     setShowActionMenu(false);
     
     try {
@@ -257,7 +247,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
                 headers: { Authorization: `Bearer ${token}` }
               });
               
-              // Optimistically remove their replies from the feed
               Alert.alert("User Blocked", `${selectedReply.username} has been blocked.`);
               loadReplies(); 
             } catch (error) {
@@ -268,7 +257,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
       ]
     );
   };
-  // ------------------------------
 
   const handleUpvoteReply = async (replyId: string) => {
     try {
@@ -396,7 +384,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
     return (
       <View key={reply.id} style={[styles.replyContainer, depth > 0 && styles.nestedReply]}>
         <View style={styles.replyCard}>
-          {/* Reply Header */}
           <View style={styles.replyHeader}>
             <View style={styles.replyUserInfo}>
               <Ionicons name="person-circle-outline" size={16} color="#6B7280" />
@@ -406,7 +393,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
             </View>
 
             <View style={styles.replyHeaderRight}>
-              {/* NEW: Universal Action Menu Trigger */}
               <TouchableOpacity
                 style={styles.optionsMenuButton}
                 onPress={() => {
@@ -419,10 +405,8 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
             </View>
           </View>
 
-          {/* Reply Content */}
           <Text style={styles.replyContent}>{reply.content}</Text>
 
-          {/* Reply Actions Row */}
           <View style={styles.replyActionsRow}>
             <View style={styles.replyActionsLeft}>
               <TouchableOpacity style={styles.actionButton} onPress={() => handleUpvoteReply(reply.id)}>
@@ -447,7 +431,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           </View>
         </View>
 
-        {/* Nested Replies */}
         {hasReplies && isExpanded && (
           <View style={styles.repliesThread}>
             {reply.replies?.map(childReply => renderReply(childReply, depth + 1))}
@@ -458,7 +441,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
   };
 
   const renderHeader = () => {
-    // ... [KEEP EXACTLY THE SAME] ...
     if (!title) return null;
 
     const categoryColor = getCategoryColor(category);
@@ -472,7 +454,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
     return (
       <View style={styles.headerContainer}>
-        {/* Type Badge */}
         <View style={styles.typeBadge}>
           <View style={[styles.typeBadgeInner, { backgroundColor: typeColors.bg }]}>
             <Ionicons name={typeColors.icon} size={12} color={typeColors.text} />
@@ -485,10 +466,8 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           )}
         </View>
 
-        {/* Title */}
         <Text style={styles.title}>{title}</Text>
 
-        {/* Description with toggle */}
         {description && (
           <View style={styles.descriptionContainer}>
             <Text style={styles.description} numberOfLines={isDescriptionExpanded ? undefined : 2}>
@@ -502,7 +481,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           </View>
         )}
 
-        {/* Tags */}
         {tags.length > 0 && (
           <View style={styles.tagsRow}>
             {tags.slice(0, 3).map((tag, index) => (
@@ -513,7 +491,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           </View>
         )}
 
-        {/* Metadata Row */}
         <View style={styles.metadataRow}>
           <View style={styles.metadataLeft}>
             <Ionicons name="person-circle-outline" size={14} color="#6B7280" />
@@ -574,10 +551,15 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           ) : (
             replies.map(reply => renderReply(reply))
           )}
-          <View style={{ height: 20 }} />
+          <View style={styles.listBottomPadding} />
         </ScrollView>
 
-        <View style={[styles.inputContainer, isKeyboardVisible && { marginBottom: keyboardHeight }]}>
+        <View 
+          style={[
+            styles.inputContainer, 
+            !isKeyboardVisible && { paddingBottom: Platform.OS === 'ios' ? 28 : 12 }
+          ]}
+        >
           {replyingTo && (
             <View style={styles.replyingToBanner}>
               <View style={styles.replyingToContent}>
@@ -611,6 +593,11 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
           </View>
         </View>
 
+        {/* DYNAMIC KEYBOARD SPACER (iOS ONLY) */}
+        {Platform.OS === 'ios' && isKeyboardVisible && (
+          <View style={{ height: keyboardHeight }} />
+        )}
+
         {/* MODERATION ACTION MENU */}
         <Modal
           visible={showActionMenu}
@@ -626,7 +613,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
             <View style={styles.bottomSheetContainer}>
               <View style={styles.bottomSheetHandle} />
               
-              {/* Only show delete if it's their own reply */}
               {selectedReply?.user_id === currentUser ? (
                 <TouchableOpacity 
                   style={styles.actionSheetButton}
@@ -637,7 +623,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
                   }}
                 >
                   <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                  <Text style={[styles.actionSheetText, { color: "#EF4444" }]}>Delete Reply</Text>
+                  <Text style={[styles.actionSheetText, styles.destructiveText]}>Delete Reply</Text>
                 </TouchableOpacity>
               ) : (
                 <>
@@ -648,7 +634,7 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
                   <TouchableOpacity style={styles.actionSheetButton} onPress={handleBlockUser}>
                     <Ionicons name="ban-outline" size={20} color="#EF4444" />
-                    <Text style={[styles.actionSheetText, { color: "#EF4444" }]}>Block User</Text>
+                    <Text style={[styles.actionSheetText, styles.destructiveText]}>Block User</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -694,7 +680,6 @@ const DiscussionThread: React.FC<DiscussionThreadProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    // flex: 1 removed here to allow infinite height expansion
     backgroundColor: "#FFFFFF",
   },
   centerContainer: {
@@ -832,6 +817,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+  listBottomPadding: {
+    height: 20,
+  },
   emptyReplies: {
     paddingVertical: 60,
     paddingHorizontal: 40,
@@ -887,9 +875,6 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     fontStyle: "italic",
   },
-  deleteButton: {
-    padding: 4,
-  },
   replyContent: {
     fontSize: 13,
     color: "#374151",
@@ -927,9 +912,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
     paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 0,
-    marginBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   replyingToBanner: {
     flexDirection: "row",
@@ -965,7 +949,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    marginVertical: 12,
+    marginVertical: 4,
     fontSize: 13,
     color: "#111827",
     borderWidth: 1,
@@ -1043,7 +1027,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-
   bottomSheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1075,6 +1058,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#111827",
+  },
+  destructiveText: {
+    color: "#EF4444",
   },
   actionSheetDivider: {
     height: 1,

@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 export interface SettingItem {
   id: string;
-  type: "navigation" | "toggle" | "value" | "header";
+  type: "navigation" | "toggle" | "value" | "header" | "action";
   icon?: keyof typeof Ionicons.glyphMap;
   iconColor?: string;
   title: string;
@@ -21,6 +21,7 @@ export interface SettingItem {
   onToggle?: (value: boolean) => void;
   showChevron?: boolean;
   destructive?: boolean;
+  subItems?: SettingItem[];
 }
 
 interface Props {
@@ -50,31 +51,50 @@ const SettingsList: React.FC<Props> = ({ sections }) => {
 
     if (item.type === "toggle") {
       return (
-        <View key={item.id} style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            {item.icon && (
-              <View style={[styles.iconContainer, { backgroundColor: item.iconColor + "15" || "#F3F4F6" }]}>
-                <Ionicons
-                  name={item.icon}
-                  size={20}
-                  color={item.iconColor || "#6366F1"}
-                />
-              </View>
-            )}
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>{item.title}</Text>
-              {item.subtitle && (
-                <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
+        <View key={item.id}>
+          <View style={styles.settingRow}>
+            <View style={styles.settingLeft}>
+              {item.icon && (
+                <View style={[styles.iconContainer, { backgroundColor: item.iconColor ? item.iconColor + "15" : "#F3F4F6" }]}>
+                  <Ionicons
+                    name={item.icon}
+                    size={20}
+                    color={item.iconColor || "#6366F1"}
+                  />
+                </View>
               )}
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>{item.title}</Text>
+                {item.subtitle && (
+                  <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
+                )}
+              </View>
             </View>
+            <Switch
+              value={item.value as boolean}
+              onValueChange={item.onToggle}
+              trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
+              thumbColor={item.value ? "#6366F1" : "#F3F4F6"}
+              ios_backgroundColor="#D1D5DB"
+            />
           </View>
-          <Switch
-            value={item.value as boolean}
-            onValueChange={item.onToggle}
-            trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
-            thumbColor={item.value ? "#6366F1" : "#F3F4F6"}
-            ios_backgroundColor="#D1D5DB"
-          />
+
+          {item.value && item.subItems && (
+            <View style={styles.subSettingsWrapper}>
+              {item.subItems.map((subItem) => (
+                <View key={subItem.id} style={styles.subSettingRow}>
+                  <Text style={styles.subSettingTitle}>{subItem.title}</Text>
+                  <Switch
+                    value={subItem.value as boolean}
+                    onValueChange={subItem.onToggle}
+                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
+                    thumbColor={subItem.value ? "#6366F1" : "#ffffff"}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       );
     }
@@ -88,7 +108,7 @@ const SettingsList: React.FC<Props> = ({ sections }) => {
       >
         <View style={styles.settingLeft}>
           {item.icon && (
-            <View style={[styles.iconContainer, { backgroundColor: item.iconColor + "15" || "#F3F4F6" }]}>
+            <View style={[styles.iconContainer, { backgroundColor: item.iconColor ? item.iconColor + "15" : "#F3F4F6" }]}>
               <Ionicons
                 name={item.icon}
                 size={20}
@@ -234,6 +254,25 @@ const styles = StyleSheet.create({
   },
   destructiveText: {
     color: "#EF4444",
+  },
+  subSettingsWrapper: {
+    backgroundColor: "#FAFAFA",
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    paddingVertical: 8,
+  },
+  subSettingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingLeft: 60,
+    paddingRight: 16,
+  },
+  subSettingTitle: {
+    fontSize: 14,
+    color: "#4B5563",
+    fontWeight: "400",
   },
 });
 

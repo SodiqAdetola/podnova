@@ -21,7 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAudio } from "../contexts/AudioContext";
 import PodcastPlayer from "../components/PodcastPlayer";
 import { Podcast, TabType, PodcastLibraryResponse } from "../types/podcasts";
-import { LinearGradient } from 'expo-linear-gradient'; // Added for custom podcast flair
+import { LinearGradient } from 'expo-linear-gradient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -296,11 +296,19 @@ const LibraryScreen: React.FC = () => {
     return true;
   });
 
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return "Unknown";
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  // --- UPDATED: formatDuration function with fallback ---
+  const formatDuration = (seconds?: number, estimatedMinutes?: number) => {
+    if (seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, "0")}`;
+    }
+    
+    if (estimatedMinutes) {
+      return `~${estimatedMinutes}:00`;
+    }
+    
+    return "Unknown";
   };
 
   const formatDate = (dateString: string) => {
@@ -318,7 +326,6 @@ const LibraryScreen: React.FC = () => {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  // --- NEW: Category and Styling Logic ---
   const getCategoryColor = (category: string) => {
     const cat = category?.toLowerCase();
     if (cat === "finance") return "#3B82F6";
@@ -332,7 +339,6 @@ const LibraryScreen: React.FC = () => {
     if (category?.toLowerCase() === "custom") return "document-text";
     return "musical-notes";
   };
-  // ---------------------------------------
 
   const renderMenu = (podcast: Podcast) => {
     if (activeMenu !== podcast.id) return null;
@@ -445,8 +451,9 @@ const LibraryScreen: React.FC = () => {
               </Text>
 
               <View style={styles.metaRow}>
+                {/* UPDATED: Calling formatDuration with both actual and estimated length */}
                 <Text style={styles.duration}>
-                  Length: {formatDuration(item.duration_seconds)}
+                  Length: {formatDuration(item.duration_seconds, item.length_minutes)}
                 </Text>
                 
                 <Text style={styles.metaDivider}>•</Text>
@@ -556,15 +563,6 @@ const LibraryScreen: React.FC = () => {
           {activeTab === "all" && <View style={styles.activeTabIndicator} />}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "downloads" && styles.activeTab]}
-          onPress={() => setActiveTab("downloads")}
-        >
-          <Text style={[styles.tabText, activeTab === "downloads" && styles.activeTabText]}>
-            Downloads
-          </Text>
-          {activeTab === "downloads" && <View style={styles.activeTabIndicator} />}
-        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.tab, activeTab === "saved" && styles.activeTab]}
@@ -574,6 +572,17 @@ const LibraryScreen: React.FC = () => {
             Saved
           </Text>
           {activeTab === "saved" && <View style={styles.activeTabIndicator} />}
+        </TouchableOpacity>
+
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "downloads" && styles.activeTab]}
+          onPress={() => setActiveTab("downloads")}
+        >
+          <Text style={[styles.tabText, activeTab === "downloads" && styles.activeTabText]}>
+            Downloads
+          </Text>
+          {activeTab === "downloads" && <View style={styles.activeTabIndicator} />}
         </TouchableOpacity>
       </View>
 
@@ -802,7 +811,7 @@ const styles = StyleSheet.create({
   playButton: {
     width: 40,
     height: 40,
-    borderRadius: 20, // fixed CSS standard
+    borderRadius: 20,
     backgroundColor: "#EEF2FF",
     justifyContent: "center",
     alignItems: "center",

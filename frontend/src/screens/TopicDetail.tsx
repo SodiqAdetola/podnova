@@ -13,6 +13,8 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Share,
+  Alert,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -103,6 +105,16 @@ const TopicDetailScreen: React.FC = () => {
     } catch (error) {
       console.error("Error loading topic details:", error);
       setTopic(null); 
+
+      Alert.alert("Topic Unavailable", "This topic could not be found or has been removed.");
+      
+      // go back to working screen if error. If they landed here directly (e.g. from a shared link) and there's no back stack, navigate to the main screen.
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        (navigation as any).replace("MainTabs"); 
+      }
+
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -162,6 +174,31 @@ const TopicDetailScreen: React.FC = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
+  };
+
+  // --- NEW: Native Share Implementation ---
+  const handleShare = async () => {
+    if (!topic) return;
+
+    try {
+      // This URL format acts as a Universal Link. 
+      // If the app is installed, OS intercepts it and opens the app.
+      // If not installed, it goes to the web browser (which redirects to App Store).
+      const shareUrl = `https://podnova.app/topic/${topic.id}`;
+      
+      const message = Platform.OS === 'android' 
+        ? `Check out this topic on PodNova: ${topic.title}\n\n${shareUrl}`
+        : `Check out this topic on PodNova: ${topic.title}`;
+
+      await Share.share({
+        message,
+        url: shareUrl, // iOS uses this specifically for rich link previews
+        title: topic.title,
+      });
+    } catch (error: any) {
+      Alert.alert("Error", "Could not share this topic.");
+      console.error("Share error:", error.message);
+    }
   };
 
   const getCategoryFallback = (category?: string) => {
@@ -388,7 +425,9 @@ const TopicDetailScreen: React.FC = () => {
         <Text style={styles.headerTitle} numberOfLines={1}>
           PODNOVA TOPIC
         </Text>
-        <TouchableOpacity style={styles.headerButton}>
+        
+        {/* WIRED UP SHARE BUTTON */}
+        <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
           <Ionicons name="share-outline" size={22} color="#6B7280" />
         </TouchableOpacity>
       </View>
@@ -550,7 +589,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#111827",
-    lineHeight: 32,
+    lineHeight: 28,
     marginBottom: 8,
   },
   metadata: {
@@ -607,8 +646,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center", 
     justifyContent: "center",
-    gap: 4,
-    marginHorizontal: 10,
+    gap: 10,
+    marginHorizontal: 20,
     marginBottom: 24,
   },
   actionButton: {
@@ -640,11 +679,11 @@ const styles = StyleSheet.create({
   },
   podcastButtonContainer: {
     flex: 1.2,
-    borderRadius: 24,
+    borderRadius: 48,
     overflow: "hidden",
-    shadowColor: "#6366F1",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowColor: "#000000",
+    shadowOffset: { width: 1, height: 5 },
+    shadowOpacity: 0.5,
     shadowRadius: 4,
     elevation: 4,
   },
@@ -653,12 +692,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    gap: 6,
   },
   podcastButtonText: {
     fontSize: 13,
     fontWeight: "700",
     color: "#FFFFFF",
+    width: "50%",
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#FFFFFF",

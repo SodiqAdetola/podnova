@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#FFFFFF', // Creates a cutout effect
   },
   badgeText: {

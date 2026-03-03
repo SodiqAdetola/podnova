@@ -209,9 +209,6 @@ const CategoryTopicsScreen: React.FC = () => {
         <Text style={styles.headerTitle}>
           {category.charAt(0).toUpperCase() + category.slice(1)}
         </Text>
-        <TouchableOpacity style={styles.searchButton} onPress={() => navigation.navigate('Search')}>
-          <Ionicons name="search" size={20} color="#6B7280" />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.tabsContainer}>
@@ -300,7 +297,6 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 60,
@@ -321,13 +317,9 @@ const styles = StyleSheet.create({
     color: "#6366F1",
     letterSpacing: 1,
     textTransform: "uppercase",
+    width: "77%",
     textAlign: "center",
-  },
-  searchButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+
   },
   tabsContainer: {
     flexDirection: "row",

@@ -1,77 +1,32 @@
-// frontend/src/screens/ProfileScreen.tsx - PRODUCTION READY
+// frontend/src/screens/ProfileScreen.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Alert,
   StatusBar,
-  Switch,
   ActivityIndicator,
-  LayoutAnimation,
-  Platform,
-  UIManager,
+  TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
-import VoiceSelector from "../components/VoiceSelector";
-import AIStyleSelector from "../components/AIStyleSelector";
-import PodcastLengthSelector from "../components/PodcastLengthSelector";
-
-// Enable LayoutAnimation on Android for the smooth expanding drawer
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import ProfileSettings from "../components/ProfileSettings";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-
-interface UserPreferences {
-  default_categories: string[];
-  default_podcast_length: string;
-  default_tone: string;
-  push_notifications: boolean;
-  default_voice: string;
-  default_ai_style: string;
-  // NEW: Granular notification settings
-  push_podcast_ready?: boolean;
-  push_reply?: boolean;
-  push_topic_update?: boolean;
-}
-
-interface UserProfile {
-  id: string;
-  firebase_uid: string;
-  email: string;
-  username: string;
-  preferences: UserPreferences;
-}
 
 const ProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [stats, setStats] = useState({
     podcasts: 0,
     discussions: 0,
     upvotes: 0,
   });
-
-  // Master Toggle
-  const [pushNotifications, setPushNotifications] = useState(true);
-  
-  // Granular Toggles (Defaulting to true)
-  const [pushPodcastReady, setPushPodcastReady] = useState(true);
-  const [pushReply, setPushReply] = useState(true);
-  const [pushTopicUpdate, setPushTopicUpdate] = useState(true);
-  
-  // Modal states
-  const [showVoiceSelector, setShowVoiceSelector] = useState(false);
-  const [showAIStyleSelector, setShowAIStyleSelector] = useState(false);
-  const [showLengthSelector, setShowLengthSelector] = useState(false);
 
   useEffect(() => {
     loadUserProfile();
@@ -99,14 +54,8 @@ const ProfileScreen: React.FC = () => {
       }
 
       if (response.ok) {
-        const profile: UserProfile = await response.json();
+        const profile = await response.json();
         setUserProfile(profile);
-        
-        // Sync states with backend data
-        setPushNotifications(profile.preferences.push_notifications ?? true);
-        setPushPodcastReady(profile.preferences.push_podcast_ready ?? true);
-        setPushReply(profile.preferences.push_reply ?? true);
-        setPushTopicUpdate(profile.preferences.push_topic_update ?? true);
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -118,7 +67,6 @@ const ProfileScreen: React.FC = () => {
   const createUserProfile = async () => {
     try {
       const token = await getAuthToken();
-
       const response = await fetch(`${API_BASE_URL}/users/profile`, {
         method: "POST",
         headers: {
@@ -128,9 +76,8 @@ const ProfileScreen: React.FC = () => {
       });
 
       if (response.ok) {
-        const profile: UserProfile = await response.json();
+        const profile = await response.json();
         setUserProfile(profile);
-        setPushNotifications(profile.preferences.push_notifications);
       }
     } catch (error) {
       console.error("Error creating profile:", error);
@@ -140,7 +87,6 @@ const ProfileScreen: React.FC = () => {
   const loadStats = async () => {
     try {
       const token = await getAuthToken();
-
       const response = await fetch(`${API_BASE_URL}/users/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -158,11 +104,18 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  const updatePreference = async (updates: Partial<UserPreferences>) => {
+  const updatePreference = async (updates: any) => {
     try {
       setUpdating(true);
-      const token = await getAuthToken();
+      
+      if (userProfile) {
+        setUserProfile({
+          ...userProfile,
+          preferences: { ...userProfile.preferences, ...updates },
+        });
+      }
 
+      const token = await getAuthToken();
       const response = await fetch(`${API_BASE_URL}/users/preferences`, {
         method: "PATCH",
         headers: {
@@ -172,91 +125,23 @@ const ProfileScreen: React.FC = () => {
         body: JSON.stringify(updates),
       });
 
-      if (response.ok) {
-        if (userProfile) {
-          setUserProfile({
-            ...userProfile,
-            preferences: {
-              ...userProfile.preferences,
-              ...updates,
-            },
-          });
-        }
-      } else {
-        throw new Error("Failed to update");
-      }
+      if (!response.ok) throw new Error("Failed to update");
     } catch (error) {
       console.error("Error updating preference:", error);
       Alert.alert("Error", "Failed to update preferences. Reverting changes.");
-      // Soft revert on error by reloading profile
-      loadUserProfile(); 
+      loadUserProfile();
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleMasterNotificationToggle = async (value: boolean) => {
-    // Animate the drawer opening/closing
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setPushNotifications(value);
-    await updatePreference({ push_notifications: value });
-  };
-
-  // --- Sub-toggle Handlers ---
-  const togglePodcastReady = (value: boolean) => {
-    setPushPodcastReady(value);
-    updatePreference({ push_podcast_ready: value });
-  };
-
-  const toggleReply = (value: boolean) => {
-    setPushReply(value);
-    updatePreference({ push_reply: value });
-  };
-
-  const toggleTopicUpdate = (value: boolean) => {
-    setPushTopicUpdate(value);
-    updatePreference({ push_topic_update: value });
-  };
-
-  const handleVoiceUpdate = (voice: string) => {
-    if (userProfile) {
-      setUserProfile({
-        ...userProfile,
-        preferences: {
-          ...userProfile.preferences,
-          default_voice: voice,
-        },
-      });
-    }
-  };
-
-  const handleAIStyleUpdate = (style: string) => {
-    if (userProfile) {
-      setUserProfile({
-        ...userProfile,
-        preferences: {
-          ...userProfile.preferences,
-          default_ai_style: style,
-        },
-      });
-    }
-  };
-
-  const handleLengthUpdate = (length: string) => {
-    if (userProfile) {
-      setUserProfile({
-        ...userProfile,
-        preferences: {
-          ...userProfile.preferences,
-          default_podcast_length: length,
-        },
-      });
-    }
-  };
-
+  // Restored Logout logic
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Cancel", 
+        style: "cancel" 
+      },
       {
         text: "Logout",
         style: "destructive",
@@ -269,26 +154,6 @@ const ProfileScreen: React.FC = () => {
         },
       },
     ]);
-  };
-
-  const formatVoiceName = (voice: string) => {
-    return voice
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  };
-
-  const formatAIStyleName = (style: string) => {
-    return style.charAt(0).toUpperCase() + style.slice(1);
-  };
-
-  const formatLengthName = (length: string) => {
-    const lengthMap: Record<string, string> = {
-      short: "Short (5 min)",
-      medium: "Medium (10 min)",
-      long: "Long (20 min)",
-    };
-    return lengthMap[length] || "Medium (10 min)";
   };
 
   if (loading) {
@@ -304,25 +169,24 @@ const ProfileScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header*/}
+      {/* Restored Header with Logout Button */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.brandName}>PODNOVA PROFILE</Text>
-          <Ionicons name="log-out-outline" size={24} color="#6366F1" onPress={handleLogout} />
+          <TouchableOpacity onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={24} color="#6366F1" />
+          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* User Info */}
         <View style={styles.userSection}>
           <View style={styles.avatarPlaceholder}>
             <Ionicons name="person" size={48} color="#FFFFFF" />
           </View>
-
           <Text style={styles.userName}>{userProfile?.username || "User"}</Text>
           <Text style={styles.userEmail}>{userProfile?.email || ""}</Text>
 
-          {/* Stats */}
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats.podcasts}</Text>
@@ -341,203 +205,13 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Preferences */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="settings" size={18} color="#6B7280" />
-            <Text style={styles.sectionTitle}>Preferences</Text>
-          </View>
-
-          <View style={styles.settingsCard}>
-            {/* Master Push Toggle */}
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: "#6366F115" }]}>
-                  <Ionicons name="notifications" size={20} color="#6366F1" />
-                </View>
-                <Text style={styles.settingTitle}>Allow Push Notifications</Text>
-              </View>
-              <Switch
-                value={pushNotifications}
-                onValueChange={handleMasterNotificationToggle}
-                disabled={updating}
-                trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
-                thumbColor={pushNotifications ? "#ffffff" : "#ffffff"}
-              />
-            </View>
-
-            {/* EXPANDING DRAWER: Granular Controls */}
-            {pushNotifications && (
-              <View style={styles.subSettingsWrapper}>
-                
-                <View style={styles.subSettingRow}>
-                  <Text style={styles.subSettingTitle}>Podcast Generation</Text>
-                  <Switch
-                    value={pushPodcastReady}
-                    onValueChange={togglePodcastReady}
-                    disabled={updating}
-                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
-                    thumbColor={pushPodcastReady ? "#ffffff" : "#ffffff"}
-                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                  />
-                </View>
-
-                <View style={styles.subSettingRow}>
-                  <Text style={styles.subSettingTitle}>Message Replies</Text>
-                  <Switch
-                    value={pushReply}
-                    onValueChange={toggleReply}
-                    disabled={updating}
-                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
-                    thumbColor={pushReply ? "#ffffff" : "#ffffff"}
-                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                  />
-                </View>
-
-                <View style={styles.subSettingRow}>
-                  <Text style={styles.subSettingTitle}>Topic Updates</Text>
-                  <Switch
-                    value={pushTopicUpdate}
-                    onValueChange={toggleTopicUpdate}
-                    disabled={updating}
-                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
-                    thumbColor={pushTopicUpdate ? "#ffffff" : "#ffffff"}
-                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                  />
-                </View>
-
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Voice & AI */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="flash" size={18} color="#6B7280" />
-            <Text style={styles.sectionTitle}>Podcast Defaults</Text>
-          </View>
-
-          <View style={styles.settingsCard}>
-            {/* Voice */}
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => setShowVoiceSelector(true)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: "#8B5CF615" }]}>
-                  <Ionicons name="mic" size={20} color="#8B5CF6" />
-                </View>
-                <Text style={styles.settingTitle}>Default Voice</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.valueText}>
-                  {userProfile?.preferences?.default_voice
-                    ? formatVoiceName(userProfile.preferences.default_voice)
-                    : "Calm Female"}
-                </Text>
-                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            {/* AI Style */}
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => setShowAIStyleSelector(true)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: "#6366F115" }]}>
-                  <Ionicons name="sparkles" size={20} color="#6366F1" />
-                </View>
-                <Text style={styles.settingTitle}>AI Style</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.valueText}>
-                  {userProfile?.preferences?.default_ai_style
-                    ? formatAIStyleName(userProfile.preferences.default_ai_style)
-                    : "Standard"}
-                </Text>
-                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            {/* Podcast Length */}
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => setShowLengthSelector(true)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: "#F59E0B15" }]}>
-                  <Ionicons name="time" size={20} color="#F59E0B" />
-                </View>
-                <Text style={styles.settingTitle}>Default Length</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.valueText}>
-                  {userProfile?.preferences?.default_podcast_length
-                    ? formatLengthName(userProfile.preferences.default_podcast_length)
-                    : "Medium (10 min)"}
-                </Text>
-                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* About */}
-        <View style={styles.section}>
-          <View style={styles.settingsCard}>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => Alert.alert("PodNova", "Version 1.0.0\n\nAI-powered news podcasts")}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: "#6B728015" }]}>
-                  <Ionicons name="information-circle" size={20} color="#6B7280" />
-                </View>
-                <Text style={styles.settingTitle}>About PodNova</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ProfileSettings 
+          userProfile={userProfile} 
+          onUpdatePreference={updatePreference} 
+        />
 
         <View style={styles.footer} />
       </ScrollView>
-
-      {/* Modals */}
-      {userProfile && (
-        <>
-          <VoiceSelector
-            visible={showVoiceSelector}
-            currentVoice={userProfile.preferences.default_voice}
-            onClose={() => setShowVoiceSelector(false)}
-            onUpdate={handleVoiceUpdate}
-          />
-
-          <AIStyleSelector
-            visible={showAIStyleSelector}
-            currentStyle={userProfile.preferences.default_ai_style}
-            onClose={() => setShowAIStyleSelector(false)}
-            onUpdate={handleAIStyleUpdate}
-          />
-
-          <PodcastLengthSelector
-            visible={showLengthSelector}
-            currentLength={userProfile.preferences.default_podcast_length}
-            onClose={() => setShowLengthSelector(false)}
-            onUpdate={handleLengthUpdate}
-          />
-        </>
-      )}
 
       {updating && (
         <View style={styles.updateOverlay}>
@@ -642,70 +316,6 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: "#E5E7EB",
   },
-  section: {
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 8,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6B7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  settingsCard: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 20,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  settingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    minHeight: 56,
-  },
-  settingLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  settingTitle: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#111827",
-  },
-  settingRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginLeft: 12,
-  },
-  valueText: {
-    fontSize: 15,
-    color: "#6B7280",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#F3F4F6",
-    marginLeft: 60,
-  },
   updateOverlay: {
     position: "absolute",
     top: 100,
@@ -717,7 +327,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -730,25 +343,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 40,
-  },
-  subSettingsWrapper: {
-    backgroundColor: "#FAFAFA",
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    paddingVertical: 8,
-  },
-  subSettingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingLeft: 60,
-    paddingRight: 16,
-  },
-  subSettingTitle: {
-    fontSize: 14,
-    color: "#4B5563",
-    fontWeight: "400",
   },
 });
 

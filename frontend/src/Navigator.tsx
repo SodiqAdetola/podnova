@@ -22,6 +22,8 @@ import DiscussionDetailScreen from "./screens/DiscussionDetailScreen";
 import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
 
+import * as Notifications from 'expo-notifications';
+
 /* -------------------- TYPES -------------------- */
 
 export type AuthStackParamList = {
@@ -164,13 +166,46 @@ const RootAppOverlay: React.FC = () => {
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [currentRouteName, setCurrentRouteName] = useState<string>("Home");
   
-  // Navigation Ref allows us to track route changes globally
-  const navigationRef = useNavigationContainerRef();
+  // Navigation Ref allows us to track route changes globally and navigate from outside screens!
+  const navigationRef = useNavigationContainerRef<MainStackParamList>();
 
   const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
-  
-  // Check if the current screen is one of our tab screens
   const hasTabBar = SCREENS_WITH_TAB_BAR.includes(currentRouteName);
+
+  // --- NEW: NOTIFICATION TAP LISTENER ---
+  React.useEffect(() => {
+    // This fires when the user physically taps the push notification banner
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      // Tell TypeScript exactly what shape the payload data is in
+      const data = response.notification.request.content.data as {
+        source_type?: string;
+        source_id?: string;
+      };
+      
+      // Safety check: wait a millisecond for the app to fully wake up and mount the navigator
+      setTimeout(() => {
+        if (navigationRef.isReady() && data) {
+          console.log("Tapped notification with data:", data);
+
+          // Route them based on the backend payload
+          if (data.source_type === 'podcast') {
+            // @ts-ignore - Overriding strict typing for nested tab navigation
+            navigationRef.navigate('MainTabs', { screen: 'Library' });
+          } 
+          // Check that source_id exists AND is a string before navigating
+          else if (data.source_type === 'discussion' && typeof data.source_id === 'string') {
+            navigationRef.navigate('DiscussionDetail', { discussionId: data.source_id });
+          } 
+          else if (data.source_type === 'topic' && typeof data.source_id === 'string') {
+            navigationRef.navigate('TopicDetail', { topicId: data.source_id });
+          }
+        }
+      }, 100);
+    });
+
+    return () => subscription.remove();
+  }, []);
+  // --------------------------------------
 
   return (
     <View style={{ flex: 1 }}>
@@ -184,27 +219,28 @@ const RootAppOverlay: React.FC = () => {
           setCurrentRouteName(navigationRef.getCurrentRoute()?.name ?? "Home");
         }}
       >
+        {/* 1. The main app screens */}
         {user ? <MainStackNavigator /> : <AuthStackNavigator />}
+
+        {/* 2. Global Mini Player Layer */}
+        {shouldShowMiniPlayer && (
+          <MiniPlayer 
+            onExpand={() => setShowFullPlayer(true)} 
+            hasTabBar={hasTabBar} 
+          />
+        )}
+
+        {/* 3. Global Full Player Modal Layer */}
+        {showFullPlayer && currentPodcast && (
+          <PodcastPlayer
+            visible={showFullPlayer}
+            podcast={currentPodcast}
+            onClose={() => setShowFullPlayer(false)}
+            isSaved={false} 
+            onToggleSave={() => {}} 
+          />
+        )}
       </NavigationContainer>
-
-      {/* Global Mini Player Layer - Now aware of the tab bar! */}
-      {shouldShowMiniPlayer && (
-        <MiniPlayer 
-          onExpand={() => setShowFullPlayer(true)} 
-          hasTabBar={hasTabBar} 
-        />
-      )}
-
-      {/* Global Full Player Modal Layer */}
-      {showFullPlayer && currentPodcast && (
-        <PodcastPlayer
-          visible={showFullPlayer}
-          podcast={currentPodcast}
-          onClose={() => setShowFullPlayer(false)}
-          isSaved={false}
-          onToggleSave={() => {}}
-        />
-      )}
     </View>
   );
 };

@@ -300,10 +300,32 @@ class DiscussionService:
         except Exception: return False
 
     async def get_replies(self, discussion_id: str, user_id: Optional[str] = None) -> List[Dict]:
-        """Get all replies for a discussion"""
+        """Get all replies for a discussion, filtering out blocked users and heavily reported content"""
         try:
-            cursor = db["replies"].find({"discussion_id": discussion_id, "is_deleted": False}).sort("created_at", 1)
+            blocked_users = []
+            
+            # 1. Fetch the current user's blocked list
+            if user_id:
+                user_doc = await db["users"].find_one({"firebase_uid": user_id})
+                if user_doc:
+                    blocked_users = user_doc.get("blocked_users", [])
+
+            # 2. Build a strict query
+            query = {
+                "discussion_id": discussion_id,
+                "is_deleted": False,
+                # Filter out any replies written by blocked users
+                "user_id": {"$nin": blocked_users}, 
+                # Auto-hide content with 5 or more reports
+                "$or": [
+                    {"report_count": {"$exists": False}},
+                    {"report_count": {"$lt": 5}}
+                ]
+            }
+
+            cursor = db["replies"].find(query).sort("created_at", 1)
             replies = []
+            
             async for reply in cursor:
                 try:
                     is_upvoted = False
@@ -325,27 +347,14 @@ class DiscussionService:
                         "time_ago": self._format_time_ago(reply["created_at"]),
                         "is_edited": reply.get("is_edited", False)
                     })
-                except Exception: continue
+                except Exception: 
+                    continue
+                    
             return replies
-        except Exception: return []
-
-    async def upvote_discussion(self, discussion_id: str, user_id: str) -> Dict:
-        """Toggle upvote on discussion"""
-        try:
-            if not ObjectId.is_valid(discussion_id): raise ValueError("Invalid ID")
-            existing = await db["discussion_upvotes"].find_one({"discussion_id": discussion_id, "user_id": user_id})
-            
-            if existing:
-                await db["discussion_upvotes"].delete_one({"_id": existing["_id"]})
-                await db["discussions"].update_one({"_id": ObjectId(discussion_id)}, {"$inc": {"upvote_count": -1}})
-                return {"upvoted": False, "action": "removed"}
-            else:
-                await db["discussion_upvotes"].insert_one({"discussion_id": discussion_id, "user_id": user_id, "created_at": datetime.utcnow()})
-                await db["discussions"].update_one({"_id": ObjectId(discussion_id)}, {"$inc": {"upvote_count": 1}})
-                return {"upvoted": True, "action": "added"}
         except Exception as e:
+            import traceback
             traceback.print_exc()
-            raise
+            return []
 
     async def upvote_reply(self, reply_id: str, user_id: str) -> Dict:
         """Toggle upvote on reply"""

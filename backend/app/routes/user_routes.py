@@ -165,3 +165,66 @@ async def get_user_stats(firebase_user=Depends(verify_firebase_token)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+    
+@router.post("/block/{blocked_user_id}")
+async def block_user_endpoint(
+    blocked_user_id: str,
+    firebase_user=Depends(verify_firebase_token)
+):
+    """
+    Block another user.
+    Their content will be filtered out of the feed.
+    """
+    try:
+        from app.db import db
+        # Use MongoDB's $addToSet to add the ID without creating duplicates
+        await db["users"].update_one(
+            {"firebase_uid": firebase_user["uid"]},
+            {"$addToSet": {"blocked_users": blocked_user_id}}
+        )
+        return {"status": "success", "message": f"User {blocked_user_id} blocked."}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to block user: {str(e)}"
+        )
+    
+@router.post("/replies/{reply_id}/report")
+async def report_reply_endpoint(
+    reply_id: str,
+    firebase_user: dict = Depends(verify_firebase_token)
+):
+    """
+    Report a reply for Terms of Service violations.
+    Required for App Store compliance.
+    """
+    try:
+        from app.db import db
+        from datetime import datetime
+        
+        # 1. Log the report in a dedicated collection for admin review
+        report_data = {
+            "reply_id": reply_id,
+            "reporter_uid": firebase_user["uid"],
+            "created_at": datetime.utcnow(),
+            "status": "pending_review"
+        }
+        await db["reports"].insert_one(report_data)
+        
+        # 2. Increment a warning counter on the actual reply
+        from bson import ObjectId
+        if ObjectId.is_valid(reply_id):
+            await db["replies"].update_one(
+                {"_id": ObjectId(reply_id)},
+                {"$inc": {"report_count": 1}}
+            )
+            
+        return {"success": True, "message": "Content reported successfully."}
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

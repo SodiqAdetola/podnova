@@ -362,9 +362,10 @@ async def get_user_podcasts(
     async for podcast in cursor:
         podcasts.append({
             "id": str(podcast["_id"]),
-            "topic_id": str(podcast["topic_id"]),
+            "topic_id": str(podcast["topic_id"]) if podcast.get("topic_id") else None,
             "topic_title": podcast["topic_title"],
             "category": podcast["category"],
+            "is_custom": podcast.get("is_custom", False),
             "status": podcast["status"],
             "voice": podcast["voice"],
             "style": podcast["style"],
@@ -375,7 +376,7 @@ async def get_user_podcasts(
             "script": podcast.get("script"),
             "credits_used": podcast.get("credits_used", 0),
             "created_at": podcast["created_at"].isoformat() if isinstance(podcast.get("created_at"), datetime) else podcast.get("created_at"),
-            "completed_at": podcast["completed_at"].isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
+            "completed_at": podcast.get("completed_at").isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
             "error_message": podcast.get("error_message")
         })
     
@@ -395,9 +396,10 @@ async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
     return {
         "id": str(podcast["_id"]),
         "user_id": podcast["user_id"],
-        "topic_id": str(podcast["topic_id"]),
+        "topic_id": str(podcast["topic_id"]) if podcast.get("topic_id") else None,
         "topic_title": podcast["topic_title"],
         "category": podcast["category"],
+        "is_custom": podcast.get("is_custom", False),
         "status": podcast["status"],
         "voice": podcast["voice"],
         "style": podcast["style"],
@@ -412,7 +414,7 @@ async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
         "credits_used": podcast.get("credits_used", 0),
         "created_at": podcast["created_at"].isoformat() if isinstance(podcast.get("created_at"), datetime) else podcast.get("created_at"),
         "updated_at": podcast["updated_at"].isoformat() if isinstance(podcast.get("updated_at"), datetime) else podcast.get("updated_at"),
-        "completed_at": podcast["completed_at"].isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
+        "completed_at": podcast.get("completed_at").isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
         "error_message": podcast.get("error_message")
     }
 

@@ -15,6 +15,9 @@ router = APIRouter()
 
 class UpdatePreferencesRequest(BaseModel):
     push_notifications: bool | None = None
+    push_podcast_ready: bool | None = None  
+    push_reply: bool | None = None          
+    push_topic_update: bool | None = None   
     playback_speed: float | None = None
     default_voice: str | None = None
     default_ai_style: str | None = None

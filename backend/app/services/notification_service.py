@@ -24,49 +24,75 @@ logger = logging.getLogger(__name__)
 
 class NotificationService:
     
-    # NEW: Helper function to trigger the actual device push
+    # Helper function to trigger device push notification
     async def _send_push_notification(self, user_id: str, title: str, message: str, data: dict):
-        """Looks up user push token and fires the notification to Expo."""
-        try:
-            # Look up the user by their ID (assuming user_id is firebase_uid)
-            user = await db["users"].find_one({"firebase_uid": user_id})
-            
-            if not user:
-                return
+            """Looks up user push token and fires the notification to Expo."""
+            try:
+                from bson import ObjectId
                 
-            # Check preferences to respect user opt-outs
-            prefs = user.get("preferences", {})
-            if prefs.get("push_notifications") is False:
-                return
+                # 1. Lookup the user (Checking both string UID and MongoDB ObjectId)
+                query = {"$or": [{"firebase_uid": user_id}]}
+                if ObjectId.is_valid(user_id):
+                    query["$or"].append({"_id": ObjectId(user_id)})
+                    
+                user = await db["users"].find_one(query)
+                
+                if not user:
+                    logger.warning(f"Push aborted: Could not find user for ID {user_id}")
+                    return
+                    
+                prefs = user.get("preferences", {})
+                
+                # 2. Check the Master Toggle first
+                if prefs.get("push_notifications") is False:
+                    logger.info(f"User {user_id} has master notifications disabled. Skipping.")
+                    return
+                    
+                # 3. Check Granular Toggles based on the source_type
+                source_type = data.get("source_type")
+                
+                if source_type == "podcast" and prefs.get("push_podcast_ready", True) is False:
+                    logger.info(f"User {user_id} opted out of podcast notifications. Skipping.")
+                    return
+                    
+                if source_type == "discussion" and prefs.get("push_reply", True) is False:
+                    logger.info(f"User {user_id} opted out of reply notifications. Skipping.")
+                    return
+                    
+                if source_type == "topic" and prefs.get("push_topic_update", True) is False:
+                    logger.info(f"User {user_id} opted out of topic update notifications. Skipping.")
+                    return
 
-            token = user.get("expo_push_token")
-            if not token:
-                return
+                # 4. Check for a valid token
+                token = user.get("expo_push_token")
+                if not token:
+                    logger.info(f"No push token found for user {user_id}.")
+                    return
 
-            # Fire to Apple/Google via Expo
-            PushClient().publish(
-                PushMessage(
-                    to=token,
-                    title=title,
-                    body=message,
-                    data=data,
-                    sound="default",
-                    badge=1 # Increments the red dot on the iOS app icon
+                # 5. Fire to Apple/Google via Expo
+                PushClient().publish(
+                    PushMessage(
+                        to=token,
+                        title=title,
+                        body=message,
+                        data=data,
+                        sound="default",
+                        badge=1
+                    )
                 )
-            )
-            logger.info(f"Push notification sent to {user_id}")
-            
-        except DeviceNotRegisteredError:
-            # Token is dead (user uninstalled). Clean it up.
-            await db["users"].update_one(
-                {"firebase_uid": user_id},
-                {"$set": {"expo_push_token": None}}
-            )
-            logger.warning(f"Cleaned up dead push token for {user_id}")
-        except PushServerError as exc:
-            logger.error(f"Expo Server Error: {exc.errors}")
-        except Exception as exc:
-            logger.error(f"Push Notification Failed: {str(exc)}")
+                logger.info(f"✅ Push notification sent successfully to {user_id}")
+                
+            except DeviceNotRegisteredError:
+                # Token is dead (user uninstalled). Clean it up.
+                await db["users"].update_one(
+                    {"firebase_uid": user_id},
+                    {"$set": {"expo_push_token": None}}
+                )
+                logger.warning(f"Cleaned up dead push token for {user_id}")
+            except PushServerError as exc:
+                logger.error(f"Expo Server Error: {exc.errors}")
+            except Exception as exc:
+                logger.error(f"Push Notification Failed: {str(exc)}")
 
     async def create_notification(self, req: CreateNotificationRequest) -> str:
         """Create a standard notification document AND fire a push notification"""

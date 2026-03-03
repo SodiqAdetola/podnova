@@ -18,6 +18,11 @@ class UserPreferences(BaseModel):
     # Notification preferences
     push_notifications: bool = Field(default=True, description="Enable push notifications")
     
+    # Granular Notification Toggles
+    push_podcast_ready: bool = Field(default=True, description="Notify when podcast is generated")
+    push_reply: bool = Field(default=True, description="Notify on discussion replies")
+    push_topic_update: bool = Field(default=True, description="Notify on topic updates")
+
     # AI preferences
     default_voice: str = Field(default="calm_female", description="Default TTS voice")
     default_ai_style: str = Field(default="balanced", description="AI generation style")

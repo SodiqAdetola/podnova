@@ -10,7 +10,7 @@ import {
   Image,
   FlatList,
 } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
@@ -64,6 +64,12 @@ const CategoryTopicsScreen: React.FC = () => {
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [discussionsKey, setDiscussionsKey] = useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setActiveTab("topics");
+    }, [])
+  );
 
   // --- TanStack Infinite Query ---
   const {

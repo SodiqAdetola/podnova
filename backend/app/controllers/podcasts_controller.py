@@ -18,6 +18,9 @@ from app.services.user_service import UserService
 from app.services.notification_service import notification_service
 from app.monitor import thread_monitor
 
+from fastapi import UploadFile
+from app.services.file_service import file_service
+
 
 class PodcastStyle(str, Enum):
     CASUAL = "casual"
@@ -147,6 +150,62 @@ async def create_podcast(
     }
 
 
+
+async def create_custom_podcast(
+    user_id: str,
+    files: List[UploadFile],
+    custom_prompt: str,
+    voice: str,
+    style: str,
+    length_minutes: int
+) -> Dict:
+    """Extract text from files and create a custom podcast job"""
+    
+    # 1. Extract text from all uploaded files
+    extracted_text = ""
+    if files:
+        for file in files:
+            extracted_text += await file_service.extract_text(file)
+            
+    # 2. Create the Database Record
+    podcast_doc = {
+        "user_id": user_id,
+        "topic_id": None, # No associated news topic
+        "topic_title": "Custom Studio Podcast",
+        "category": "custom",
+        "is_custom": True, # Crucial flag
+        "custom_source_text": extracted_text,
+        "custom_prompt": custom_prompt,
+        "status": PodcastStatus.PENDING,
+        "voice": voice,
+        "style": style,
+        "length_minutes": length_minutes,
+        "estimated_credits": length_minutes,
+        "credits_used": 0,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "script": None,
+        "audio_url": None,
+        "transcript_url": None,
+        "duration_seconds": None,
+        "error_message": None
+    }
+    
+    result = await db["podcasts"].insert_one(podcast_doc)
+    podcast_id = str(result.inserted_id)
+    
+    # 3. Trigger background generation
+    asyncio.create_task(_generate_podcast_async(podcast_id))
+    
+    return {
+        "id": podcast_id,
+        "status": PodcastStatus.PENDING,
+        "estimated_time_seconds": length_minutes * 60,
+        "message": "Custom podcast generation started."
+    }
+
+
+
 async def _generate_podcast_async(podcast_id: str):
     """Async task to generate podcast script and audio"""
     thread_monitor.start_task()
@@ -159,8 +218,11 @@ async def _generate_podcast_async(podcast_id: str):
 
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         
-        script = await script_service.generate_script(podcast_id)
-        
+        if podcast.get("is_custom"):
+            script = await script_service.generate_custom_script(podcast_id)
+        else:
+            script = await script_service.generate_script(podcast_id)  
+                  
         await _update_podcast_status(
             podcast_id, 
             PodcastStatus.GENERATING_AUDIO,
@@ -223,6 +285,7 @@ async def _generate_podcast_async(podcast_id: str):
         )
     finally:
         thread_monitor.end_task()
+
 
 
 async def _update_podcast_status(

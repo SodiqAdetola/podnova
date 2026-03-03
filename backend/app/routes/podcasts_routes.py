@@ -3,12 +3,13 @@ import asyncio
 from datetime import time
 import datetime
 
-from fastapi import APIRouter, HTTPException, status, Body, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Body, Depends, Query, UploadFile, File, Form
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from app.middleware.firebase_auth import verify_firebase_token
 from app.controllers.podcasts_controller import (
     create_podcast,
+    create_custom_podcast,
     get_user_podcasts,
     get_podcast_by_id,
     regenerate_podcast,
@@ -79,7 +80,43 @@ async def generate_podcast(
             detail=f"Failed to create podcast: {str(e)}"
         )
 
-
+@router.post("/generate-custom")
+async def generate_custom_podcast_endpoint(
+    files: Optional[List[UploadFile]] = File(None),
+    custom_prompt: Optional[str] = Form(""),
+    voice: str = Form(PodcastVoice.CALM_FEMALE),
+    style: str = Form(PodcastStyle.STANDARD),
+    length_minutes: int = Form(5),
+    firebase_user=Depends(verify_firebase_token)
+):
+    """
+    Generate a custom podcast from uploaded files and prompts.
+    Uses multipart/form-data.
+    """
+    try:
+        user_uid = firebase_user["uid"]
+        
+        # FastAPI handles the multipart parsing automatically
+        result = await create_custom_podcast(
+            user_id=user_uid,
+            files=files or [],
+            custom_prompt=custom_prompt or "",
+            voice=voice,
+            style=style,
+            length_minutes=length_minutes
+        )
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        print(f"Error generating custom podcast: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create custom podcast: {str(e)}"
+        )
+    
 @router.get("/library")
 async def get_podcast_library(
     firebase_user=Depends(verify_firebase_token),

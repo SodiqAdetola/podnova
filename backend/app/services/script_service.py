@@ -249,3 +249,66 @@ SCRIPT STRUCTURE:
 Now, generate the podcast script. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
 """
         return prompt
+
+
+
+
+async def generate_custom_script(self, podcast_id: str) -> str:
+        """Generate a script entirely from user-uploaded documents and prompts"""
+        try:
+            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+            if not podcast:
+                raise Exception(f"Podcast {podcast_id} not found")
+                
+            prompt = self._build_custom_prompt(podcast)
+            
+            loop = asyncio.get_running_loop()
+            func = partial(
+                self.client.models.generate_content,
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            
+            response = await loop.run_in_executor(self.executor, func)
+            script = response.text.strip()
+            
+            return self._sanitize_for_tts(script)
+            
+        except Exception as e:
+            raise Exception(f"Failed to generate custom script: {str(e)}")
+
+
+def _build_custom_prompt(self, podcast: Dict) -> str:
+        """Build the prompt specifically for custom file uploads"""
+        style_config = self.STYLE_INSTRUCTIONS[podcast.get('style', 'standard')]
+        source_text = podcast.get("custom_source_text", "No documents provided.")
+        custom_prompt = podcast.get("custom_prompt", "Summarize these materials.")
+        
+        prompt = f"""You are a seasoned narrator creating a spoken monologue for a custom PodNova podcast. 
+Your script will be read aloud by an AI text-to-speech engine.
+
+TARGET LENGTH: {podcast['length_minutes']} minutes
+TARGET WORD COUNT: approximately {podcast['length_minutes'] * 150} words
+COMPREHENSION LEVEL: {podcast.get('style', 'standard').upper()}
+
+STYLE PROFILE:
+- Audience: {style_config['audience']}
+- Approach: {style_config['approach']}
+- Depth Required: {style_config['depth']}
+- Language Guidelines: {style_config['language']}
+
+{self.TTS_STRICT_RULES}
+
+SOURCE MATERIALS PROVIDED BY THE USER:
+{source_text}
+
+USER'S CUSTOM INSTRUCTIONS:
+{custom_prompt}
+
+CONSISTENT INTRO & OUTRO PATTERN:
+**Intro (10-15 seconds)** - Mention "PodNova" and "I'm your host". Briefly tease what will be discussed based on the materials and user instructions.
+**Outro (10-15 seconds)** - Summarize the key takeaway, thank the listener, mention "PodNova", and sign off.
+
+Now, generate the podcast script. Write ONLY the spoken words.
+"""
+        return prompt

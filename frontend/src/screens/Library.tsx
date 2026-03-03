@@ -21,6 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAudio } from "../contexts/AudioContext";
 import PodcastPlayer from "../components/PodcastPlayer";
 import { Podcast, TabType, PodcastLibraryResponse } from "../types/podcasts";
+import { LinearGradient } from 'expo-linear-gradient'; // Added for custom podcast flair
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -81,12 +82,12 @@ const LibraryScreen: React.FC = () => {
         }
       );
 
-      const data: PodcastLibraryResponse = await response.json();
+      const data = await response.json();
       if (response.ok) {
         const newPodcasts = data.podcasts || [];
         
         if (previousPodcastCount.current > 0 && newPodcasts.length > previousPodcastCount.current) {
-          const completedCount = newPodcasts.filter(p => p.status === 'completed').length;
+          const completedCount = newPodcasts.filter((p: Podcast) => p.status === 'completed').length;
           const previousCompletedCount = podcasts.filter(p => p.status === 'completed').length;
           
           if (completedCount > previousCompletedCount) {
@@ -280,10 +281,7 @@ const LibraryScreen: React.FC = () => {
       return;
     }
     
-    // Load podcast into global audio context
     loadPodcast(podcast);
-    
-    // Show full player (mini player will show when this is closed)
     setShowFullPlayer(true);
   };
 
@@ -320,14 +318,21 @@ const LibraryScreen: React.FC = () => {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
+  // --- NEW: Category and Styling Logic ---
   const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      finance: "#3B82F6",
-      technology: "#EF4444",
-      politics: "#8B5CF6",
-    };
-    return colors[category?.toLowerCase()] || "#6366F1";
+    const cat = category?.toLowerCase();
+    if (cat === "finance") return "#3B82F6";
+    if (cat === "technology") return "#EF4444";
+    if (cat === "politics") return "#8B5CF6";
+    if (cat === "custom") return "#10B981"; // Green for Custom
+    return "#6366F1";
   };
+
+  const getPodcastIcon = (category: string) => {
+    if (category?.toLowerCase() === "custom") return "document-text";
+    return "musical-notes";
+  };
+  // ---------------------------------------
 
   const renderMenu = (podcast: Podcast) => {
     if (activeMenu !== podcast.id) return null;
@@ -407,6 +412,7 @@ const LibraryScreen: React.FC = () => {
     const isDownloaded = downloadedPodcasts.has(item.id);
     const isSaved = savedPodcasts.has(item.id);
     const isDownloading = downloadingPodcasts.has(item.id);
+    const isCustom = item.category?.toLowerCase() === "custom";
 
     return (
       <>
@@ -416,11 +422,22 @@ const LibraryScreen: React.FC = () => {
           onPress={() => handlePlayPodcast(item)}
         >
           <View style={styles.cardContent}>
-            <View
-              style={[styles.thumbnail, { backgroundColor: getCategoryColor(item.category) }]}
-            >
-              <Ionicons name="musical-notes" size={28} color="#FFFFFF" />
-            </View>
+            
+            {/* THUMBNAIL LOGIC */}
+            {isCustom ? (
+              <LinearGradient
+                colors={['#34D399', '#059669']}
+                style={styles.thumbnail}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="document-text" size={28} color="#FFFFFF" />
+              </LinearGradient>
+            ) : (
+              <View style={[styles.thumbnail, { backgroundColor: getCategoryColor(item.category) }]}>
+                <Ionicons name="musical-notes" size={28} color="#FFFFFF" />
+              </View>
+            )}
 
             <View style={styles.podcastInfo}>
               <Text style={styles.podcastTitle} numberOfLines={2}>
@@ -429,7 +446,7 @@ const LibraryScreen: React.FC = () => {
 
               <View style={styles.metaRow}>
                 <Text style={styles.duration}>
-                  est. Length: {item.length_minutes} mins
+                  Length: {formatDuration(item.duration_seconds)}
                 </Text>
                 
                 <Text style={styles.metaDivider}>•</Text>
@@ -437,6 +454,7 @@ const LibraryScreen: React.FC = () => {
               </View>
 
               <View style={styles.tagsRow}>
+                {/* CATEGORY TAG */}
                 <View
                   style={[
                     styles.categoryTag,
@@ -446,7 +464,7 @@ const LibraryScreen: React.FC = () => {
                   <Text
                     style={[styles.categoryText, { color: getCategoryColor(item.category) }]}
                   >
-                    {item.category}
+                    {isCustom ? "Studio Custom" : item.category}
                   </Text>
                 </View>
 
@@ -784,7 +802,7 @@ const styles = StyleSheet.create({
   playButton: {
     width: 40,
     height: 40,
-    borderRadius: '50%',
+    borderRadius: 20, // fixed CSS standard
     backgroundColor: "#EEF2FF",
     justifyContent: "center",
     alignItems: "center",

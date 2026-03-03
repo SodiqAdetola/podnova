@@ -1,6 +1,7 @@
 # app/controllers/user_controller.py
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional, Dict, List
+from bson import ObjectId
 from app.db import db
 from app.models.user import UserProfile, UserPreferences
 
@@ -36,7 +37,8 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
         "username": username,
         "created_at": datetime.utcnow(),
         "preferences": default_prefs.dict(),
-        "expo_push_token": None  # NEW: Initialize empty push token for new users
+        "expo_push_token": None,
+        "blocked_users": []
     }
 
     result = await db["users"].insert_one(profile_data)
@@ -59,16 +61,7 @@ async def update_user_preferences(
     firebase_uid: str,
     preference_updates: Dict
 ) -> UserProfile:
-    """
-    Update user preferences
-    
-    Args:
-        firebase_uid: Firebase UID of the user
-        preference_updates: Dictionary of preference fields to update
-        
-    Returns:
-        Updated UserProfile
-    """
+    """Update user preferences"""
     # Get current profile
     user = await db["users"].find_one({"firebase_uid": firebase_uid})
     if not user:
@@ -95,14 +88,87 @@ async def update_user_preferences(
     return UserProfile(**updated_user)
 
 
-# Function to save the push token
 async def save_push_token(firebase_uid: str, token: str) -> bool:
-    """
-    Save the Expo push token to the user's profile.
-    This allows the backend to target this specific device.
-    """
+    """Save the Expo push token to the user's profile."""
     result = await db["users"].update_one(
         {"firebase_uid": firebase_uid},
         {"$set": {"expo_push_token": token}}
     )
     return result.modified_count > 0 or result.matched_count > 0
+
+
+async def get_user_stats_data(user_uid: str) -> dict:
+    """Calculate and return user statistics from the database"""
+    podcasts_cursor = db["podcasts"].find({"user_id": user_uid})
+    podcasts = []
+    async for p in podcasts_cursor:
+        podcasts.append(p)
+    
+    completed = len([p for p in podcasts if p.get("status") == "completed"])
+    total_duration = sum(p.get("duration_seconds", 0) for p in podcasts if p.get("duration_seconds"))
+    
+    return {
+        "podcasts": completed,
+        "discussions": 0,  # TODO: Implement when discussions feature is ready
+        "followers": 0,    # TODO: Implement when social features are ready
+        "total_duration_minutes": round(total_duration / 60, 1) if total_duration else 0,
+        "credits_used": sum(p.get("credits_used", 0) for p in podcasts)
+    }
+
+
+async def block_target_user(user_uid: str, target_uid: str) -> bool:
+    """Add a target user's UID to the current user's blocked list"""
+    result = await db["users"].update_one(
+        {"firebase_uid": user_uid},
+        {"$addToSet": {"blocked_users": target_uid}}
+    )
+    return result.modified_count > 0
+
+
+async def get_blocked_users_list(user_uid: str) -> List[Dict]:
+    """Fetch the list of blocked users with their usernames"""
+    user_doc = await db["users"].find_one({"firebase_uid": user_uid})
+    if not user_doc:
+        return []
+
+    blocked_uids = user_doc.get("blocked_users", [])
+    if not blocked_uids:
+        return []
+
+    blocked_users_cursor = db["users"].find({"firebase_uid": {"$in": blocked_uids}})
+    blocked_users = []
+    
+    async for bu in blocked_users_cursor:
+        blocked_users.append({
+            "firebase_uid": bu["firebase_uid"],
+            "username": bu.get("username", "Unknown User")
+        })
+
+    return blocked_users
+
+
+async def unblock_target_user(user_uid: str, target_uid: str) -> bool:
+    """Remove a target user's UID from the current user's blocked list"""
+    result = await db["users"].update_one(
+        {"firebase_uid": user_uid},
+        {"$pull": {"blocked_users": target_uid}}
+    )
+    return result.modified_count > 0
+
+
+async def report_reply_content(reply_id: str, reporter_uid: str) -> bool:
+    """Log a report and flag the reply in the database"""
+    report_data = {
+        "reply_id": reply_id,
+        "reporter_uid": reporter_uid,
+        "created_at": datetime.utcnow(),
+        "status": "pending_review"
+    }
+    await db["reports"].insert_one(report_data)
+    
+    if ObjectId.is_valid(reply_id):
+        await db["replies"].update_one(
+            {"_id": ObjectId(reply_id)},
+            {"$inc": {"report_count": 1}}
+        )
+    return True

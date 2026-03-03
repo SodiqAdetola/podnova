@@ -1,6 +1,6 @@
 // frontend/src/screens/SearchScreen.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   StatusBar,
   FlatList,
   Image,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Feather from '@expo/vector-icons/Feather';
@@ -73,9 +74,9 @@ const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
 
   const skip = pageParam * PAGE_LIMIT;
   const params = new URLSearchParams({
-    q: query, // ✅ FIXED: Now passes the search text for BOTH scopes
+    q: query,
     limit: PAGE_LIMIT.toString(),
-    skip: skip.toString()
+    skip: skip.toString() // ✅ Added skip for proper pagination support
   });
 
   if (category !== "all") {
@@ -88,7 +89,6 @@ const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
     const data = await response.json();
     return data.topics || [];
   } else {
-    // scope === "discussions"
     params.append("sort_by", "latest");
     if (discFilter !== "all") {
       params.append("discussion_type", discFilter);
@@ -113,7 +113,21 @@ const SearchScreen: React.FC = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  // --- TanStack Infinite Query ---
+  // ✅ 1. Debounce Effect: Updates 'submittedQuery' 400ms after typing stops
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSubmittedQuery("");
+      return;
+    }
+
+    const handler = setTimeout(() => {
+      setSubmittedQuery(trimmed);
+    }, 400);
+
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   const {
     data,
     isLoading,
@@ -127,35 +141,24 @@ const SearchScreen: React.FC = () => {
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === PAGE_LIMIT ? allPages.length : undefined;
     },
-    enabled: !!submittedQuery, // Only run the query if there is a submitted search term
-    staleTime: 1000 * 60 * 5, // Cache results for 5 minutes
+    enabled: !!submittedQuery,
+    staleTime: 1000 * 60 * 5,
   });
 
   const searchResults = data?.pages.flat() || [];
 
-  // --- Auth & Recent Searches Logic ---
+  // Auth logic
   useEffect(() => {
     const auth = getAuth();
     const user = auth.currentUser;
     setUserId(user ? user.uid : null);
-
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setUserId(user.uid);
-      } else {
-        setUserId(null);
-        setRecentSearches([]);
-      }
-    });
+    const unsubscribe = auth.onAuthStateChanged((u) => setUserId(u ? u.uid : null));
     return unsubscribe;
   }, []);
 
   useEffect(() => {
-    if (userId) {
-      loadRecentSearches();
-    } else {
-      setRecentSearches([]);
-    }
+    if (userId) loadRecentSearches();
+    else setRecentSearches([]);
   }, [userId]);
 
   const getRecentSearchesKey = () => userId ? `@podnova_recent_searches_${userId}` : null;
@@ -166,9 +169,7 @@ const SearchScreen: React.FC = () => {
       if (!key) return;
       const stored = await AsyncStorage.getItem(key);
       if (stored) setRecentSearches(JSON.parse(stored));
-    } catch (error) {
-      console.error("Error loading recent searches:", error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const saveRecentSearch = async (query: string) => {
@@ -177,29 +178,25 @@ const SearchScreen: React.FC = () => {
       if (!key) return;
       const trimmedQuery = query.trim();
       if (!trimmedQuery) return;
-
-      const updated = [
-        trimmedQuery,
-        ...recentSearches.filter((s) => s !== trimmedQuery),
-      ].slice(0, 10);
-
+      const updated = [trimmedQuery, ...recentSearches.filter((s) => s !== trimmedQuery)].slice(0, 10);
       setRecentSearches(updated);
       await AsyncStorage.setItem(key, JSON.stringify(updated));
-    } catch (error) {
-      console.error("Error saving recent search:", error);
-    }
+    } catch (e) { console.error(e); }
   };
 
+  // ✅ 2. Handle Manual Submit (Hitting 'Search' on keyboard)
   const handleSearchSubmit = () => {
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
     saveRecentSearch(trimmed);
-    setSubmittedQuery(trimmed);
+    setSubmittedQuery(trimmed); // Triggers immediate fetch if timer hasn't popped
+    Keyboard.dismiss();
   };
 
   const handleRecentSearchPress = (query: string) => {
     setSearchQuery(query);
     setSubmittedQuery(query);
+    Keyboard.dismiss();
   };
 
   const handleRemoveRecentSearch = async (query: string) => {
@@ -209,9 +206,7 @@ const SearchScreen: React.FC = () => {
       const updated = recentSearches.filter((s) => s !== query);
       setRecentSearches(updated);
       await AsyncStorage.setItem(key, JSON.stringify(updated));
-    } catch (error) {
-      console.error("Error removing recent search:", error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const handleClearAllSearches = async () => {
@@ -220,9 +215,7 @@ const SearchScreen: React.FC = () => {
       if (!key) return;
       setRecentSearches([]);
       await AsyncStorage.removeItem(key);
-    } catch (error) {
-      console.error("Error clearing recent searches:", error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const handleImageError = (topicId: string) => {
@@ -240,7 +233,6 @@ const SearchScreen: React.FC = () => {
     return cat?.color || "#6366F1";
   };
 
-  // --- Render Functions ---
   const renderTopicImage = (topic: Topic) => {
     if (!topic.image_url || imageErrors.has(topic.id)) {
       return (
@@ -364,26 +356,20 @@ const SearchScreen: React.FC = () => {
   };
 
   const renderResult = ({ item }: { item: SearchResult }) => {
-    if ('article_count' in item) {
-      return renderTopicCard({ item: item as Topic });
-    } else {
-      return renderDiscussionCard({ item: item as Discussion });
-    }
+    if ('article_count' in item) return renderTopicCard({ item: item as Topic });
+    return renderDiscussionCard({ item: item as Discussion });
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.brandName}>PODNOVA SEARCH</Text>
-          <Ionicons name="search-outline" size={24} color="#6366F1" />
         </View>
       </View>
 
-      {/* Search Input Section */}
       <View style={styles.searchSection}>
         <View style={styles.searchInputContainer}>
           <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
@@ -393,7 +379,7 @@ const SearchScreen: React.FC = () => {
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearchSubmit}
+            onSubmitEditing={handleSearchSubmit} // Marks recent search & dismisses KB
             returnKeyType="search"
             autoCapitalize="none"
           />
@@ -410,7 +396,6 @@ const SearchScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Scope Toggle */}
         <View style={styles.scopeToggleContainer}>
           <TouchableOpacity
             style={[styles.scopeToggle, searchScope === "news" && styles.scopeToggleActive]}
@@ -429,7 +414,6 @@ const SearchScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Category Filters */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -457,7 +441,6 @@ const SearchScreen: React.FC = () => {
           })}
         </ScrollView>
 
-        {/* Discussion Type Filters */}
         {searchScope === "discussions" && (
           <View style={styles.discussionFiltersContainer}>
             <TouchableOpacity
@@ -486,7 +469,6 @@ const SearchScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Main Content Area */}
       {!userId ? (
         <View style={styles.emptyState}>
           <Ionicons name="log-in-outline" size={64} color="#E5E7EB" />
@@ -750,10 +732,10 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     flex: 1,
-    justifyContent: "center",
+    top: 50,
     alignItems: "center",
     paddingHorizontal: 40,
-    paddingTop: 80,
+    paddingTop: 0,
   },
   emptyTitle: {
     fontSize: 18,
@@ -808,7 +790,6 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  // Topic-specific styles
   topicTopRow: {
     flexDirection: "row",
     marginBottom: 12,
@@ -849,7 +830,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
   },
-  // Discussion styles
   resultHeader: {
     flexDirection: "row",
     alignItems: "center",

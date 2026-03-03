@@ -10,6 +10,9 @@ import {
   StatusBar,
   Switch,
   ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
@@ -17,6 +20,11 @@ import { auth } from "../firebase/config";
 import VoiceSelector from "../components/VoiceSelector";
 import AIStyleSelector from "../components/AIStyleSelector";
 import PodcastLengthSelector from "../components/PodcastLengthSelector";
+
+// Enable LayoutAnimation on Android for the smooth expanding drawer
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
@@ -27,13 +35,17 @@ interface UserPreferences {
   push_notifications: boolean;
   default_voice: string;
   default_ai_style: string;
+  // NEW: Granular notification settings
+  push_podcast_ready?: boolean;
+  push_reply?: boolean;
+  push_topic_update?: boolean;
 }
 
 interface UserProfile {
   id: string;
   firebase_uid: string;
   email: string;
-  full_name: string;
+  username: string;
   preferences: UserPreferences;
 }
 
@@ -48,7 +60,13 @@ const ProfileScreen: React.FC = () => {
     upvotes: 0,
   });
 
+  // Master Toggle
   const [pushNotifications, setPushNotifications] = useState(true);
+  
+  // Granular Toggles (Defaulting to true)
+  const [pushPodcastReady, setPushPodcastReady] = useState(true);
+  const [pushReply, setPushReply] = useState(true);
+  const [pushTopicUpdate, setPushTopicUpdate] = useState(true);
   
   // Modal states
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
@@ -83,7 +101,12 @@ const ProfileScreen: React.FC = () => {
       if (response.ok) {
         const profile: UserProfile = await response.json();
         setUserProfile(profile);
-        setPushNotifications(profile.preferences.push_notifications);
+        
+        // Sync states with backend data
+        setPushNotifications(profile.preferences.push_notifications ?? true);
+        setPushPodcastReady(profile.preferences.push_podcast_ready ?? true);
+        setPushReply(profile.preferences.push_reply ?? true);
+        setPushTopicUpdate(profile.preferences.push_topic_update ?? true);
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -164,19 +187,35 @@ const ProfileScreen: React.FC = () => {
       }
     } catch (error) {
       console.error("Error updating preference:", error);
-      Alert.alert("Error", "Failed to update preference");
-      
-      if (userProfile) {
-        setPushNotifications(userProfile.preferences.push_notifications);
-      }
+      Alert.alert("Error", "Failed to update preferences. Reverting changes.");
+      // Soft revert on error by reloading profile
+      loadUserProfile(); 
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleNotificationToggle = async (value: boolean) => {
+  const handleMasterNotificationToggle = async (value: boolean) => {
+    // Animate the drawer opening/closing
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setPushNotifications(value);
     await updatePreference({ push_notifications: value });
+  };
+
+  // --- Sub-toggle Handlers ---
+  const togglePodcastReady = (value: boolean) => {
+    setPushPodcastReady(value);
+    updatePreference({ push_podcast_ready: value });
+  };
+
+  const toggleReply = (value: boolean) => {
+    setPushReply(value);
+    updatePreference({ push_reply: value });
+  };
+
+  const toggleTopicUpdate = (value: boolean) => {
+    setPushTopicUpdate(value);
+    updatePreference({ push_topic_update: value });
   };
 
   const handleVoiceUpdate = (voice: string) => {
@@ -280,7 +319,7 @@ const ProfileScreen: React.FC = () => {
             <Ionicons name="person" size={48} color="#FFFFFF" />
           </View>
 
-          <Text style={styles.userName}>{userProfile?.full_name || "User"}</Text>
+          <Text style={styles.userName}>{userProfile?.username || "User"}</Text>
           <Text style={styles.userEmail}>{userProfile?.email || ""}</Text>
 
           {/* Stats */}
@@ -310,21 +349,65 @@ const ProfileScreen: React.FC = () => {
           </View>
 
           <View style={styles.settingsCard}>
+            {/* Master Push Toggle */}
             <View style={styles.settingRow}>
               <View style={styles.settingLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: "#6366F115" }]}>
                   <Ionicons name="notifications" size={20} color="#6366F1" />
                 </View>
-                <Text style={styles.settingTitle}>Push Notifications</Text>
+                <Text style={styles.settingTitle}>Allow Push Notifications</Text>
               </View>
               <Switch
                 value={pushNotifications}
-                onValueChange={handleNotificationToggle}
+                onValueChange={handleMasterNotificationToggle}
                 disabled={updating}
                 trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
-                thumbColor={pushNotifications ? "#6366F1" : "#F3F4F6"}
+                thumbColor={pushNotifications ? "#ffffff" : "#F3F4F6"}
               />
             </View>
+
+            {/* EXPANDING DRAWER: Granular Controls */}
+            {pushNotifications && (
+              <View style={styles.subSettingsWrapper}>
+                
+                <View style={styles.subSettingRow}>
+                  <Text style={styles.subSettingTitle}>Podcast Generation</Text>
+                  <Switch
+                    value={pushPodcastReady}
+                    onValueChange={togglePodcastReady}
+                    disabled={updating}
+                    trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
+                    thumbColor={pushPodcastReady ? "#6366F1" : "#F9FAFB"}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                </View>
+
+                <View style={styles.subSettingRow}>
+                  <Text style={styles.subSettingTitle}>Message Replies</Text>
+                  <Switch
+                    value={pushReply}
+                    onValueChange={toggleReply}
+                    disabled={updating}
+                    trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
+                    thumbColor={pushReply ? "#6366F1" : "#F9FAFB"}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                </View>
+
+                <View style={styles.subSettingRow}>
+                  <Text style={styles.subSettingTitle}>Topic Updates</Text>
+                  <Switch
+                    value={pushTopicUpdate}
+                    onValueChange={toggleTopicUpdate}
+                    disabled={updating}
+                    trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
+                    thumbColor={pushTopicUpdate ? "#6366F1" : "#F9FAFB"}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                </View>
+
+              </View>
+            )}
           </View>
         </View>
 
@@ -502,12 +585,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  logoutButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   scrollView: {
     flex: 1,
   },
@@ -653,6 +730,25 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 40,
+  },
+  subSettingsWrapper: {
+    backgroundColor: "#FAFAFA",
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    paddingVertical: 8,
+  },
+  subSettingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingLeft: 60,
+    paddingRight: 16,
+  },
+  subSettingTitle: {
+    fontSize: 14,
+    color: "#4B5563",
+    fontWeight: "400",
   },
 });
 

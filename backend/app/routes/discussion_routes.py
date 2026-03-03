@@ -117,7 +117,7 @@ async def create_discussion_endpoint(
         
         from app.db import db
         user = await db["users"].find_one({"firebase_uid": firebase_user["uid"]})
-        username = user.get("full_name", "Anonymous") if user else "Anonymous"
+        username = user.get("username", "Anonymous") if user else "Anonymous"
         
         discussion = await create_community_discussion(
             request=request,
@@ -151,7 +151,7 @@ async def create_reply_endpoint(
         
         from app.db import db
         user = await db["users"].find_one({"firebase_uid": firebase_user["uid"]})
-        username = user.get("full_name", "Anonymous") if user else "Anonymous"
+        username = user.get("username", "Anonymous") if user else "Anonymous"
         
         reply = await create_reply(
             discussion_id=discussion_id,

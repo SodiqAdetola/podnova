@@ -362,7 +362,7 @@ const ProfileScreen: React.FC = () => {
                 onValueChange={handleMasterNotificationToggle}
                 disabled={updating}
                 trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
-                thumbColor={pushNotifications ? "#ffffff" : "#F3F4F6"}
+                thumbColor={pushNotifications ? "#ffffff" : "#ffffff"}
               />
             </View>
 
@@ -376,8 +376,8 @@ const ProfileScreen: React.FC = () => {
                     value={pushPodcastReady}
                     onValueChange={togglePodcastReady}
                     disabled={updating}
-                    trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
-                    thumbColor={pushPodcastReady ? "#6366F1" : "#F9FAFB"}
+                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
+                    thumbColor={pushPodcastReady ? "#ffffff" : "#ffffff"}
                     style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                   />
                 </View>
@@ -388,8 +388,8 @@ const ProfileScreen: React.FC = () => {
                     value={pushReply}
                     onValueChange={toggleReply}
                     disabled={updating}
-                    trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
-                    thumbColor={pushReply ? "#6366F1" : "#F9FAFB"}
+                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
+                    thumbColor={pushReply ? "#ffffff" : "#ffffff"}
                     style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                   />
                 </View>
@@ -400,8 +400,8 @@ const ProfileScreen: React.FC = () => {
                     value={pushTopicUpdate}
                     onValueChange={toggleTopicUpdate}
                     disabled={updating}
-                    trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
-                    thumbColor={pushTopicUpdate ? "#6366F1" : "#F9FAFB"}
+                    trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
+                    thumbColor={pushTopicUpdate ? "#ffffff" : "#ffffff"}
                     style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                   />
                 </View>

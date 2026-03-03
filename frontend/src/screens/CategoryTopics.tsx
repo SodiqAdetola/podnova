@@ -18,6 +18,7 @@ import { MainTabParamList, MainStackParamList } from "../Navigator";
 import { Topic, SortOption } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
 import DiscussionsList from "../components/DiscussionsList";
 import CreateDiscussionModal from "../components/CreateDiscussionModal";
 
@@ -32,7 +33,6 @@ type CategoryTopicsNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<MainStackParamList>
 >;
 
-// --- API Fetching Function ---
 const fetchTopics = async ({ pageParam, queryKey }: any) => {
   const [_, category, sortBy] = queryKey;
   const skip = pageParam * PAGE_LIMIT;
@@ -48,10 +48,9 @@ const fetchTopics = async ({ pageParam, queryKey }: any) => {
   const data = await response.json();
   const rawTopics = data.topics || [];
   
-  // ✅ FORCE MAP ID: Ensure every topic definitely has an 'id' string
   return rawTopics.map((t: any) => ({
     ...t,
-    id: t.id || t._id || Math.random().toString() // Fallback so flatlist keyExtractor never crashes
+    id: t.id || t._id || Math.random().toString()
   }));
 };
 
@@ -72,7 +71,6 @@ const CategoryTopicsScreen: React.FC = () => {
     }, [])
   );
 
-  // --- TanStack Infinite Query ---
   const {
     data,
     isLoading,
@@ -88,7 +86,7 @@ const CategoryTopicsScreen: React.FC = () => {
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === PAGE_LIMIT ? allPages.length : undefined;
     },
-    staleTime: 1000 * 60 * 2, // Cache for 2 minutes
+    staleTime: 1000 * 60 * 2, 
     enabled: activeTab === "topics",
   });
 
@@ -110,12 +108,27 @@ const CategoryTopicsScreen: React.FC = () => {
     return sortBy === option ? styles.sortButtonTextActive : styles.sortButtonText;
   };
 
+  // --- Premium Gradient Fallback Logic ---
+  const getCategoryFallback = (category?: string) => {
+    const cat = category?.toLowerCase() || '';
+    if (cat.includes('tech')) return { colors: ['#FDA4A3', '#F16365'], icon: 'hardware-chip' as const };
+    if (cat.includes('finance')) return { colors: ['#A5CFF4', '#73AEF2'], icon: 'trending-up' as const };
+    if (cat.includes('politic')) return { colors: ['#A78BFA', '#8B5CF6'], icon: 'business' as const };
+    return { colors: ['#818CF8', '#4F46E5'], icon: 'newspaper' as const };
+  };
+
   const renderTopicImage = (topic: Topic) => {
     if (!topic.image_url || imageErrors.has(topic.id)) {
+      const fallback = getCategoryFallback(topic.category);
       return (
-        <View style={styles.topicImagePlaceholder}>
-          <Text style={styles.placeholderIcon}>📰</Text>
-        </View>
+        <LinearGradient
+          colors={fallback.colors as [string, string]}
+          style={styles.topicImagePlaceholder}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name={fallback.icon as any} size={32} color="#FFFFFF" style={{ opacity: 0.9 }} />
+        </LinearGradient>
       );
     }
     return (
@@ -128,7 +141,6 @@ const CategoryTopicsScreen: React.FC = () => {
     );
   };
 
-  // --- Render List Items ---
   const renderTopicItem = ({ item: topic }: { item: Topic }) => {
     return (
       <TouchableOpacity
@@ -399,12 +411,9 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     marginRight: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-  },
-  placeholderIcon: {
-    fontSize: 32,
   },
   topicContent: {
     flex: 1,

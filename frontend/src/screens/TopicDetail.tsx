@@ -20,6 +20,7 @@ import { MainStackParamList } from "../Navigator";
 import { TopicDetail } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
 import Feather from '@expo/vector-icons/Feather';
+import { LinearGradient } from 'expo-linear-gradient';
 import PodcastGeneratorModal from "../components/PodcastGenModal";
 import TopicHistoryModal from "../components/TopicHistoryModal";
 import DiscussionThread from "../components/DiscussionThread";
@@ -82,7 +83,6 @@ const TopicDetailScreen: React.FC = () => {
         return;
       }
 
-      console.log("Fetching topic detail for:", topicId);
       const response = await fetch(`${API_BASE_URL}/topics/${topicId}`);
       
       if (!response.ok) {
@@ -91,14 +91,12 @@ const TopicDetailScreen: React.FC = () => {
       
       const data = await response.json();
       
-      // Map _id to id if necessary
       if (data && data._id && !data.id) {
         data.id = data._id;
       }
       
       setTopic(data);
       
-      // Fetch discussion using the confirmed safe ID
       if (data.id) {
         await fetchTopicDiscussion(data.id);
       }
@@ -143,12 +141,6 @@ const TopicDetailScreen: React.FC = () => {
     }
   };
 
-  const truncateTitle = (title: string, maxLength: number = 30) => {
-    if (!title) return 'Untitled';
-    if (title.length <= maxLength) return title;
-    return title.substring(0, maxLength) + '...';
-  };
-
   const openArticle = (url: string) => {
     Linking.openURL(url);
   };
@@ -172,13 +164,29 @@ const TopicDetailScreen: React.FC = () => {
     }, 100);
   };
 
+  const getCategoryFallback = (category?: string) => {
+    const cat = category?.toLowerCase() || '';
+    if (cat.includes('tech')) return { colors: ['#FDA4A3', '#F16365'], icon: 'hardware-chip-outline' as const };
+    if (cat.includes('finance')) return { colors: ['#A5CFF4', '#73AEF2'], icon: 'trending-up-outline' as const };
+    if (cat.includes('politic')) return { colors: ['#A78BFA', '#8B5CF6'], icon: 'business-outline' as const };
+    return { colors: ['#818CF8', '#4F46E5'], icon: 'newspaper-outline' as const }; 
+  };
+
   const renderHeroImage = () => {
     if (!topic?.image_url || heroImageError) {
+      const fallback = getCategoryFallback(topic?.category);
       return (
-        <View style={styles.heroPlaceholder}>
-          <Text style={styles.heroPlaceholderIcon}>📰</Text>
-          <Text style={styles.heroPlaceholderText}>{topic?.category?.toUpperCase()}</Text>
-        </View>
+        <LinearGradient
+          colors={fallback.colors as [string, string]}
+          style={styles.heroPlaceholder}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name={fallback.icon as any} size={80} color="rgba(255,255,255,0.8)" />
+          <Text style={[styles.heroPlaceholderText, { marginTop: 12 }]}>
+            {topic?.category?.toUpperCase() || 'NEWS'}
+          </Text>
+        </LinearGradient>
       );
     }
 
@@ -220,6 +228,7 @@ const TopicDetailScreen: React.FC = () => {
 
     return (
       <View style={styles.actionButtons}>
+        {/* Secondary: Timeline */}
         <TouchableOpacity 
           style={[styles.actionButton, styles.timelineAction]}
           onPress={handleOpenTimeline}
@@ -228,14 +237,24 @@ const TopicDetailScreen: React.FC = () => {
           <Text style={styles.actionButtonText}>Timeline</Text>
         </TouchableOpacity>
 
+        {/* Primary CTA: Generate Podcast */}
         <TouchableOpacity 
-          style={[styles.actionButton, styles.podcastAction]}
+          style={styles.podcastButtonContainer}
           onPress={handleGeneratePodcast}
+          activeOpacity={0.8}
         >
-          <Ionicons name="sparkles" size={18} color="#6366F1" />
-          <Text style={styles.actionButtonText}>Generate Podcast</Text>
+          <LinearGradient
+            colors={['#8B5CF6', '#6366F1']}
+            style={styles.podcastButtonGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons name="sparkles-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.podcastButtonText}>Create Podcast</Text>
+          </LinearGradient>
         </TouchableOpacity>
 
+        {/* Secondary: Discuss */}
         <TouchableOpacity 
           style={[styles.actionButton, styles.discussionAction]}
           onPress={scrollToDiscussions}
@@ -514,13 +533,8 @@ const styles = StyleSheet.create({
   heroPlaceholder: {
     width: "100%",
     height: 200,
-    backgroundColor: "#6366F1",
     justifyContent: "center",
     alignItems: "center",
-  },
-  heroPlaceholderIcon: {
-    fontSize: 48,
-    marginBottom: 8,
   },
   heroPlaceholderText: {
     fontSize: 14,
@@ -591,8 +605,10 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: "row",
-    gap: 12,
-    marginHorizontal: 20,
+    alignItems: "center", 
+    justifyContent: "center",
+    gap: 4,
+    marginHorizontal: 10,
     marginBottom: 24,
   },
   actionButton: {
@@ -600,12 +616,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 5,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 24,
     gap: 6,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -614,18 +628,37 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   timelineAction: {
-    borderColor: "#8B5CF6",
-  },
-  podcastAction: {
-    borderColor: "#6366F1",
+    borderColor: "#E5E7EB",
   },
   discussionAction: {
-    borderColor: "#10B981",
+    borderColor: "#E5E7EB",
   },
   actionButtonText: {
     fontSize: 13,
     fontWeight: "600",
     color: "#374151",
+  },
+  podcastButtonContainer: {
+    flex: 1.2,
+    borderRadius: 24,
+    overflow: "hidden",
+    shadowColor: "#6366F1",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  podcastButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    gap: 6,
+  },
+  podcastButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   card: {
     backgroundColor: "#FFFFFF",

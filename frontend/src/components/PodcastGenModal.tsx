@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
@@ -62,7 +64,6 @@ const STYLES = [
   { id: "expert", name: "Expert", description: "Technical & comprehensive" },
 ];
 
-// Combine both navigators so TypeScript knows about nested routes
 type ModalNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<MainStackParamList>,
   BottomTabNavigationProp<MainTabParamList>
@@ -161,7 +162,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
-  // Safe close that just hides the modal and resets state
   const resetAndClose = () => {
     setCustomPrompt("");
     setShowAdvanced(false);
@@ -186,10 +186,8 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
-  // Routes to the Tabs navigator, then to the Library screen
-const handleGoToLibrary = () => {
+  const handleGoToLibrary = () => {
     resetAndClose();
-    // Use 'as any' to bypass the strict Stack param types for nested tab navigation
     (navigation as any).navigate("MainTabs", { screen: "Library" });
   };
 
@@ -332,9 +330,6 @@ const handleGoToLibrary = () => {
     );
   };
 
-  // ----------------------------------------------------
-  // SUCCESS SCREEN UI
-  // ----------------------------------------------------
   if (generationStarted) {
     return (
       <Modal
@@ -353,7 +348,6 @@ const handleGoToLibrary = () => {
               Your podcast is being generated in the background. Estimated time: {Math.round(estimatedTime / 60)} min {estimatedTime % 60} sec.
             </Text>
             
-            {/* Clickable Library Text */}
             <Text style={styles.successInstruction}>
               You can track progress in the{' '}
               <Text style={styles.clickableLink} onPress={handleGoToLibrary}>
@@ -383,9 +377,6 @@ const handleGoToLibrary = () => {
     );
   }
 
-  // ----------------------------------------------------
-  // MAIN MODAL UI
-  // ----------------------------------------------------
   return (
     <Modal
       visible={visible}
@@ -393,7 +384,10 @@ const handleGoToLibrary = () => {
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView 
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <View style={styles.modalContainer}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
@@ -410,7 +404,11 @@ const handleGoToLibrary = () => {
             </View>
           ) : (
             <>
-              <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+              <ScrollView 
+                style={styles.content} 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
                 <View style={styles.topicInfo}>
                   <Text style={styles.topicLabel}>Topic</Text>
                   <Text style={styles.topicTitle}>{topic.title}</Text>
@@ -451,7 +449,7 @@ const handleGoToLibrary = () => {
             </>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -535,7 +533,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E5E7EB",
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 12,
@@ -545,8 +543,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   voiceCard: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     marginRight: 12,
     borderRadius: 12,
     borderWidth: 2,
@@ -563,7 +561,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: "#6B7280",
-    marginTop: 8,
+    marginTop: 4,
     textAlign: "center",
   },
   voiceNameActive: {
@@ -593,7 +591,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
   },
   styleName: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
     color: "#6B7280",
   },

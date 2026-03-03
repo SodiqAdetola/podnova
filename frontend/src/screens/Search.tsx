@@ -1,6 +1,5 @@
 // frontend/src/screens/SearchScreen.tsx
-
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -22,8 +21,10 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainStackParamList } from "../Navigator";
 import { getAuth } from "firebase/auth";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { LinearGradient } from 'expo-linear-gradient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const PAGE_LIMIT = 20;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
@@ -57,16 +58,15 @@ interface Discussion {
 type SearchResult = Topic | Discussion;
 
 const CATEGORIES = [
-  { id: "all", name: "All Categories", icon: "apps", color: "#6B7280" },
-  { id: "technology", name: "Technology", icon: "hardware-chip", color: "#f16365ff" },
-  { id: "finance", name: "Finance", icon: "cash", color: "#73aef2ff" },
-  { id: "politics", name: "Politics", icon: "people", color: "#8B5CF6" }
+  { id: "all", name: "All Categories", icon: "apps", color: "#6B7280", gradient: ['#9CA3AF', '#6B7280'] },
+  { id: "technology", name: "Technology", icon: "hardware-chip", color: "#f16365ff", gradient: ['#FDA4A3', '#F16365'] },
+  { id: "finance", name: "Finance", icon: "cash", color: "#73aef2ff", gradient: ['#A5CFF4', '#73AEF2'] },
+  { id: "politics", name: "Politics", icon: "people", color: "#8B5CF6", gradient: ['#A78BFA', '#8B5CF6'] }
 ];
 
 type SearchScope = "news" | "discussions";
 type DiscussionFilter = "all" | "topic" | "community";
 
-// --- API Fetching Function ---
 const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
   const [_, query, scope, category, discFilter] = queryKey;
   
@@ -76,7 +76,7 @@ const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
   const params = new URLSearchParams({
     q: query,
     limit: PAGE_LIMIT.toString(),
-    skip: skip.toString() // ✅ Added skip for proper pagination support
+    skip: skip.toString()
   });
 
   if (category !== "all") {
@@ -113,7 +113,6 @@ const SearchScreen: React.FC = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  // ✅ 1. Debounce Effect: Updates 'submittedQuery' 400ms after typing stops
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (!trimmed) {
@@ -147,7 +146,6 @@ const SearchScreen: React.FC = () => {
 
   const searchResults = data?.pages.flat() || [];
 
-  // Auth logic
   useEffect(() => {
     const auth = getAuth();
     const user = auth.currentUser;
@@ -184,12 +182,11 @@ const SearchScreen: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
-  // ✅ 2. Handle Manual Submit (Hitting 'Search' on keyboard)
   const handleSearchSubmit = () => {
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
     saveRecentSearch(trimmed);
-    setSubmittedQuery(trimmed); // Triggers immediate fetch if timer hasn't popped
+    setSubmittedQuery(trimmed);
     Keyboard.dismiss();
   };
 
@@ -233,12 +230,24 @@ const SearchScreen: React.FC = () => {
     return cat?.color || "#6366F1";
   };
 
+  // --- Premium Gradient Fallback Logic ---
+  const getCategoryFallback = (category?: string) => {
+    const cat = CATEGORIES.find(c => c.id === category?.toLowerCase());
+    return cat ? { colors: cat.gradient, icon: cat.icon } : { colors: ['#818CF8', '#4F46E5'], icon: 'newspaper' };
+  };
+
   const renderTopicImage = (topic: Topic) => {
     if (!topic.image_url || imageErrors.has(topic.id)) {
+      const fallback = getCategoryFallback(topic.category);
       return (
-        <View style={styles.topicImagePlaceholder}>
-          <Text style={styles.placeholderIcon}>📰</Text>
-        </View>
+        <LinearGradient
+          colors={fallback.colors as [string, string]}
+          style={styles.topicImagePlaceholder}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name={fallback.icon as any} size={32} color="#FFFFFF" style={{ opacity: 0.9 }} />
+        </LinearGradient>
       );
     }
     return (
@@ -379,7 +388,7 @@ const SearchScreen: React.FC = () => {
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearchSubmit} // Marks recent search & dismisses KB
+            onSubmitEditing={handleSearchSubmit}
             returnKeyType="search"
             autoCapitalize="none"
           />
@@ -814,12 +823,9 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     marginRight: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-  },
-  placeholderIcon: {
-    fontSize: 32,
   },
   topicContent: {
     flex: 1,

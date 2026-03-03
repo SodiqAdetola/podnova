@@ -1,5 +1,3 @@
-// frontend/src/components/PodcastPlayer.tsx
-
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -16,27 +14,36 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
 import { useAudio } from "../contexts/AudioContext";
-import { Podcast } from "../types/podcasts";
 import { PodcastPlayerProps } from "../types/podcasts";
-
-
+import { MainStackParamList } from "../Navigator";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0];
+const SAVED_STORAGE_KEY = "@podnova_saved";
 
 const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   visible,
   podcast,
   onClose,
-  isSaved,
-  onToggleSave,
+  isSaved: externalIsSaved, // Renamed to avoid conflicts
+  onToggleSave: externalOnToggleSave, // Renamed to avoid conflicts
 }) => {
   const insets = useSafeAreaInsets();
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   
-  // GLOBAL AUDIO CONTEXT - No local sound state!
+  // Internal state for self-sufficient saves
+  const [internalIsSaved, setInternalIsSaved] = useState(false);
+
+  // Navigation Hook
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+
+  // GLOBAL AUDIO CONTEXT
   const {
     isPlaying,
     position,
@@ -72,6 +79,24 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     }
   }, [visible]);
 
+  // Self-Sufficient: Check AsyncStorage whenever the player opens
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      if (!podcast) return;
+      try {
+        const savedData = await AsyncStorage.getItem(SAVED_STORAGE_KEY);
+        const savedSet = new Set(savedData ? JSON.parse(savedData) : []);
+        setInternalIsSaved(savedSet.has(podcast.id));
+      } catch (error) {
+        console.error("Error checking saved status:", error);
+      }
+    };
+
+    if (visible) {
+      checkSavedStatus();
+    }
+  }, [podcast, visible]);
+
   // Auto-scroll transcript
   useEffect(() => {
     if (!transcriptScrollRef.current || !duration) return;
@@ -87,6 +112,64 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
       animated: false,
     });
   }, [position, duration, transcriptContentHeight, transcriptViewHeight]);
+
+  // Internal function to handle toggling the save state globally
+  const handleToggleSave = async () => {
+    if (!podcast) return;
+    try {
+      const savedData = await AsyncStorage.getItem(SAVED_STORAGE_KEY);
+      const savedArray = savedData ? JSON.parse(savedData) : [];
+      const savedSet = new Set(savedArray);
+
+      if (savedSet.has(podcast.id)) {
+        savedSet.delete(podcast.id);
+        setInternalIsSaved(false);
+      } else {
+        savedSet.add(podcast.id);
+        setInternalIsSaved(true);
+      }
+
+      await AsyncStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...savedSet]));
+
+      // If LibraryScreen passed a sync function, call it
+      if (externalOnToggleSave) {
+        externalOnToggleSave();
+      }
+    } catch (error) {
+      console.error("Error toggling save:", error);
+    }
+  };
+
+  // Handler for "Go to Topic"
+  const handleGoToTopic = () => {
+    if (!podcast) return;
+    onClose(); // Hide the player modal first
+    const topicId = podcast.topic_id || podcast.id; 
+    navigation.navigate("TopicDetail", { topicId });
+  };
+
+  // Handler for "Discuss"
+  const handleDiscuss = async () => {
+    if (!podcast) return;
+    onClose(); // Hide the player modal first
+    
+    const topicId = podcast.topic_id || podcast.id;
+
+    try {
+      const response = await fetch(`https://podnova-backend-r8yz.onrender.com/discussions?topic_id=${topicId}`);
+      const data = await response.json();
+
+      if (data.discussions && data.discussions.length > 0) {
+        navigation.navigate("DiscussionDetail", { discussionId: data.discussions[0].id });
+      } else {
+        // Fallback: If no discussion exists yet, just go to the topic detail
+        navigation.navigate("TopicDetail", { topicId });
+      }
+    } catch (error) {
+      console.error("Failed to fetch discussion:", error);
+      navigation.navigate("TopicDetail", { topicId }); // Fallback on error
+    }
+  };
 
   const formatTime = (millis: number) => {
     const totalSeconds = Math.floor(millis / 1000);
@@ -155,11 +238,11 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             <Ionicons name="chevron-down" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Now Playing</Text>
-          <TouchableOpacity onPress={onToggleSave} style={styles.saveButton}>
+          <TouchableOpacity onPress={handleToggleSave} style={styles.saveButton}>
             <Ionicons
-              name={isSaved ? "bookmark" : "bookmark-outline"}
+              name={internalIsSaved ? "bookmark" : "bookmark-outline"}
               size={24}
-              color={isSaved ? "#FCD34D" : "#FFFFFF"}
+              color={internalIsSaved ? "#FCD34D" : "#FFFFFF"}
             />
           </TouchableOpacity>
         </View>
@@ -265,16 +348,22 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
               <Text style={styles.actionButtonText}>Speed</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={handleGoToTopic}
+            >
               <View style={styles.iconCircle}>
-                <Ionicons name="share-social-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
               </View>
-              <Text style={styles.actionButtonText}>Share</Text>
+              <Text style={styles.actionButtonText}>Topic</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={handleDiscuss}
+            >
               <View style={styles.iconCircle}>
-                <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="chatbubbles-outline" size={20} color="#FFFFFF" />
               </View>
               <Text style={styles.actionButtonText}>Discuss</Text>
             </TouchableOpacity>
@@ -534,7 +623,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   speedMenuContainer: {
-    backgroundColor: "#5d5d5dd8",
+    backgroundColor: "#ffffffd8",
     width: "40%",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -557,7 +646,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: "#00000080",
+    backgroundColor: "#000000ab",
   },
   speedMenuItemActive: {
     backgroundColor: "#000000ad",
@@ -565,10 +654,8 @@ const styles = StyleSheet.create({
   speedMenuItemText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: "#b6c1d4",
     textAlign: "center",
-
-
   },
   speedMenuItemTextActive: {
     color: "#8B5CF6",

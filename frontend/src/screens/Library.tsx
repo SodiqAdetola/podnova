@@ -427,7 +427,7 @@ const LibraryScreen: React.FC = () => {
 
               <View style={styles.metaRow}>
                 <Text style={styles.duration}>
-                  Length: {item.length_minutes} mins
+                  est. Length: {item.length_minutes} mins
                 </Text>
                 
                 <Text style={styles.metaDivider}>•</Text>
@@ -450,7 +450,7 @@ const LibraryScreen: React.FC = () => {
 
                 {isDownloaded && (
                   <View style={styles.downloadBadge}>
-                    <Ionicons name="download" size={12} color="#10B981" />
+                    <Ionicons name="download-outline" size={12} color="#0e9b6c" />
                   </View>
                 )}
 
@@ -522,7 +522,6 @@ const LibraryScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.brandName}>PODNOVA LIBRARY</Text>
-          <Ionicons name="book-outline" size={24} color="#6366F1" />
         </View>
       </View>
 
@@ -694,7 +693,8 @@ const styles = StyleSheet.create({
   },
   emptyListContent: {
     flex: 1,
-    justifyContent: "center",
+    top: 50,
+    alignItems: "center",
   },
   listContentWithPlayer: {
     paddingBottom: 80,
@@ -726,11 +726,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   podcastTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 6,
-    lineHeight: 22,
+    
   },
   metaRow: {
     flexDirection: "row",
@@ -738,7 +737,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   duration: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#6B7280",
   },
   metaDivider: {
@@ -747,7 +746,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   dateText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#6B7280",
   },
   tagsRow: {
@@ -781,20 +780,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   playButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: '50%',
     backgroundColor: "#EEF2FF",
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 12,
+    marginLeft: 10,
   },
   menuButton: {
     width: 36,
     height: 36,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 8,
+    marginLeft: 5,
   },
   loadingContainer: {
     flex: 1,

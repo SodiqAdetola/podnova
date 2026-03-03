@@ -1,8 +1,7 @@
-// frontend/src/contexts/AudioContext.tsx
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File, Paths } from 'expo-file-system';
 import { Podcast } from '../types/podcasts';
 
 interface AudioContextType {
@@ -36,14 +35,24 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [showPlayer, setShowPlayer] = useState(false);
 
-  // Initialize audio mode
+  // Initialize production-grade audio mode
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-    });
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          shouldDuckAndroid: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.error("Failed to set audio mode:", error);
+      }
+    };
+    setupAudio();
   }, []);
 
   // Save position periodically
@@ -82,7 +91,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 0;
   };
 
-  // Highly optimized native event listener
+  // Optimized native event listener
   const onPlaybackStatusUpdate = (status: any) => {
     if (status.isLoaded) {
       setIsPlaying(status.isPlaying);
@@ -112,9 +121,22 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSound(null);
       }
 
+      // --- OFFLINE INTERCEPTION LOGIC (MODERN EXPO-FILE-SYSTEM) ---
+      // Check if the file exists in cache (matching LibraryScreen's download path)
+      const localFile = new File(Paths.cache, `podcast_${podcast.id}.mp3`);
+      const isOfflineAvailable = localFile.exists;
+      const uriToPlay = isOfflineAvailable ? localFile.uri : podcast.audio_url!;
+
+      if (isOfflineAvailable) {
+        console.log(`✈️ Playing OFFLINE downloaded file for podcast ${podcast.id}`);
+      } else {
+        console.log(`🌐 Streaming ONLINE file for podcast ${podcast.id}`);
+      }
+      // ------------------------------------------------------------
+
       // Load new podcast with native progress polling (500ms)
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: podcast.audio_url! },
+        { uri: uriToPlay },
         { 
           shouldPlay: false, 
           rate: playbackRate,

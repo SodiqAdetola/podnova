@@ -49,7 +49,7 @@ class PodcastVoice(str, Enum):
 
 # Voice configuration mapping
 VOICE_CONFIGS = {
-    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Zephyr",        # Soothing, airy, conversational
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       # Smooth, soothing, ideal for relaxed news delivery
     PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            # Warm, relaxed, lower register
     PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Kore",     # Dynamic, bright, highly engaging
     PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Puck",       # The ultimate "Podcast Host" energy

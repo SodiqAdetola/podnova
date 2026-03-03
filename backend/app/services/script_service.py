@@ -107,6 +107,30 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
             
         except Exception as e:
             raise Exception(f"Failed to generate script: {str(e)}")
+
+    async def generate_custom_script(self, podcast_id: str) -> str:
+        """Generate a script entirely from user-uploaded documents and prompts"""
+        try:
+            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+            if not podcast:
+                raise Exception(f"Podcast {podcast_id} not found")
+                
+            prompt = self._build_custom_prompt(podcast)
+            
+            loop = asyncio.get_running_loop()
+            func = partial(
+                self.client.models.generate_content,
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            
+            response = await loop.run_in_executor(self.executor, func)
+            script = response.text.strip()
+            
+            return self._sanitize_for_tts(script)
+            
+        except Exception as e:
+            raise Exception(f"Failed to generate custom script: {str(e)}")
             
     def _sanitize_for_tts(self, text: str) -> str:
         """Deterministic post-processing to strip Markdown and TTS-breaking characters."""
@@ -250,35 +274,7 @@ Now, generate the podcast script. Write ONLY the spoken words, beginning with an
 """
         return prompt
 
-
-
-
-async def generate_custom_script(self, podcast_id: str) -> str:
-        """Generate a script entirely from user-uploaded documents and prompts"""
-        try:
-            podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
-            if not podcast:
-                raise Exception(f"Podcast {podcast_id} not found")
-                
-            prompt = self._build_custom_prompt(podcast)
-            
-            loop = asyncio.get_running_loop()
-            func = partial(
-                self.client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=prompt
-            )
-            
-            response = await loop.run_in_executor(self.executor, func)
-            script = response.text.strip()
-            
-            return self._sanitize_for_tts(script)
-            
-        except Exception as e:
-            raise Exception(f"Failed to generate custom script: {str(e)}")
-
-
-def _build_custom_prompt(self, podcast: Dict) -> str:
+    def _build_custom_prompt(self, podcast: Dict) -> str:
         """Build the prompt specifically for custom file uploads"""
         style_config = self.STYLE_INSTRUCTIONS[podcast.get('style', 'standard')]
         source_text = podcast.get("custom_source_text", "No documents provided.")

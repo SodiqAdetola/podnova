@@ -214,13 +214,22 @@ class NotificationService:
         )
         return await self.create_notification(req)
 
+
     async def create_reply_notification(
         self, discussion_owner_id: str, discussion_id: str, discussion_title: str, 
-        reply_author_id: str, reply_author_name: str, reply_preview: str
+        reply_author_id: str, reply_author_name: str, reply_preview: str,
+        is_nested_reply: bool = False  # <-- NEW ARGUMENT
     ) -> Optional[str]:
         """Triggered when a user gets a reply in a discussion"""
         if discussion_owner_id == reply_author_id:
             return None
+            
+        # Dynamically change the text based on what they replied to
+        message_text = (
+            f"{reply_author_name} replied to your comment" 
+            if is_nested_reply 
+            else f"{reply_author_name} replied to your discussion"
+        )
         
         req = CreateNotificationRequest(
             user_id=discussion_owner_id,
@@ -231,11 +240,12 @@ class NotificationService:
             actor_user_id=reply_author_id,
             actor_username=reply_author_name,
             title="New Reply",
-            message=f"{reply_author_name} replied to your discussion",
+            message=message_text,
             preview=reply_preview[:100] if reply_preview else None,
             action_path=f"/discussion/{discussion_id}"
         )
         return await self.create_notification(req)
+
 
     async def create_topic_update_notification(
         self, user_id: str, topic_id: str, topic_title: str, update_type: str, update_count: int

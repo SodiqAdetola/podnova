@@ -261,18 +261,34 @@ class DiscussionService:
                 "$set": {"last_activity": datetime.utcnow()}
             })
             
+            # --- SMART NOTIFICATION TARGETING ---
             try:
-                owner_id = discussion.get("user_id")
-                if owner_id and owner_id != user_id:
+                target_user_id = None
+                is_nested = False
+                
+                # 1. If replying to a specific comment, target the comment's author
+                if parent_reply_id:
+                    parent_reply = await db["replies"].find_one({"_id": ObjectId(parent_reply_id)})
+                    if parent_reply:
+                        target_user_id = parent_reply.get("user_id")
+                        is_nested = True
+                # 2. Otherwise, target the creator of the main discussion
+                else:
+                    target_user_id = discussion.get("user_id")
+
+                # If we have a valid target (and they aren't replying to themselves), fire!
+                if target_user_id and target_user_id != user_id:
                     await notification_service.create_reply_notification(
-                        discussion_owner_id=owner_id,
+                        discussion_owner_id=target_user_id,
                         discussion_id=discussion_id,
                         discussion_title=discussion.get("title", "Discussion"),
                         reply_author_id=user_id,
                         reply_author_name=username,
-                        reply_preview=content[:100]
+                        reply_preview=content[:100],
+                        is_nested_reply=is_nested # Pass this new flag
                     )
-            except Exception: pass
+            except Exception as e:
+                print(f"Error triggering reply notification: {e}")
             
             return Reply(**reply_data)
         except Exception:

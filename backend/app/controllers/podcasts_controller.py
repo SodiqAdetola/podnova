@@ -154,6 +154,7 @@ async def create_podcast(
 async def create_custom_podcast(
     user_id: str,
     files: List[UploadFile],
+    title: str,
     custom_prompt: str,
     voice: str,
     style: str,
@@ -171,7 +172,7 @@ async def create_custom_podcast(
     podcast_doc = {
         "user_id": user_id,
         "topic_id": None, # No associated news topic
-        "topic_title": "Custom Studio Podcast",
+        "topic_title": title,
         "category": "custom",
         "is_custom": True, # Crucial flag
         "custom_source_text": extracted_text,

@@ -83,7 +83,8 @@ async def generate_podcast(
 @router.post("/generate-custom")
 async def generate_custom_podcast_endpoint(
     # REMOVED Optional, and set default to []
-    files: List[UploadFile] = File(default=[]), 
+    files: List[UploadFile] = File(default=[]),
+    title: str = Form("Custom Studio Podcast"),
     custom_prompt: Optional[str] = Form(""),
     voice: str = Form(PodcastVoice.CALM_FEMALE),
     style: str = Form(PodcastStyle.STANDARD),
@@ -101,6 +102,7 @@ async def generate_custom_podcast_endpoint(
         result = await create_custom_podcast(
             user_id=user_uid,
             files=files, # No longer need 'or []' because it defaults to []
+            title=title,
             custom_prompt=custom_prompt or "",
             voice=voice,
             style=style,

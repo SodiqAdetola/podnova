@@ -22,6 +22,8 @@ import { useAudio } from "../contexts/AudioContext";
 import { PodcastPlayerProps } from "../types/podcasts";
 import { MainStackParamList } from "../Navigator";
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -156,7 +158,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     const topicId = podcast.topic_id || podcast.id;
 
     try {
-      const response = await fetch(`https://podnova-backend-r8yz.onrender.com/discussions?topic_id=${topicId}`);
+      const response = await fetch(`${API_BASE_URL}/discussions?topic_id=${topicId}`);
       const data = await response.json();
 
       if (data.discussions && data.discussions.length > 0) {

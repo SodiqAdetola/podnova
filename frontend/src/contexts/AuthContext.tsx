@@ -9,7 +9,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
-const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type AuthContextProps = {
     user: User | null;

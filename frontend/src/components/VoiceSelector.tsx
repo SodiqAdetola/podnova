@@ -11,7 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { auth } from "../firebase/config";
 
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const VOICES = [
   { id: "calm_female", name: "Calm (Female)" },

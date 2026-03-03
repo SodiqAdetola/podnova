@@ -21,7 +21,8 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import DiscussionsList from "../components/DiscussionsList";
 import CreateDiscussionModal from "../components/CreateDiscussionModal";
 
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const PAGE_LIMIT = 20;
 
 type TabType = "topics" | "discussions";

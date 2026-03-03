@@ -16,7 +16,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuth } from "firebase/auth";
 
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const PAGE_LIMIT = 20;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;

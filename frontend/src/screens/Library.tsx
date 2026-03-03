@@ -22,6 +22,8 @@ import { useAudio } from "../contexts/AudioContext";
 import PodcastPlayer from "../components/PodcastPlayer";
 import { Podcast, TabType, PodcastLibraryResponse } from "../types/podcasts";
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const STORAGE_KEYS = {
   DOWNLOADS: "@podnova_downloads",
   SAVED: "@podnova_saved",
@@ -71,7 +73,7 @@ const LibraryScreen: React.FC = () => {
       if (!token) return;
 
       const response = await fetch(
-        "https://podnova-backend-r8yz.onrender.com/podcasts/library",
+        `${API_BASE_URL}/podcasts/library`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -203,7 +205,7 @@ const LibraryScreen: React.FC = () => {
               if (!token) return;
 
               const response = await fetch(
-                `https://podnova-backend-r8yz.onrender.com/podcasts/${podcast.id}`,
+                `${API_BASE_URL}/podcasts/${podcast.id}`,
                 {
                   method: "DELETE",
                   headers: {

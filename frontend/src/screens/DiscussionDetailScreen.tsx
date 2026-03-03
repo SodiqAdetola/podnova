@@ -16,7 +16,7 @@ import { getAuth } from "firebase/auth";
 import DiscussionThread from "../components/DiscussionThread";
 import { useAudio } from "../contexts/AudioContext";
 
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
 

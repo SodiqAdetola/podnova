@@ -19,8 +19,9 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainTabParamList, MainStackParamList } from "../Navigator";
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const { height } = Dimensions.get("window");
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
 const TONE_TO_STYLE: Record<string, string> = {
   casual: "casual",

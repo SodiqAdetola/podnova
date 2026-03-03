@@ -23,7 +23,7 @@ import { MainStackParamList } from "../Navigator";
 import { getAuth } from "firebase/auth";
 import { useInfiniteQuery } from "@tanstack/react-query";
 
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 const PAGE_LIMIT = 20;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;

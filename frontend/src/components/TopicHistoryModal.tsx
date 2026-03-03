@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SLIDE_HEIGHT = SCREEN_HEIGHT * 0.85;
 const SWIPE_THRESHOLD = 100;
@@ -126,7 +128,7 @@ const TopicHistoryModal: React.FC<Props> = ({
     try {
       setLoading(true);
       const response = await fetch(
-        `https://podnova-backend-r8yz.onrender.com/topics/${topicId}/history`
+        `${API_BASE_URL}/topics/${topicId}/history`
       );
       const data = await response.json();
       setHistory(data.history_points || []);

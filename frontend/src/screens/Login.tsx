@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
-const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState("");

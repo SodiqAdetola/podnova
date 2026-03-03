@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { getAuth } from "firebase/auth";
 
-const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<MainStackParamList>;
 

@@ -15,6 +15,7 @@ import { MainStackParamList } from "../Navigator";
 import { Category, Topic } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { getAuth } from "firebase/auth";
 
 const API_BASE_URL = "https://podnova-backend-r8yz.onrender.com";
 
@@ -51,6 +52,29 @@ const fetchRecentTopics = async (categories: Category[]): Promise<Topic[]> => {
     .slice(0, 5);
 };
 
+// NEW: Lightweight fetch just for the unread count
+const fetchUnreadCount = async (): Promise<number> => {
+  try {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return 0;
+    
+    const token = await user.getIdToken();
+    if (!token) return 0;
+
+    // We only need 1 item to get the unread_count from the payload
+    const response = await fetch(`${API_BASE_URL}/notifications?limit=1&skip=0`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    if (!response.ok) return 0;
+    const data = await response.json();
+    return data.unread_count || 0;
+  } catch (error) {
+    return 0;
+  }
+};
+
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
 
@@ -76,8 +100,15 @@ const HomeScreen: React.FC = () => {
     staleTime: 1000 * 60 * 2,
   });
 
+  // NEW: Query for the unread badge counter
+  const { data: unreadCount = 0, refetch: refetchUnread } = useQuery({
+    queryKey: ['unreadNotificationCount'],
+    queryFn: fetchUnreadCount,
+    refetchInterval: 1000 * 60, // Auto-refresh every 60 seconds while on this screen
+  });
+
   const onRefresh = async () => {
-    await Promise.all([refetchCategories(), refetchTopics()]);
+    await Promise.all([refetchCategories(), refetchTopics(), refetchUnread()]);
   };
 
   const getCategoryColor = (name: string) => {
@@ -111,6 +142,15 @@ const HomeScreen: React.FC = () => {
             onPress={() => navigation.navigate("Notifications")}
           >
             <Ionicons name="notifications-outline" size={20} color="#ffffff" />
+            
+            {/* NEW: Unread Badge UI */}
+            {unreadCount > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -153,7 +193,6 @@ const HomeScreen: React.FC = () => {
           contentContainerStyle={styles.topicsScrollContainer}
         >
           {recentTopics.map((topic) => {
-            // ✅ SAFETY CHECK: Prevent "undefined" from being passed to the detail screen
             const safeId = topic.id || (topic as any)._id;
 
             return (
@@ -221,6 +260,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#6366F1",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative", // Needed for the absolute badge to position correctly
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444', // Danger red
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF', // Creates a cutout effect
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   section: {
     marginTop: 24,

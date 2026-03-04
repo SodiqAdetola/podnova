@@ -12,7 +12,7 @@ from app.models.notification import (
 import traceback
 import logging
 
-# NEW: Import Expo Push SDK
+# Import Expo Push SDK
 from exponent_server_sdk import (
     DeviceNotRegisteredError,
     PushClient,
@@ -115,7 +115,7 @@ class NotificationService:
             }
             res = await db["notifications"].insert_one(doc)
             
-            # NEW: Trigger the push notification in the background
+            # Trigger the push notification in the background
             await self._send_push_notification(
                 user_id=req.user_id,
                 title=req.title,
@@ -159,7 +159,6 @@ class NotificationService:
         
         notifications = []
         async for n in cursor:
-            # ✅ SHIELD: Safely parse each item. If one is broken, skip it, don't crash the whole screen!
             try:
                 notifications.append(self._format_notification(n))
             except Exception as e:
@@ -214,17 +213,15 @@ class NotificationService:
         )
         return await self.create_notification(req)
 
-
     async def create_reply_notification(
         self, discussion_owner_id: str, discussion_id: str, discussion_title: str, 
         reply_author_id: str, reply_author_name: str, reply_preview: str,
-        is_nested_reply: bool = False  # <-- NEW ARGUMENT
+        is_nested_reply: bool = False
     ) -> Optional[str]:
         """Triggered when a user gets a reply in a discussion"""
         if discussion_owner_id == reply_author_id:
             return None
             
-        # Dynamically change the text based on what they replied to
         message_text = (
             f"{reply_author_name} replied to your comment" 
             if is_nested_reply 
@@ -246,7 +243,6 @@ class NotificationService:
         )
         return await self.create_notification(req)
 
-
     async def create_topic_update_notification(
         self, user_id: str, topic_id: str, topic_title: str, update_type: str, update_count: int
     ) -> Optional[str]:
@@ -263,6 +259,38 @@ class NotificationService:
             action_path=f"/topic/{topic_id}"
         )
         return await self.create_notification(req)
+
+    # --- DELETION LOGIC ---
+    
+    async def delete_notification(self, n_id: str, user_id: str) -> bool:
+        """Permanently delete a single notification"""
+        if not ObjectId.is_valid(n_id): 
+            return False
+            
+        res = await db["notifications"].delete_one(
+            {"_id": ObjectId(n_id), "user_id": user_id}
+        )
+        return res.deleted_count > 0
+
+    async def bulk_delete(self, notification_ids: List[str], user_id: str) -> int:
+        """Safely delete multiple notifications with MongoDB $in operator"""
+        object_ids = []
+        for nid in notification_ids:
+            if ObjectId.is_valid(nid):
+                object_ids.append(ObjectId(nid))
+                
+        if not object_ids:
+            return 0
+            
+        res = await db["notifications"].delete_many(
+            {"_id": {"$in": object_ids}, "user_id": user_id}
+        )
+        return res.deleted_count
+
+    async def delete_all(self, user_id: str) -> int:
+        """Wipe the entire tray for this specific user"""
+        res = await db["notifications"].delete_many({"user_id": user_id})
+        return res.deleted_count
 
     # --- FORMATTERS ---
 

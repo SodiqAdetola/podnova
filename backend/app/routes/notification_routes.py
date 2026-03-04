@@ -1,11 +1,16 @@
 # app/routes/notification_routes.py
 from fastapi import APIRouter, HTTPException, status, Query, Depends
-from typing import Optional 
+from typing import Optional, List
+from pydantic import BaseModel
 from app.middleware.firebase_auth import require_firebase_token
 from app.controllers import notification_controller
 import traceback
 
 router = APIRouter()
+
+# Schema for bulk deletion
+class BulkDeleteRequest(BaseModel):
+    notification_ids: List[str]
 
 # Removed the trailing slash ("/" -> "") to prevent 307 Redirects from stripping auth headers
 @router.get("")
@@ -111,13 +116,43 @@ async def archive_notification(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
+# --- NEW BULK DELETE ENDPOINT ---
+@router.post("/bulk-delete")
+async def bulk_delete_notifications(
+    request: BulkDeleteRequest,
+    firebase_user: dict = Depends(require_firebase_token)
+):
+    """Delete multiple notifications at once"""
+    try:
+        result = await notification_controller.bulk_delete_notifications(
+            notification_ids=request.notification_ids,
+            user_id=firebase_user["uid"]
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# --- NEW DELETE ALL ENDPOINT ---
+@router.delete("/delete-all")
+async def delete_all_notifications(
+    firebase_user: dict = Depends(require_firebase_token)
+):
+    """Wipe all notifications for the current user"""
+    try:
+        result = await notification_controller.delete_all_notifications(
+            user_id=firebase_user["uid"]
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @router.delete("/{notification_id}")
 async def delete_notification(
     notification_id: str,
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Permanently delete a notification"""
+    """Permanently delete a single notification"""
     try:
         result = await notification_controller.delete_notification(
             notification_id=notification_id,

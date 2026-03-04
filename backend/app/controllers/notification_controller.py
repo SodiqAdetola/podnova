@@ -43,3 +43,22 @@ async def get_unread_count(user_id: str) -> Dict:
     """Standalone count check"""
     count = await notification_service.get_notification_count(user_id, unread_only=True)
     return {"unread_count": count}
+
+# --- DELETION CONTROLLERS ---
+
+async def delete_notification(notification_id: str, user_id: str) -> Dict:
+    """Delete a single notification"""
+    success = await notification_service.delete_notification(notification_id, user_id)
+    if not success:
+        return {"success": False, "message": "Notification not found or access denied"}
+    return {"success": True, "message": "Notification deleted successfully"}
+
+async def bulk_delete_notifications(notification_ids: list, user_id: str) -> Dict:
+    """Pass bulk delete request to the service layer"""
+    deleted_count = await notification_service.bulk_delete(notification_ids, user_id)
+    return {"success": True, "deleted_count": deleted_count}
+
+async def delete_all_notifications(user_id: str) -> Dict:
+    """Pass wipe request to the service layer"""
+    deleted_count = await notification_service.delete_all(user_id)
+    return {"success": True, "deleted_count": deleted_count}

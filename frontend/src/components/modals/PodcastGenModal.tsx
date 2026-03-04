@@ -1,3 +1,4 @@
+// frontend/src/components/PodcastGenModal.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -15,11 +16,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import { auth } from "../firebase/config";
+import { auth } from "../../firebase/config";
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { MainTabParamList, MainStackParamList } from "../Navigator";
+import { MainTabParamList, MainStackParamList } from "../../Navigator";
+import { LinearGradient } from 'expo-linear-gradient'; // Added Import
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -436,14 +438,21 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
                   onPress={handleGenerate}
                   disabled={generating}
                 >
-                  {generating ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-                      <Text style={styles.generateButtonText}>Generate Podcast</Text>
-                    </>
-                  )}
+                  <LinearGradient
+                    colors={['#8B5CF6', '#6366F1']}
+                    style={styles.generateButtonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    {generating ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+                        <Text style={styles.generateButtonText}>Generate Podcast</Text>
+                      </>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             </>
@@ -663,29 +672,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
   },
+
+  // --- UPDATED BUTTON & FOOTER STYLES ---
   footer: {
-    padding: 20,
+    alignItems: "center",
+    paddingTop: 16,
     paddingBottom: 30,
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
   generateButton: {
+    borderRadius: 24, // Pill shape
+    width: "65%", // Smaller, centered button instead of full-width
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  generateButtonDisabled: {
+    opacity: 0.7,
+  },
+  generateButtonGradient: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: "#6366F1",
+    paddingVertical: 14,
     gap: 8,
-  },
-  generateButtonDisabled: {
-    backgroundColor: "#9CA3AF",
+    borderRadius: 24, 
   },
   generateButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
   },
+
   successContainer: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 20,

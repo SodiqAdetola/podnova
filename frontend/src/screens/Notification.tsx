@@ -1,5 +1,5 @@
 // frontend/src/screens/NotificationsScreen.tsx
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   FlatList,
+  Modal,
+  Alert,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -15,9 +20,14 @@ import { MainStackParamList } from "../Navigator";
 import { Ionicons } from "@expo/vector-icons";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuth } from "firebase/auth";
+import NotificationListSkeleton from "../components/skeletons/NotificationListSkeleton";
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-
 const PAGE_LIMIT = 20;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
@@ -41,7 +51,6 @@ interface Notification {
 // --- API Fetching Function ---
 const fetchNotifications = async ({ pageParam = 0 }: any) => {
   try {
-    // ✅ FIXED: Using Firebase to get the fresh token
     const auth = getAuth();
     const user = auth.currentUser;
     if (!user) throw new Error("You are not logged in.");
@@ -71,6 +80,14 @@ const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
+  // Bottom Sheet State (used for long-press delete now)
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+
+  // Selection Mode State
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   const {
     data,
     isLoading,
@@ -89,7 +106,7 @@ const NotificationsScreen: React.FC = () => {
       if (!lastPage || !lastPage.notifications) return undefined;
       return lastPage.notifications.length === PAGE_LIMIT ? allPages.length : undefined;
     },
-    staleTime: 1000 * 60, // Cache for 1 minute
+    staleTime: 1000 * 60, 
   });
 
   const notifications = data?.pages?.reduce((acc: Notification[], page: any) => {
@@ -101,10 +118,9 @@ const NotificationsScreen: React.FC = () => {
 
   const unreadCount = data?.pages?.[0]?.unread_count || 0;
 
-  // --- Mutations for Marking as Read ---
+  // --- Mutations ---
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      // ✅ FIXED: Using Firebase for mutation tokens too
       const auth = getAuth();
       const token = await auth.currentUser?.getIdToken();
       return fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
@@ -112,14 +128,11 @@ const NotificationsScreen: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      // ✅ FIXED: Using Firebase for mutation tokens too
       const auth = getAuth();
       const token = await auth.currentUser?.getIdToken();
       return fetch(`${API_BASE_URL}/notifications/read-all`, {
@@ -127,12 +140,124 @@ const NotificationsScreen: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to delete notification");
+      return response.json();
+    },
+    onSuccess: () => {
+      setShowActionMenu(false);
+      setSelectedNotification(null);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: () => Alert.alert("Error", "Could not delete notification. Please try again.")
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/notifications/bulk-delete`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ notification_ids: ids })
+      });
+      if (!response.ok) throw new Error("Failed to delete selected notifications");
+      return response.json();
+    },
+    onSuccess: () => {
+      setIsSelectMode(false);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: () => Alert.alert("Error", "Some notifications could not be deleted.")
+  });
+
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/notifications/delete-all`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to delete all notifications");
+      return response.json();
+    },
+    onSuccess: () => {
+      setIsSelectMode(false);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: () => Alert.alert("Error", "Failed to clear notifications.")
+  });
+
+  // --- Handlers ---
+  const toggleSelectionMode = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsSelectMode(!isSelectMode);
+    setSelectedIds(new Set());
+  };
+
+  const toggleItemSelection = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === notifications.length) {
+      setSelectedIds(new Set()); 
+    } else {
+      const allIds = notifications.map((n: Notification) => n.id);
+      setSelectedIds(new Set(allIds));
+    }
+  };
+
+  const handleDynamicDelete = () => {
+    if (selectedIds.size === 0) {
+      Alert.alert(
+        "Clear All Notifications",
+        "Are you sure you want to permanently delete ALL notifications? This cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete All", style: "destructive", onPress: () => deleteAllMutation.mutate() }
+        ]
+      );
+    } else {
+      Alert.alert(
+        "Delete Selected",
+        `Are you sure you want to delete ${selectedIds.size} notification${selectedIds.size !== 1 ? 's' : ''}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => bulkDeleteMutation.mutate(Array.from(selectedIds)) }
+        ]
+      );
+    }
+  };
+
   const handleNotificationPress = (notification: Notification) => {
+    if (isSelectMode) {
+      toggleItemSelection(notification.id);
+      return;
+    }
+
     if (!notification.is_read) {
       markAsReadMutation.mutate(notification.id);
     }
@@ -150,10 +275,23 @@ const NotificationsScreen: React.FC = () => {
     }
   };
 
+  const openActionMenu = (notification: Notification) => {
+    if (isSelectMode) return;
+    setSelectedNotification(notification);
+    setShowActionMenu(true);
+  };
+
+  const handleDeleteSingle = () => {
+    if (selectedNotification) {
+      deleteNotificationMutation.mutate(selectedNotification.id);
+    }
+  };
+
+  // --- Rendering Helpers ---
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "mention": return "at-circle";
-      case "reply": return "chatbubble";
+      case "reply": return "chatbubble-outline";
       case "upvote": return "arrow-up-circle";
       case "podcast_ready": return "headset";
       case "topic_update": return "newspaper";
@@ -172,43 +310,55 @@ const NotificationsScreen: React.FC = () => {
     }
   };
 
-  const renderItem = ({ item: notification }: { item: Notification }) => (
-    <TouchableOpacity
-      style={[
-        styles.notificationCard,
-        !notification.is_read && styles.notificationCardUnread,
-      ]}
-      onPress={() => handleNotificationPress(notification)}
-      activeOpacity={0.7}
-    >
-      <View
+  const renderItem = ({ item: notification }: { item: Notification }) => {
+    const isSelected = selectedIds.has(notification.id);
+
+    return (
+      <TouchableOpacity
         style={[
-          styles.iconContainer,
-          { backgroundColor: getNotificationColor(notification.type) + "20" },
+          styles.notificationCard,
+          !notification.is_read && styles.notificationCardUnread,
+          isSelected && styles.notificationCardSelected
         ]}
+        onPress={() => handleNotificationPress(notification)}
+        onLongPress={() => openActionMenu(notification)} 
+        activeOpacity={0.7}
       >
-        <Ionicons
-          name={getNotificationIcon(notification.type) as any}
-          size={24}
-          color={getNotificationColor(notification.type)}
-        />
-      </View>
+        {isSelectMode && (
+          <View style={styles.checkboxContainer}>
+            <Ionicons 
+              name={isSelected ? "checkmark-circle" : "ellipse-outline"} 
+              size={24} 
+              color={isSelected ? "#6366F1" : "#D1D5DB"} 
+            />
+          </View>
+        )}
 
-      <View style={styles.notificationContent}>
-        <Text style={styles.notificationTitle}>
-          {notification.title || "Notification"}
-        </Text>
-        <Text style={styles.notificationPreview} numberOfLines={2}>
-          {notification.message || notification.preview || "You have a new update."}
-        </Text>
-        <Text style={styles.notificationTime}>
-          {notification.time_ago || "Recently"}
-        </Text>
-      </View>
+        <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(notification.type) + "20" }]}>
+          <Ionicons name={getNotificationIcon(notification.type) as any} size={20} color={getNotificationColor(notification.type)} />
+        </View>
 
-      {!notification.is_read && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
+        <View style={styles.notificationContent}>
+          <View style={styles.titleRow}>
+            <Text style={styles.notificationTitle} numberOfLines={1}>
+              {notification.title || "Notification"}
+            </Text>
+          </View>
+
+          <Text style={styles.notificationPreview} numberOfLines={2}>
+            {notification.message || notification.preview || "You have a new update."}
+          </Text>
+          
+          <View style={styles.footerRow}>
+            <Text style={styles.notificationTime}>
+              {notification.time_ago || "Recently"}
+            </Text>
+            {!notification.is_read && <View style={styles.unreadDot} />}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmptyState = () => {
     if (isLoading) return null;
@@ -236,13 +386,7 @@ const NotificationsScreen: React.FC = () => {
     );
   };
 
-  if (isLoading && notifications.length === 0) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
-    );
-  }
+  const isDeleting = bulkDeleteMutation.isPending || deleteAllMutation.isPending;
 
   return (
     <View style={styles.container}>
@@ -250,49 +394,146 @@ const NotificationsScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>PODNOVA NOTIFICATIONS</Text>
-        {unreadCount > 0 ? (
-          <TouchableOpacity onPress={() => markAllAsReadMutation.mutate()}>
-            <Text style={styles.markAllText}>Mark all read</Text>
-          </TouchableOpacity>
+        <Text style={styles.headerTitle}>NOTIFICATIONS</Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      {/* PERMANENT BANNER */}
+      <View style={styles.bannerContainer}>
+        {isSelectMode ? (
+          <>
+            <Text style={styles.bannerMainText}>
+              {selectedIds.size} Selected
+            </Text>
+            <View style={styles.bannerActionsRow}>
+              <TouchableOpacity onPress={handleSelectAll} style={styles.bannerAction}>
+                <Text style={styles.bannerActionText}>
+                  {selectedIds.size === notifications.length && notifications.length > 0 ? "Deselect" : "Select All"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDynamicDelete} style={styles.bannerAction}>
+                <Text style={[styles.bannerActionText, styles.dangerText]}>
+                  {selectedIds.size === 0 ? "Delete All" : "Delete"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={toggleSelectionMode} style={styles.bannerAction}>
+                <Text style={[styles.bannerActionText, styles.bannerActionTextLast]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         ) : (
-          <View style={styles.placeholder} />
+          <>
+            <Text style={styles.bannerMainText}>
+              {unreadCount} Unread
+            </Text>
+            <View style={styles.bannerActionsRow}>
+              <TouchableOpacity 
+                onPress={() => markAllAsReadMutation.mutate()} 
+                style={styles.bannerAction}
+                disabled={notifications.length === 0}
+              >
+                <Text style={[styles.bannerActionText, notifications.length === 0 && styles.disabledText]}>
+                  Mark All Read
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={toggleSelectionMode} 
+                style={styles.bannerAction}
+                disabled={notifications.length === 0}
+              >
+                <Text style={[
+                  styles.bannerActionText, 
+                  styles.bannerActionTextLast, 
+                  notifications.length === 0 && styles.disabledText
+                ]}>
+                  Select
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </View>
 
-      {unreadCount > 0 && (
-        <View style={styles.unreadBanner}>
-          <Text style={styles.unreadText}>
-            {unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}
-          </Text>
+      {/* Loading Overlay for Background Deletions */}
+      {isDeleting && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#6366F1" />
+          <Text style={styles.loadingOverlayText}>Deleting...</Text>
         </View>
       )}
 
-      <FlatList
-        data={notifications}
-        keyExtractor={(item) => item.id || Math.random().toString()}
-        renderItem={renderItem}
-        ListEmptyComponent={renderEmptyState}
-        ListFooterComponent={() => (
-          <View style={styles.footerLoader}>
-            {isFetchingNextPage && <ActivityIndicator size="small" color="#6366F1" />}
-          </View>
-        )}
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) {
-            fetchNextPage();
+      {isLoading && notifications.length === 0 ? (
+        <NotificationListSkeleton />
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={(item) => item.id || Math.random().toString()}
+          renderItem={renderItem}
+          ListEmptyComponent={renderEmptyState}
+          ListFooterComponent={() => (
+            <View style={styles.footerLoader}>
+              {isFetchingNextPage && <ActivityIndicator size="small" color="#6366F1" />}
+            </View>
+          )}
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) {
+              fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl 
+              refreshing={isRefetching && !isFetchingNextPage} 
+              onRefresh={refetch} 
+            />
           }
-        }}
-        onEndReachedThreshold={0.5}
-        refreshControl={
-          <RefreshControl 
-            refreshing={isRefetching && !isFetchingNextPage} 
-            onRefresh={refetch} 
-          />
-        }
-      />
+        />
+      )}
+
+      {/* --- ACTION MENU BOTTOM SHEET --- */}
+      <Modal 
+        visible={showActionMenu} 
+        transparent 
+        animationType="slide" 
+        onRequestClose={() => setShowActionMenu(false)}
+      >
+        <TouchableOpacity 
+          style={styles.bottomSheetOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowActionMenu(false)}
+        >
+          <View style={styles.bottomSheetContainer}>
+            <View style={styles.bottomSheetHandle} />
+            
+            <TouchableOpacity 
+              style={styles.actionSheetButton}
+              onPress={handleDeleteSingle}
+              disabled={deleteNotificationMutation.isPending}
+            >
+              {deleteNotificationMutation.isPending ? (
+                <ActivityIndicator size="small" color="#EF4444" />
+              ) : (
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+              )}
+              <Text style={[styles.actionSheetText, styles.destructiveText]}>
+                {deleteNotificationMutation.isPending ? "Deleting..." : "Delete Notification"}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.actionSheetDivider} />
+
+            <TouchableOpacity 
+              style={styles.actionSheetCancel} 
+              onPress={() => setShowActionMenu(false)}
+            >
+              <Text style={styles.actionSheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 };
@@ -332,25 +573,49 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textAlign: "center",
   },
-  markAllText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6366F1",
-  },
   placeholder: {
-    width: 80,
+    width: 40,
   },
-  unreadBanner: {
+  bannerContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     backgroundColor: "#EEF2FF",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E7FF",
   },
-  unreadText: {
-    fontSize: 13,
+  bannerMainText: {
+    fontSize: 14,
     fontWeight: "600",
     color: "#6366F1",
+  },
+  bannerActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bannerAction: {
+    paddingVertical: 4,
+  },
+  bannerActionText: {
+    fontSize: 14,
+    color: "#3c517e",
+    fontWeight: "500",
+    borderRightWidth: 1,
+    borderColor: "#b4b4b4",
+    paddingRight: 10,
+  },
+  bannerActionTextLast: {
+    borderRightWidth: 0,
+    paddingRight: 0,
+  },
+  dangerText: {
+    color: "#EF4444",
+  },
+  disabledText: {
+    color: "#D1D5DB",
   },
   content: {
     flex: 1,
@@ -359,16 +624,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: "#FFFFFF",
-    padding: 12,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
   notificationCardUnread: {
     backgroundColor: "#FAFBFF",
   },
+  notificationCardSelected: {
+    backgroundColor: "#EEF2FF",
+  },
+  checkboxContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    marginTop: 12,
+  },
   iconContainer: {
-    width: 48,
-    height: 48,
+    width: 36,
+    height: 36,
     borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
@@ -377,16 +651,29 @@ const styles = StyleSheet.create({
   notificationContent: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   notificationTitle: {
+    flex: 1,
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 4,
+    marginRight: 8,
   },
   notificationPreview: {
     fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 4,
+    color: "#4B5563",
+    marginBottom: 8,
+    lineHeight: 14,
+  },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   notificationTime: {
     fontSize: 12,
@@ -397,8 +684,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#6366F1",
-    marginLeft: 8,
-    marginTop: 8,
   },
   emptyState: {
     paddingTop: 100,
@@ -420,6 +705,74 @@ const styles = StyleSheet.create({
   },
   footerLoader: {
     paddingVertical: 20,
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 135, 
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  loadingOverlayText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6366F1",
+  },
+
+  // --- BOTTOM SHEET STYLES ---
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  bottomSheetContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 12,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  actionSheetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 12,
+  },
+  actionSheetText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#111827",
+  },
+  destructiveText: {
+    color: "#EF4444",
+  },
+  actionSheetDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 8,
+  },
+  actionSheetCancel: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  actionSheetCancelText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#6B7280",
   },
 });
 

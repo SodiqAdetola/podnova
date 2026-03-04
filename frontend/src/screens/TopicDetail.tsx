@@ -15,6 +15,8 @@ import {
   UIManager,
   Share,
   Alert,
+  KeyboardAvoidingView,
+  Dimensions,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -23,20 +25,37 @@ import { TopicDetail } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
 import Feather from '@expo/vector-icons/Feather';
 import { LinearGradient } from 'expo-linear-gradient';
-import PodcastGeneratorModal from "../components/PodcastGenModal";
-import TopicHistoryModal from "../components/TopicHistoryModal";
+import PodcastGeneratorModal from "../components/modals/PodcastGenModal";
+import TopicHistoryModal from "../components/modals/TopicHistoryModal";
 import DiscussionThread from "../components/DiscussionThread";
 import { getAuth } from "firebase/auth";
 import { useAudio } from "../contexts/AudioContext";
+import TopicDetailSkeleton from "../components/skeletons/TopicDetailSkeleton";
+import { useQuery } from "@tanstack/react-query";
 
-// Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 type TopicDetailNavigationProp = NativeStackNavigationProp<MainStackParamList>;
+
+// Helper for Auth
+const getAuthToken = async (): Promise<string | null> => {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (user) {
+    try {
+      return await user.getIdToken();
+    } catch (error) {
+      console.error("Error getting token:", error);
+      return null;
+    }
+  }
+  return null;
+};
 
 const TopicDetailScreen: React.FC = () => {
   const navigation = useNavigation<TopicDetailNavigationProp>();
@@ -46,124 +65,83 @@ const TopicDetailScreen: React.FC = () => {
   
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const [topic, setTopic] = useState<TopicDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // UI States (NO MORE FETCHING STATES)
   const [heroImageError, setHeroImageError] = useState(false);
   const [showPodcastModal, setShowPodcastModal] = useState(false);
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(false);
-  const [discussionId, setDiscussionId] = useState<string | null>(null);
-  const [replyCount, setReplyCount] = useState(0);
-  const [loadingDiscussion, setLoadingDiscussion] = useState(false);
   const [isArticlesExpanded, setIsArticlesExpanded] = useState(false);
 
-  const getAuthToken = async (): Promise<string | null> => {
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (user) {
-      try {
-        return await user.getIdToken();
-      } catch (error) {
-        console.error("Error getting token:", error);
-        return null;
-      }
-    }
-    return null;
-  };
-
-  useEffect(() => {
-    loadTopic();
-  }, [topicId]);
-
-  const loadTopic = async () => {
-    try {
-      if (!topicId || topicId === "undefined" || topicId.includes("undefined")) {
-        console.error("Invalid topic ID passed to screen:", topicId);
-        setTopic(null);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
+  // ==========================================
+  // 1. REACT QUERY: FETCH TOPIC (CACHED)
+  // ==========================================
+  const {
+    data: topic,
+    isLoading: loadingTopic,
+    isError: isTopicError,
+    refetch: refetchTopic,
+    isRefetching: isRefetchingTopic
+  } = useQuery({
+    queryKey: ['topic', topicId],
+    queryFn: async (): Promise<TopicDetail> => {
+      if (!topicId || topicId === "undefined") throw new Error("Invalid Topic ID");
       const response = await fetch(`${API_BASE_URL}/topics/${topicId}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load topic: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Failed to load topic`);
       
       const data = await response.json();
-      
-      if (data && data._id && !data.id) {
-        data.id = data._id;
-      }
-      
-      setTopic(data);
-      
-      if (data.id) {
-        await fetchTopicDiscussion(data.id);
-      }
-    } catch (error) {
-      console.error("Error loading topic details:", error);
-      setTopic(null); 
+      if (data && data._id && !data.id) data.id = data._id;
+      return data;
+    },
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes. 0ms load on re-click!
+    retry: 1,
+  });
 
-      Alert.alert("Topic Unavailable", "This topic could not be found or has been removed.");
-      
-      // go back to working screen if error. If they landed here directly (e.g. from a shared link) and there's no back stack, navigate to the main screen.
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      } else {
-        (navigation as any).replace("MainTabs"); 
-      }
-
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadTopic();
-  };
-
-  const fetchTopicDiscussion = async (safeTopicId: string) => {
-    try {
-      setLoadingDiscussion(true);
+  // ==========================================
+  // 2. REACT QUERY: FETCH DISCUSSION (CACHED)
+  // ==========================================
+  const {
+    data: discussion,
+    isLoading: loadingDiscussion,
+    refetch: refetchDiscussion,
+    isRefetching: isRefetchingDiscussion
+  } = useQuery({
+    queryKey: ['topicDiscussion', topic?.id],
+    queryFn: async () => {
       const token = await getAuthToken();
-      
-      if (!token) return;
+      if (!token || !topic?.id) return null;
 
       const response = await fetch(
-        `${API_BASE_URL}/discussions?topic_id=${safeTopicId}&discussion_type=topic`,
+        `${API_BASE_URL}/discussions?topic_id=${topic.id}&discussion_type=topic`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.discussions && data.discussions.length > 0) {
-          const discussion = data.discussions[0];
-          setDiscussionId(discussion.id || discussion._id);
-          setReplyCount(discussion.reply_count || 0);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching topic discussion:", error);
-    } finally {
-      setLoadingDiscussion(false);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.discussions && data.discussions.length > 0 ? data.discussions[0] : null;
+    },
+    enabled: !!topic?.id, // Only runs AFTER the topic is loaded
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  const discussionId = discussion?.id || discussion?._id || null;
+  const replyCount = discussion?.reply_count || 0;
+
+  // --- ERROR HANDLING ---
+  useEffect(() => {
+    if (isTopicError) {
+      Alert.alert("Topic Unavailable", "This topic could not be found or has been removed.");
+      if (navigation.canGoBack()) navigation.goBack();
+      else (navigation as any).replace("MainTabs"); 
     }
+  }, [isTopicError]);
+
+  // --- HANDLERS ---
+  const onRefresh = async () => {
+    await Promise.all([refetchTopic(), refetchDiscussion()]);
   };
 
-  const openArticle = (url: string) => {
-    Linking.openURL(url);
-  };
-
-  const handleGeneratePodcast = () => {
-    setShowPodcastModal(true);
-  };
-
-  const handleOpenTimeline = () => {
-    setShowHistoryTimeline(true);
-  };
+  const openArticle = (url: string) => Linking.openURL(url);
+  const handleGeneratePodcast = () => setShowPodcastModal(true);
+  const handleOpenTimeline = () => setShowHistoryTimeline(true);
 
   const toggleArticles = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -173,31 +151,24 @@ const TopicDetailScreen: React.FC = () => {
   const scrollToDiscussions = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    }, 400); 
   };
 
-  // --- NEW: Native Share Implementation ---
   const handleShare = async () => {
     if (!topic) return;
-
     try {
-      // This URL format acts as a Universal Link. 
-      // If the app is installed, OS intercepts it and opens the app.
-      // If not installed, it goes to the web browser (which redirects to App Store).
       const shareUrl = `https://podnova.app/topic/${topic.id}`;
-      
       const message = Platform.OS === 'android' 
         ? `Check out this topic on PodNova: ${topic.title}\n\n${shareUrl}`
         : `Check out this topic on PodNova: ${topic.title}`;
 
       await Share.share({
         message,
-        url: shareUrl, // iOS uses this specifically for rich link previews
+        url: shareUrl, 
         title: topic.title,
       });
     } catch (error: any) {
       Alert.alert("Error", "Could not share this topic.");
-      console.error("Share error:", error.message);
     }
   };
 
@@ -209,6 +180,7 @@ const TopicDetailScreen: React.FC = () => {
     return { colors: ['#818CF8', '#4F46E5'], icon: 'newspaper-outline' as const }; 
   };
 
+  // --- RENDERERS ---
   const renderHeroImage = () => {
     if (!topic?.image_url || heroImageError) {
       const fallback = getCategoryFallback(topic?.category);
@@ -232,6 +204,8 @@ const TopicDetailScreen: React.FC = () => {
         source={{ uri: topic.image_url }}
         style={styles.heroImage}
         resizeMode="cover"
+        progressiveRenderingEnabled={true} 
+        fadeDuration={300} 
         onError={() => setHeroImageError(true)}
       />
     );
@@ -239,7 +213,6 @@ const TopicDetailScreen: React.FC = () => {
 
   const renderStats = () => {
     if (!topic) return null;
-
     return (
       <View style={styles.statsGrid}>
         <View style={styles.statItem}>
@@ -262,40 +235,25 @@ const TopicDetailScreen: React.FC = () => {
 
   const renderActionButtons = () => {
     if (!topic) return null;
-
     return (
       <View style={styles.actionButtons}>
-        {/* Secondary: Timeline */}
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.timelineAction]}
-          onPress={handleOpenTimeline}
-        >
+        <TouchableOpacity style={[styles.actionButton, styles.timelineAction]} onPress={handleOpenTimeline}>
           <Ionicons name="git-branch" size={18} color="#8B5CF6" />
           <Text style={styles.actionButtonText}>Timeline</Text>
         </TouchableOpacity>
 
-        {/* Primary CTA: Generate Podcast */}
-        <TouchableOpacity 
-          style={styles.podcastButtonContainer}
-          onPress={handleGeneratePodcast}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={styles.podcastButtonContainer} onPress={handleGeneratePodcast} activeOpacity={0.8}>
           <LinearGradient
             colors={['#8B5CF6', '#6366F1']}
             style={styles.podcastButtonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
           >
             <Ionicons name="sparkles-outline" size={18} color="#FFFFFF" />
             <Text style={styles.podcastButtonText}>Create Podcast</Text>
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Secondary: Discuss */}
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.discussionAction]}
-          onPress={scrollToDiscussions}
-        >
+        <TouchableOpacity style={[styles.actionButton, styles.discussionAction]} onPress={scrollToDiscussions}>
           <Ionicons name="chatbubble-outline" size={18} color="#10B981" />
           <Text style={styles.actionButtonText}>Discuss</Text>
         </TouchableOpacity>
@@ -318,17 +276,13 @@ const TopicDetailScreen: React.FC = () => {
         <View style={styles.noDiscussion}>
           <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
           <Text style={styles.noDiscussionTitle}>No Discussions Yet</Text>
-          <Text style={styles.noDiscussionText}>
-            Be the first to start a discussion about this topic
-          </Text>
+          <Text style={styles.noDiscussionText}>Be the first to start a discussion about this topic</Text>
           <TouchableOpacity style={styles.startDiscussionButton}>
             <Text style={styles.startDiscussionButtonText}>Start a Discussion</Text>
           </TouchableOpacity>
         </View>
       );
     }
-
-    const miniPlayerHeight = showPlayer ? 70 : 0;
 
     return (
       <View style={styles.discussionSection}>
@@ -341,8 +295,12 @@ const TopicDetailScreen: React.FC = () => {
             <Text style={styles.replyCountText}>{replyCount} {replyCount === 1 ? 'reply' : 'replies'}</Text>
           </View>
         </View>
-        <View style={[styles.discussionContent, { paddingBottom: miniPlayerHeight }]}>
-          <DiscussionThread discussionId={discussionId} />
+        <View style={styles.discussionContent}>
+          <DiscussionThread 
+            discussionId={discussionId} 
+            isNested={true}
+            onInputFocus={scrollToDiscussions} 
+          />
         </View>
       </View>
     );
@@ -350,40 +308,25 @@ const TopicDetailScreen: React.FC = () => {
 
   const renderArticlesSection = () => {
     if (!topic?.articles || topic.articles.length === 0) return null;
-
     return (
       <View style={styles.articlesSection}>
-        <TouchableOpacity 
-          style={styles.sectionHeader}
-          onPress={toggleArticles}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.sectionHeader} onPress={toggleArticles} activeOpacity={0.7}>
           <View style={styles.sectionHeaderLeft}>
             <Ionicons name="newspaper" size={20} color="#6366F1" />
             <Text style={styles.sectionHeaderTitle}>Source Articles</Text>
           </View>
           <View style={styles.sectionHeaderRight}>
             <Text style={styles.articleCountText}>{topic.article_count} total</Text>
-            <Ionicons 
-              name={isArticlesExpanded ? "chevron-up" : "chevron-down"} 
-              size={20} 
-              color="#6B7280" 
-            />
+            <Ionicons name={isArticlesExpanded ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
           </View>
         </TouchableOpacity>
 
         {isArticlesExpanded && (
           <View style={styles.articlesContent}>
             {topic.articles.map((article, index) => (
-              <TouchableOpacity
-                key={article.id}
-                style={[styles.articleCard, index === 0 && styles.firstArticle]}
-                onPress={() => openArticle(article.url)}
-              >
+              <TouchableOpacity key={article.id} style={[styles.articleCard, index === 0 && styles.firstArticle]} onPress={() => openArticle(article.url)}>
                 <View style={styles.articleContent}>
-                  <Text style={styles.articleTitle} numberOfLines={2}>
-                    {article.title}
-                  </Text>
+                  <Text style={styles.articleTitle} numberOfLines={2}>{article.title}</Text>
                   <Text style={styles.articleSource}>{article.source}</Text>
                 </View>
                 <Ionicons name="open-outline" size={18} color="#9CA3AF" />
@@ -395,116 +338,101 @@ const TopicDetailScreen: React.FC = () => {
     );
   };
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
-    );
-  }
+  // IF LOADING FROM CACHE OR FETCH, SHOW SKELETON
+  if (loadingTopic) return <TopicDetailSkeleton />;
+  if (!topic) return <View style={styles.centerContainer}><Text style={styles.errorText}>Topic not found</Text></View>;
 
-  if (!topic) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Topic not found</Text>
-      </View>
-    );
-  }
-
-  const miniPlayerHeight = showPlayer ? 75 : 0;
+  const dynamicBottomPadding = showPlayer ? 95 : 20;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          PODNOVA TOPIC
-        </Text>
-        
-        {/* WIRED UP SHARE BUTTON */}
+        <Text style={styles.headerTitle} numberOfLines={1}>{topic.category} PODNOVA TOPIC</Text>
         <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
           <Ionicons name="share-outline" size={22} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: miniPlayerHeight + 20 }
-        ]}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {renderHeroImage()}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          refreshControl={
+            <RefreshControl 
+              refreshing={(isRefetchingTopic || isRefetchingDiscussion) && !loadingTopic} 
+              onRefresh={onRefresh} 
+            />
+          }
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: dynamicBottomPadding } 
+          ]}
+        >
+          {renderHeroImage()}
 
-        <View style={styles.titleSection}>
-          <Text style={styles.topicTitle}>{topic.title}</Text>
-          <View style={styles.metadata}>
-            <Text style={styles.metadataText}>
-              Updated {topic.time_ago}
-            </Text>
-            {topic.development_note && (
-              <View style={styles.developingBadge}>
-                <Ionicons name="flash-outline" size={12} color="#8B5CF6" />
-                <Text style={styles.developingBadgeText}>Developing News</Text>
-              </View>
-            )}
+          <View style={styles.titleSection}>
+            <Text style={styles.topicTitle}>{topic.title}</Text>
+            <View style={styles.metadata}>
+              <Text style={styles.metadataText}>Updated {topic.time_ago}</Text>
+              {topic.development_note && (
+                <View style={styles.developingBadge}>
+                  <Ionicons name="flash-outline" size={12} color="#8B5CF6" />
+                  <Text style={styles.developingBadgeText}>Developing News</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
 
-        {renderStats()}
-        {renderActionButtons()}
+          {renderStats()}
+          {renderActionButtons()}
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Summary</Text>
-          <Text style={styles.summaryText}>{topic.summary}</Text>
-        </View>
-
-        {topic.key_insights && topic.key_insights.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Key Insights</Text>
-            {topic.key_insights.map((insight, index) => (
-              <View key={index} style={styles.insightItem}>
-                <Feather name="check-circle" size={16} color="#10B981" style={styles.insightIcon} />
-                <Text style={styles.insightText}>{insight}</Text>
-              </View>
-            ))}
+            <Text style={styles.cardTitle}>Summary</Text>
+            <Text style={styles.summaryText}>{topic.summary}</Text>
           </View>
-        )}
 
-        {topic.tags && topic.tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {topic.tags.map((tag, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>#{tag}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+          {topic.key_insights && topic.key_insights.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Key Insights</Text>
+              {topic.key_insights.map((insight, index) => (
+                <View key={index} style={styles.insightItem}>
+                  <Feather name="check-circle" size={16} color="#10B981" style={styles.insightIcon} />
+                  <Text style={styles.insightText}>{insight}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
-        {renderArticlesSection()}
-        {renderDiscussionSection()}
-      </ScrollView>
+          {topic.tags && topic.tags.length > 0 && (
+            <View style={styles.tagsContainer}>
+              {topic.tags.map((tag, index) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>#{tag}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {renderArticlesSection()}
+          {renderDiscussionSection()}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {topic && (
         <>
           <PodcastGeneratorModal
             visible={showPodcastModal}
             onClose={() => setShowPodcastModal(false)}
-            topic={{
-              id: topic.id,
-              title: topic.title,
-              article_count: topic.article_count,
-            }}
+            topic={{ id: topic.id, title: topic.title, article_count: topic.article_count }}
           />
           <TopicHistoryModal
             visible={showHistoryTimeline}
@@ -563,7 +491,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
+    flexGrow: 1, 
   },
   heroImage: {
     width: "100%",
@@ -754,7 +682,7 @@ const styles = StyleSheet.create({
   },
   articlesSection: {
     marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 10, 
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,
@@ -822,19 +750,17 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
   discussionSection: {
-    marginTop: 40,
+    marginTop: 24,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
-    overflow: "hidden",
+    borderTopWidth: 8, 
+    borderTopColor: "#F3F4F6", 
   },
   discussionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFFFFF", 
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
@@ -849,7 +775,7 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   discussionContent: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFFFFF", 
   },
   replyCountBadge: {
     backgroundColor: "#E5E7EB",
@@ -879,6 +805,7 @@ const styles = StyleSheet.create({
   },
   noDiscussion: {
     marginHorizontal: 20,
+    marginTop: 40,
     padding: 40,
     alignItems: "center",
     gap: 12,

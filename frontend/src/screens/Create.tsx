@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
@@ -17,6 +18,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { auth } from "../firebase/config";
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import CreateScreenSkeleton from "../components/skeletons/CreateScreenSkeleton";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -51,7 +53,8 @@ const LENGTH_TO_MINUTES: Record<string, number> = {
 
 const CreateScreen: React.FC = () => {
   const navigation = useNavigation();
-  
+
+  const [title, setTitle] = useState("");
   const [files, setFiles] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [customPrompt, setCustomPrompt] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("calm_female");
@@ -150,7 +153,7 @@ const CreateScreen: React.FC = () => {
           type: file.mimeType || 'application/octet-stream'
         } as any);
       });
-
+      formData.append('podcast_title', title.trim() || "Custom Studio Podcast");
       formData.append('custom_prompt', customPrompt);
       formData.append('voice', selectedVoice);
       formData.append('style', selectedStyle);
@@ -222,25 +225,40 @@ const CreateScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
+    // Wrap the entire screen to prevent the keyboard from blocking text inputs
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>STUDIO</Text>
         <Text style={styles.headerSubtitle}>Create a custom podcast</Text>
       </View>
 
       {loadingPreferences ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6366F1" />
-          <Text style={styles.loadingText}>Loading studio...</Text>
-        </View>
+        <CreateScreenSkeleton />
       ) : (
         <ScrollView 
           style={styles.content} 
-          contentContainerStyle={{ paddingBottom: 40 }} 
+          // Extra padding at the bottom ensures you can scroll past the bottom tabs safely
+          contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }} 
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           
+          {/* TITLE SECTION */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Podcast Title</Text>
+            <Text style={styles.sectionSubtitle}>Give your custom podcast a name.</Text>
+            <TextInput
+              style={[styles.textInput, { minHeight: 50, marginBottom: 10 }]}
+              placeholder="E.g., Q3 Financial Report Analysis"
+              placeholderTextColor="#9CA3AF"
+              value={title}
+              onChangeText={setTitle}
+            />
+          </View>
+
           {/* FILE UPLOAD SECTION */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Source Material</Text>
@@ -338,34 +356,34 @@ const CreateScreen: React.FC = () => {
             />
           </View>
 
-        </ScrollView>
-      )}
-
-      {/* FIXED DOCKED FOOTER */}
-      {!loadingPreferences && (
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.generateButton, generating && styles.generateButtonDisabled]}
-            onPress={handleGenerate}
-            disabled={generating}
-          >
-            {generating ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
+          {/* INLINE GENERATE BUTTON (Moved away from navbar) */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.generateButton, generating && styles.generateButtonDisabled]}
+              onPress={handleGenerate}
+              disabled={generating}
+            >
               <LinearGradient
                 colors={['#8B5CF6', '#6366F1']}
                 style={styles.generateButtonGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-                <Text style={styles.generateButtonText}>Generate Podcast</Text>
+                {generating ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+                    <Text style={styles.generateButtonText}>Generate Podcast</Text>
+                  </>
+                )}
               </LinearGradient>
-            )}
-          </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+          </View>
+
+        </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -384,7 +402,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     color: "#6366F1",
     letterSpacing: 1,
@@ -541,22 +559,21 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 40,
   },
+  
+  // UPDATED FOOTER AND BUTTON STYLES
   footer: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 85 : 80,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 10,
+    alignItems: "center",
+    paddingTop: 24,
+    paddingBottom: 20,
   },
   generateButton: {
-    borderRadius: 12,
-    overflow: "hidden",
+    borderRadius: 24, // Pill shape
+    width: "65%", // Smaller, centered button instead of full-width
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   generateButtonDisabled: {
     opacity: 0.7,
@@ -565,14 +582,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
     gap: 8,
+    borderRadius: 24, 
   },
   generateButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
   },
+
   successContainer: {
     flex: 1,
     justifyContent: "center",

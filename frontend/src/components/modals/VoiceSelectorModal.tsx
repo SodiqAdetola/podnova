@@ -1,4 +1,4 @@
-// frontend/src/components/VoiceSelector.tsx - SLEEK VERSION
+// frontend/src/components/VoiceSelector.tsx -
 import React, { useState } from "react";
 import {
   View,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { auth } from "../firebase/config";
+import { auth } from "../../firebase/config";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 

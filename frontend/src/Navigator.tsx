@@ -8,17 +8,24 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "./contexts/AuthContext";
 import { useAudio } from "./contexts/AudioContext";
+
+// Auth Screens
+import WelcomeScreen from "./screens/Welcome";
 import LoginScreen from "./screens/Login";
 import RegisterScreen from "./screens/Register";
+
+// Main Screens
 import ProfileScreen from "./screens/Profile";
 import CreateScreen from "./screens/Create";
 import LibraryScreen from "./screens/Library";
 import SearchScreen from "./screens/Search";
 import HomeScreen from "./screens/Home";
-import CategoryTopicsScreen from "./screens/CategoryTopics";
+import CategoryScreen from "./screens/Category";
 import TopicDetailScreen from "./screens/TopicDetail";
 import NotificationsScreen from "./screens/Notification";
-import DiscussionDetailScreen from "./screens/DiscussionDetailScreen";
+import DiscussionDetailScreen from "./screens/DiscussionDetail";
+
+// Components
 import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
 
@@ -28,6 +35,7 @@ import * as Linking from 'expo-linking';
 /* -------------------- TYPES -------------------- */
 
 export type AuthStackParamList = {
+  Welcome: undefined;
   Login: undefined;
   Register: undefined;
 };
@@ -38,7 +46,7 @@ export type MainTabParamList = {
   Create: undefined;
   Library: undefined;
   Profile: undefined;
-  CategoryTopics: { category: string };
+  Category: { category: string };
 };
 
 export type MainStackParamList = {
@@ -68,15 +76,11 @@ const TAB_ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Io
 /* -------------------- DEEP LINKING CONFIG -------------------- */
 
 const linking = {
-  // Listen for both the podnova:// custom scheme and the https:// Universal Links
   prefixes: [Linking.createURL('/'), 'https://podnova.app'],
   config: {
     screens: {
-      // Maps exactly to your MainStackParamList
       TopicDetail: 'topic/:topicId',
       DiscussionDetail: 'discussion/:discussionId',
-      
-      // Fallback: If a URL doesn't match anything above, just open the Home Tabs
       MainTabs: '*', 
     },
   },
@@ -85,7 +89,9 @@ const linking = {
 /* -------------------- AUTH STACK -------------------- */
 
 const AuthStackNavigator: React.FC = () => (
-  <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+  // Start the user on the Welcome screen
+  <AuthStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Welcome">
+    <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
     <AuthStack.Screen name="Login" component={LoginScreen} />
     <AuthStack.Screen name="Register" component={RegisterScreen} />
   </AuthStack.Navigator>
@@ -144,8 +150,8 @@ const MainTabsNavigator: React.FC = () => {
       <MainTabs.Screen name="Library" component={LibraryScreen} />
       <MainTabs.Screen name="Profile" component={ProfileScreen} />
       <MainTabs.Screen 
-        name="CategoryTopics" 
-        component={CategoryTopicsScreen}
+        name="Category" 
+        component={CategoryScreen}
         options={{ tabBarItemStyle: { display: 'none' }, tabBarButton: () => null }}
       />
     </MainTabs.Navigator>
@@ -167,14 +173,13 @@ const MainStackNavigator: React.FC = () => {
 
 /* -------------------- ROOT OVERLAY -------------------- */
 
-// Define which screens actually display the bottom tab bar
 const SCREENS_WITH_TAB_BAR = [
   "Home", 
   "Search", 
   "Create", 
   "Library", 
   "Profile", 
-  "CategoryTopics"
+  "Category"
 ];
 
 const RootAppOverlay: React.FC = () => {
@@ -184,33 +189,26 @@ const RootAppOverlay: React.FC = () => {
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [currentRouteName, setCurrentRouteName] = useState<string>("Home");
   
-  // Navigation Ref allows us to track route changes globally and navigate from outside screens!
   const navigationRef = useNavigationContainerRef<MainStackParamList>();
 
   const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
   const hasTabBar = SCREENS_WITH_TAB_BAR.includes(currentRouteName);
 
-  // --- NEW: NOTIFICATION TAP LISTENER ---
   React.useEffect(() => {
-    // This fires when the user physically taps the push notification banner
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      // Tell TypeScript exactly what shape the payload data is in
       const data = response.notification.request.content.data as {
         source_type?: string;
         source_id?: string;
       };
       
-      // Safety check: wait a millisecond for the app to fully wake up and mount the navigator
       setTimeout(() => {
         if (navigationRef.isReady() && data) {
           console.log("Tapped notification with data:", data);
 
-          // Route them based on the backend payload
           if (data.source_type === 'podcast') {
-            // @ts-ignore - Overriding strict typing for nested tab navigation
+            // @ts-ignore
             navigationRef.navigate('MainTabs', { screen: 'Library' });
           } 
-          // Check that source_id exists AND is a string before navigating
           else if (data.source_type === 'discussion' && typeof data.source_id === 'string') {
             navigationRef.navigate('DiscussionDetail', { discussionId: data.source_id });
           } 
@@ -223,14 +221,12 @@ const RootAppOverlay: React.FC = () => {
 
     return () => subscription.remove();
   }, []);
-  // --------------------------------------
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Navigation Layer with Deep Linking Injected */}
       <NavigationContainer
         ref={navigationRef}
-        linking={linking} // <-- THIS IS THE CRITICAL ADDITION
+        linking={linking}
         onReady={() => {
           setCurrentRouteName(navigationRef.getCurrentRoute()?.name ?? "Home");
         }}
@@ -238,10 +234,8 @@ const RootAppOverlay: React.FC = () => {
           setCurrentRouteName(navigationRef.getCurrentRoute()?.name ?? "Home");
         }}
       >
-        {/* 1. The main app screens */}
         {user ? <MainStackNavigator /> : <AuthStackNavigator />}
 
-        {/* 2. Global Mini Player Layer */}
         {shouldShowMiniPlayer && (
           <MiniPlayer 
             onExpand={() => setShowFullPlayer(true)} 
@@ -249,7 +243,6 @@ const RootAppOverlay: React.FC = () => {
           />
         )}
 
-        {/* 3. Global Full Player Modal Layer */}
         {showFullPlayer && currentPodcast && (
           <PodcastPlayer
             visible={showFullPlayer}

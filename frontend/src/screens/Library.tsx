@@ -12,6 +12,7 @@ import {
   StatusBar,
   Modal,
   Alert,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { auth } from "../firebase/config";
@@ -22,6 +23,7 @@ import { useAudio } from "../contexts/AudioContext";
 import PodcastPlayer from "../components/PodcastPlayer";
 import { Podcast, TabType, PodcastLibraryResponse } from "../types/podcasts";
 import { LinearGradient } from 'expo-linear-gradient';
+import PodcastListSkeleton from "../components/skeletons/PodcastListSkeleton";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -30,11 +32,16 @@ const STORAGE_KEYS = {
   SAVED: "@podnova_saved",
 };
 
+// Predefined categories for the filter pill bar
+const LIBRARY_CATEGORIES = ["All", "Custom", "Finance", "Technology", "Politics"];
+
 const LibraryScreen: React.FC = () => {
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [activeCategory, setActiveCategory] = useState<string>("All"); // <-- NEW STATE
+  
   const [downloadedPodcasts, setDownloadedPodcasts] = useState<Set<string>>(new Set());
   const [savedPodcasts, setSavedPodcasts] = useState<Set<string>>(new Set());
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -46,9 +53,7 @@ const LibraryScreen: React.FC = () => {
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const previousPodcastCount = useRef<number>(0);
 
-  useEffect(() => {
-    loadLocalData();
-  }, []);
+  useEffect(() => { loadLocalData(); }, []);
 
   const loadLocalData = async () => {
     try {
@@ -56,7 +61,6 @@ const LibraryScreen: React.FC = () => {
         AsyncStorage.getItem(STORAGE_KEYS.DOWNLOADS),
         AsyncStorage.getItem(STORAGE_KEYS.SAVED),
       ]);
-
       if (downloads) setDownloadedPodcasts(new Set(JSON.parse(downloads)));
       if (saved) setSavedPodcasts(new Set(JSON.parse(saved)));
     } catch (error) {
@@ -66,35 +70,17 @@ const LibraryScreen: React.FC = () => {
 
   const fetchPodcasts = async (isRefresh = false, silent = false) => {
     try {
-      if (!silent && !isRefresh && !hasInitiallyLoaded) {
-        setLoading(true);
-      }
-
+      if (!silent && !isRefresh && !hasInitiallyLoaded) setLoading(true);
       const token = await auth.currentUser?.getIdToken(true);
       if (!token) return;
 
-      const response = await fetch(
-        `${API_BASE_URL}/podcasts/library`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/podcasts/library`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const data = await response.json();
       if (response.ok) {
         const newPodcasts = data.podcasts || [];
-        
-        if (previousPodcastCount.current > 0 && newPodcasts.length > previousPodcastCount.current) {
-          const completedCount = newPodcasts.filter((p: Podcast) => p.status === 'completed').length;
-          const previousCompletedCount = podcasts.filter(p => p.status === 'completed').length;
-          
-          if (completedCount > previousCompletedCount) {
-            console.log('New podcast completed!');
-          }
-        }
-        
         previousPodcastCount.current = newPodcasts.length;
         setPodcasts(newPodcasts);
         setHasInitiallyLoaded(true);
@@ -110,7 +96,6 @@ const LibraryScreen: React.FC = () => {
   useFocusEffect(
     React.useCallback(() => {
       fetchPodcasts(false, hasInitiallyLoaded);
-      
       return () => {
         if (pollingInterval.current) {
           clearInterval(pollingInterval.current);
@@ -124,12 +109,9 @@ const LibraryScreen: React.FC = () => {
     const hasGenerating = podcasts.some((p) =>
       ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
     );
-
     if (hasGenerating) {
       if (!pollingInterval.current) {
-        pollingInterval.current = setInterval(() => {
-          fetchPodcasts(false, true);
-        }, 5000);
+        pollingInterval.current = setInterval(() => { fetchPodcasts(false, true); }, 5000);
       }
     } else {
       if (pollingInterval.current) {
@@ -137,7 +119,6 @@ const LibraryScreen: React.FC = () => {
         pollingInterval.current = null;
       }
     }
-
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
@@ -152,34 +133,20 @@ const LibraryScreen: React.FC = () => {
   };
 
   const downloadPodcast = async (podcast: Podcast) => {
-    if (!podcast.audio_url) {
-      Alert.alert("Error", "Audio not available for download");
-      return;
-    }
-
+    if (!podcast.audio_url) return;
     try {
       setDownloadingPodcasts((prev) => new Set(prev).add(podcast.id));
       setActiveMenu(null);
-
       const destination = new File(Paths.cache, `podcast_${podcast.id}.mp3`);
-      
-      const downloadedFile = await File.downloadFileAsync(
-        podcast.audio_url,
-        destination,
-        { idempotent: true }
-      );
+      const downloadedFile = await File.downloadFileAsync(podcast.audio_url, destination, { idempotent: true });
 
       if (downloadedFile.exists) {
         const newDownloads = new Set(downloadedPodcasts).add(podcast.id);
         setDownloadedPodcasts(newDownloads);
-        await AsyncStorage.setItem(
-          STORAGE_KEYS.DOWNLOADS,
-          JSON.stringify([...newDownloads])
-        );
-        Alert.alert("Success", "Podcast downloaded for offline listening");
+        await AsyncStorage.setItem(STORAGE_KEYS.DOWNLOADS, JSON.stringify([...newDownloads]));
+        Alert.alert("Success", "Podcast downloaded");
       }
     } catch (error) {
-      console.error("Download error:", error);
       Alert.alert("Error", "Failed to download podcast");
     } finally {
       setDownloadingPodcasts((prev) => {
@@ -193,7 +160,7 @@ const LibraryScreen: React.FC = () => {
   const deletePodcast = async (podcast: Podcast) => {
     Alert.alert(
       "Delete Podcast",
-      "Are you sure you want to delete this podcast? This action cannot be undone.",
+      "Are you sure you want to delete this podcast?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -205,50 +172,25 @@ const LibraryScreen: React.FC = () => {
               const token = await auth.currentUser?.getIdToken(true);
               if (!token) return;
 
-              const response = await fetch(
-                `${API_BASE_URL}/podcasts/${podcast.id}`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
-              );
+              const response = await fetch(`${API_BASE_URL}/podcasts/${podcast.id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
 
               if (response.ok) {
                 if (downloadedPodcasts.has(podcast.id)) {
                   try {
                     const file = new File(Paths.cache, `podcast_${podcast.id}.mp3`);
-                    if (file.exists) {
-                      file.delete();
-                    }
-                  } catch (e) {
-                    console.error("Error deleting local file:", e);
-                  }
-                  
+                    if (file.exists) file.delete();
+                  } catch (e) {}
                   const newDownloads = new Set(downloadedPodcasts);
                   newDownloads.delete(podcast.id);
                   setDownloadedPodcasts(newDownloads);
-                  await AsyncStorage.setItem(
-                    STORAGE_KEYS.DOWNLOADS,
-                    JSON.stringify([...newDownloads])
-                  );
+                  await AsyncStorage.setItem(STORAGE_KEYS.DOWNLOADS, JSON.stringify([...newDownloads]));
                 }
-
-                if (savedPodcasts.has(podcast.id)) {
-                  const newSaved = new Set(savedPodcasts);
-                  newSaved.delete(podcast.id);
-                  setSavedPodcasts(newSaved);
-                  await AsyncStorage.setItem(
-                    STORAGE_KEYS.SAVED,
-                    JSON.stringify([...newSaved])
-                  );
-                }
-
                 setPodcasts(prev => prev.filter(p => p.id !== podcast.id));
               }
             } catch (error) {
-              console.error("Delete error:", error);
               Alert.alert("Error", "Failed to delete podcast");
             }
           },
@@ -261,13 +203,8 @@ const LibraryScreen: React.FC = () => {
     try {
       setActiveMenu(null);
       const newSaved = new Set(savedPodcasts);
-      
-      if (newSaved.has(podcastId)) {
-        newSaved.delete(podcastId);
-      } else {
-        newSaved.add(podcastId);
-      }
-      
+      if (newSaved.has(podcastId)) newSaved.delete(podcastId);
+      else newSaved.add(podcastId);
       setSavedPodcasts(newSaved);
       await AsyncStorage.setItem(STORAGE_KEYS.SAVED, JSON.stringify([...newSaved]));
     } catch (error) {
@@ -280,7 +217,6 @@ const LibraryScreen: React.FC = () => {
       Alert.alert("Not Available", "This podcast is not ready to play yet.");
       return;
     }
-    
     loadPodcast(podcast);
     setShowFullPlayer(true);
   };
@@ -290,24 +226,29 @@ const LibraryScreen: React.FC = () => {
     ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
   );
 
+  // --- UPDATED: Apply both Tab Filter AND Category Filter ---
   const filteredPodcasts = completedPodcasts.filter((podcast) => {
-    if (activeTab === "downloads") return downloadedPodcasts.has(podcast.id);
-    if (activeTab === "saved") return savedPodcasts.has(podcast.id);
-    return true;
+    // 1. Tab Filter
+    let matchesTab = true;
+    if (activeTab === "downloads") matchesTab = downloadedPodcasts.has(podcast.id);
+    if (activeTab === "saved") matchesTab = savedPodcasts.has(podcast.id);
+
+    // 2. Category Filter
+    let matchesCategory = true;
+    if (activeCategory !== "All") {
+      matchesCategory = (podcast.category?.toLowerCase() || "") === activeCategory.toLowerCase();
+    }
+
+    return matchesTab && matchesCategory;
   });
 
-  // --- UPDATED: formatDuration function with fallback ---
   const formatDuration = (seconds?: number, estimatedMinutes?: number) => {
     if (seconds) {
       const mins = Math.floor(seconds / 60);
       const secs = seconds % 60;
       return `${mins}:${secs.toString().padStart(2, "0")}`;
     }
-    
-    if (estimatedMinutes) {
-      return `~${estimatedMinutes}:00`;
-    }
-    
+    if (estimatedMinutes) return `~${estimatedMinutes}:00`;
     return "Unknown";
   };
 
@@ -331,81 +272,33 @@ const LibraryScreen: React.FC = () => {
     if (cat === "finance") return "#3B82F6";
     if (cat === "technology") return "#EF4444";
     if (cat === "politics") return "#8B5CF6";
-    if (cat === "custom") return "#10B981"; // Green for Custom
+    if (cat === "custom") return "#10B981"; 
     return "#6366F1";
-  };
-
-  const getPodcastIcon = (category: string) => {
-    if (category?.toLowerCase() === "custom") return "document-text";
-    return "musical-notes";
   };
 
   const renderMenu = (podcast: Podcast) => {
     if (activeMenu !== podcast.id) return null;
-
     const isDownloaded = downloadedPodcasts.has(podcast.id);
     const isSaved = savedPodcasts.has(podcast.id);
 
     return (
-      <Modal
-        visible={true}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActiveMenu(null)}
-      >
-        <TouchableOpacity
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setActiveMenu(null)}
-        >
+      <Modal visible={true} transparent animationType="fade" onRequestClose={() => setActiveMenu(null)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setActiveMenu(null)}>
           <View style={styles.menuContainer}>
-            <Text style={styles.menuTitle} numberOfLines={2}>
-              {podcast.topic_title}
-            </Text>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => toggleSaved(podcast.id)}
-            >
-              <Ionicons
-                name={isSaved ? "bookmark" : "bookmark-outline"}
-                size={22}
-                color={isSaved ? "#F59E0B" : "#374151"}
-              />
-              <Text style={styles.menuItemText}>
-                {isSaved ? "Remove from Saved" : "Save for Later"}
-              </Text>
+            <Text style={styles.menuTitle} numberOfLines={2}>{podcast.topic_title}</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleSaved(podcast.id)}>
+              <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={22} color={isSaved ? "#F59E0B" : "#374151"} />
+              <Text style={styles.menuItemText}>{isSaved ? "Remove from Saved" : "Save for Later"}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => downloadPodcast(podcast)}
-              disabled={isDownloaded}
-            >
-              <Ionicons
-                name={isDownloaded ? "checkmark-circle" : "download-outline"}
-                size={22}
-                color={isDownloaded ? "#10B981" : "#374151"}
-              />
-              <Text style={[styles.menuItemText, isDownloaded && styles.menuItemTextDisabled]}>
-                {isDownloaded ? "Already Downloaded" : "Download"}
-              </Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => downloadPodcast(podcast)} disabled={isDownloaded}>
+              <Ionicons name={isDownloaded ? "checkmark-circle" : "download-outline"} size={22} color={isDownloaded ? "#10B981" : "#374151"} />
+              <Text style={[styles.menuItemText, isDownloaded && styles.menuItemTextDisabled]}>{isDownloaded ? "Already Downloaded" : "Download"}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.menuItem, styles.menuItemDanger]}
-              onPress={() => deletePodcast(podcast)}
-            >
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={() => deletePodcast(podcast)}>
               <Ionicons name="trash-outline" size={22} color="#EF4444" />
-              <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>
-                Delete Podcast
-              </Text>
+              <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>Delete Podcast</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuCancel}
-              onPress={() => setActiveMenu(null)}
-            >
+            <TouchableOpacity style={styles.menuCancel} onPress={() => setActiveMenu(null)}>
               <Text style={styles.menuCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -422,21 +315,10 @@ const LibraryScreen: React.FC = () => {
 
     return (
       <>
-        <TouchableOpacity 
-          style={styles.podcastCard} 
-          activeOpacity={0.7}
-          onPress={() => handlePlayPodcast(item)}
-        >
+        <TouchableOpacity style={styles.podcastCard} activeOpacity={0.7} onPress={() => handlePlayPodcast(item)}>
           <View style={styles.cardContent}>
-            
-            {/* THUMBNAIL LOGIC */}
             {isCustom ? (
-              <LinearGradient
-                colors={['#34D399', '#059669']}
-                style={styles.thumbnail}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
+              <LinearGradient colors={['#34D399', '#059669']} style={styles.thumbnail} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Ionicons name="document-text" size={28} color="#FFFFFF" />
               </LinearGradient>
             ) : (
@@ -446,72 +328,35 @@ const LibraryScreen: React.FC = () => {
             )}
 
             <View style={styles.podcastInfo}>
-              <Text style={styles.podcastTitle} numberOfLines={2}>
-                {item.topic_title}
-              </Text>
-
+              <Text style={styles.podcastTitle} numberOfLines={2}>{item.topic_title}</Text>
               <View style={styles.metaRow}>
-                {/* UPDATED: Calling formatDuration with both actual and estimated length */}
-                <Text style={styles.duration}>
-                  Length: {formatDuration(item.duration_seconds, item.length_minutes)}
-                </Text>
-                
+                <Text style={styles.duration}>Length: {formatDuration(item.duration_seconds, item.length_minutes)}</Text>
                 <Text style={styles.metaDivider}>•</Text>
                 <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
               </View>
 
               <View style={styles.tagsRow}>
-                {/* CATEGORY TAG */}
-                <View
-                  style={[
-                    styles.categoryTag,
-                    { backgroundColor: getCategoryColor(item.category) + "20" },
-                  ]}
-                >
-                  <Text
-                    style={[styles.categoryText, { color: getCategoryColor(item.category) }]}
-                  >
-                    {isCustom ? "Studio Custom" : item.category}
-                  </Text>
+                <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(item.category) + "20" }]}>
+                  <Text style={[styles.categoryText, { color: getCategoryColor(item.category) }]}>{isCustom ? "Studio Custom" : item.category}</Text>
                 </View>
-
                 {isDownloaded && (
-                  <View style={styles.downloadBadge}>
-                    <Ionicons name="download-outline" size={12} color="#0e9b6c" />
-                  </View>
+                  <View style={styles.downloadBadge}><Ionicons name="download-outline" size={12} color="#0e9b6c" /></View>
                 )}
-
                 {isSaved && (
-                  <View style={styles.savedBadge}>
-                    <Ionicons name="bookmark" size={12} color="#F59E0B" />
-                  </View>
+                  <View style={styles.savedBadge}><Ionicons name="bookmark" size={12} color="#F59E0B" /></View>
                 )}
               </View>
             </View>
 
-            <TouchableOpacity 
-              style={styles.playButton}
-              onPress={() => handlePlayPodcast(item)}
-            >
+            <TouchableOpacity style={styles.playButton} onPress={() => handlePlayPodcast(item)}>
               <Ionicons name="play" size={24} color="#6366F1" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                setActiveMenu(item.id);
-              }}
-            >
-              {isDownloading ? (
-                <ActivityIndicator size="small" color="#6366F1" />
-              ) : (
-                <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
-              )}
+            <TouchableOpacity style={styles.menuButton} onPress={(e) => { e.stopPropagation(); setActiveMenu(item.id); }}>
+              {isDownloading ? <ActivityIndicator size="small" color="#6366F1" /> : <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />}
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-
         {renderMenu(item)}
       </>
     );
@@ -532,6 +377,11 @@ const LibraryScreen: React.FC = () => {
       icon = "bookmark-outline";
     }
 
+    if (activeCategory !== "All" && filteredPodcasts.length === 0 && podcasts.length > 0) {
+      message = `No ${activeCategory} podcasts`;
+      subtitle = "Try selecting a different category.";
+    }
+
     return (
       <View style={styles.emptyState}>
         <Ionicons name={icon} size={64} color="#D1D5DB" />
@@ -545,7 +395,6 @@ const LibraryScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header*/}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.brandName}>PODNOVA LIBRARY</Text>
@@ -553,37 +402,41 @@ const LibraryScreen: React.FC = () => {
       </View>
 
       <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "all" && styles.activeTab]}
-          onPress={() => setActiveTab("all")}
-        >
-          <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>
-            All
-          </Text>
+        <TouchableOpacity style={[styles.tab, activeTab === "all" && styles.activeTab]} onPress={() => setActiveTab("all")}>
+          <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>All</Text>
           {activeTab === "all" && <View style={styles.activeTabIndicator} />}
         </TouchableOpacity>
-
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "saved" && styles.activeTab]}
-          onPress={() => setActiveTab("saved")}
-        >
-          <Text style={[styles.tabText, activeTab === "saved" && styles.activeTabText]}>
-            Saved
-          </Text>
+        <TouchableOpacity style={[styles.tab, activeTab === "saved" && styles.activeTab]} onPress={() => setActiveTab("saved")}>
+          <Text style={[styles.tabText, activeTab === "saved" && styles.activeTabText]}>Saved</Text>
           {activeTab === "saved" && <View style={styles.activeTabIndicator} />}
         </TouchableOpacity>
-
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "downloads" && styles.activeTab]}
-          onPress={() => setActiveTab("downloads")}
-        >
-          <Text style={[styles.tabText, activeTab === "downloads" && styles.activeTabText]}>
-            Downloads
-          </Text>
+        <TouchableOpacity style={[styles.tab, activeTab === "downloads" && styles.activeTab]} onPress={() => setActiveTab("downloads")}>
+          <Text style={[styles.tabText, activeTab === "downloads" && styles.activeTabText]}>Downloads</Text>
           {activeTab === "downloads" && <View style={styles.activeTabIndicator} />}
         </TouchableOpacity>
+      </View>
+
+      {/* NEW: Category Filter Pills */}
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          {LIBRARY_CATEGORIES.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.filterPill,
+                activeCategory === category && styles.filterPillActive
+              ]}
+              onPress={() => setActiveCategory(category)}
+            >
+              <Text style={[
+                styles.filterPillText,
+                activeCategory === category && styles.filterPillTextActive
+              ]}>
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {hasGenerating && (
@@ -594,10 +447,7 @@ const LibraryScreen: React.FC = () => {
       )}
 
       {loading && !hasInitiallyLoaded ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6366F1" />
-          <Text style={styles.loadingText}>Loading your library...</Text>
-        </View>
+        <PodcastListSkeleton />
       ) : (
         <FlatList
           data={filteredPodcasts}
@@ -609,29 +459,17 @@ const LibraryScreen: React.FC = () => {
             showPlayer && styles.listContentWithPlayer,
           ]}
           ListEmptyComponent={renderEmptyState}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor="#6366F1"
-              colors={["#6366F1"]}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" colors={["#6366F1"]} />}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Full Player - shown when clicking a podcast */}
       <PodcastPlayer
         visible={showFullPlayer}
         podcast={currentPodcast}
         onClose={() => setShowFullPlayer(false)}
         isSaved={currentPodcast ? savedPodcasts.has(currentPodcast.id) : false}
-        onToggleSave={() => {
-          if (currentPodcast) {
-            toggleSaved(currentPodcast.id);
-          }
-        }}
+        onToggleSave={() => { if (currentPodcast) toggleSaved(currentPodcast.id); }}
       />
     </View>
   );
@@ -661,17 +499,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  refreshButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
   },
   tabContainer: {
     flexDirection: "row",
@@ -704,6 +531,39 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: "#6366F1",
   },
+  
+  // NEW STYLES: Filter Pills
+  filterContainer: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  filterScroll: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  filterPillActive: {
+    backgroundColor: "#EEF2FF",
+    borderColor: "#C7D2FE",
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#4B5563",
+  },
+  filterPillTextActive: {
+    color: "#4F46E5",
+    fontWeight: "600",
+  },
   generatingBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -719,6 +579,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+    paddingBottom: 80,
   },
   emptyListContent: {
     flex: 1,
@@ -726,7 +587,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   listContentWithPlayer: {
-    paddingBottom: 80,
+    paddingBottom: 150,
   },
   podcastCard: {
     backgroundColor: "#FFFFFF",
@@ -758,7 +619,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
-    
   },
   metaRow: {
     flexDirection: "row",

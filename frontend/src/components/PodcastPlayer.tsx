@@ -1,3 +1,4 @@
+// frontend/src/components/PodcastPlayer.tsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -23,29 +24,26 @@ import { PodcastPlayerProps } from "../types/podcasts";
 import { MainStackParamList } from "../Navigator";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
-
 const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0];
 const SAVED_STORAGE_KEY = "@podnova_saved";
+
+const TRANSCRIPT_CONTAINER_HEIGHT = 150;
 
 const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   visible,
   podcast,
   onClose,
-  isSaved: externalIsSaved, // Renamed to avoid conflicts
-  onToggleSave: externalOnToggleSave, // Renamed to avoid conflicts
+  isSaved: externalIsSaved,
+  onToggleSave: externalOnToggleSave,
 }) => {
   const insets = useSafeAreaInsets();
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
-  
-  // Internal state for self-sufficient saves
   const [internalIsSaved, setInternalIsSaved] = useState(false);
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
 
-  // Navigation Hook
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
 
-  // GLOBAL AUDIO CONTEXT
   const {
     isPlaying,
     position,
@@ -59,11 +57,89 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   } = useAudio();
 
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const transcriptScrollRef = useRef<ScrollView>(null);
-  const [transcriptContentHeight, setTranscriptContentHeight] = useState(0);
-  const [transcriptViewHeight, setTranscriptViewHeight] = useState(0);
+  
+  // --- PRODUCTION-READY TELEPROMPTER STATE ---
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const [sentences, setSentences] = useState<{text: string, length: number}[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [totalChars, setTotalChars] = useState(0);
+  // Store both Y position and height of each sentence for continuous fractional scrolling
+  const itemLayouts = useRef<{ [key: number]: { y: number, height: number } }>({});
 
-  // Animate modal in/out
+  // 1. Clean and split script into sentences
+  useEffect(() => {
+    const rawText = podcast?.script || (podcast as any)?.transcript || "";
+    if (rawText) {
+      const cleanScript = rawText.replace(/\n/g, ' ');
+      const split = cleanScript.match(/[^.!?]+[.!?]+[\])'"`’”]*|.+/g) || [];
+      
+      const processedSentences = split
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0)
+        .map((s: string) => ({ text: s, length: s.length }));
+      
+      setSentences(processedSentences);
+      setTotalChars(processedSentences.reduce((acc: number, curr: any) => acc + curr.length, 0));
+    }
+  }, [podcast?.script]);
+
+  // 2. Fractional Continuous Sync Logic
+  useEffect(() => {
+    if (!duration || totalChars === 0 || showFullTranscript || sentences.length === 0) return;
+
+    const safePosition = Number(position) || 0;
+    const safeDuration = Number(duration) || 1;
+    const progress = safePosition / safeDuration;
+
+    if (isNaN(progress) || progress < 0 || progress > 1.5) return;
+
+    const targetCharCount = progress * totalChars;
+    
+    let charAccumulator = 0;
+    let newActiveIndex = 0;
+    let sentenceFraction = 0;
+
+    for (let i = 0; i < sentences.length; i++) {
+      const sentenceLen = sentences[i].length;
+      if (charAccumulator + sentenceLen >= targetCharCount) {
+        newActiveIndex = i;
+        const charsIntoSentence = targetCharCount - charAccumulator;
+        sentenceFraction = Math.min(1, Math.max(0, charsIntoSentence / sentenceLen));
+        break;
+      }
+      charAccumulator += sentenceLen;
+    }
+    
+    if (newActiveIndex !== activeIndex) {
+      setActiveIndex(newActiveIndex);
+    }
+
+    const currentLayout = itemLayouts.current[newActiveIndex];
+    
+    if (currentLayout && typeof currentLayout.y === 'number' && typeof currentLayout.height === 'number') {
+      const exactY = currentLayout.y + (currentLayout.height * sentenceFraction);
+      let scrollPosition = exactY - (TRANSCRIPT_CONTAINER_HEIGHT / 2) + 20;
+      scrollPosition = Math.max(0, scrollPosition); 
+      
+      if (!isNaN(scrollPosition)) {
+        Animated.timing(scrollAnim, {
+          toValue: -scrollPosition,
+          duration: 500, 
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+
+  }, [position, duration, totalChars, sentences, showFullTranscript, activeIndex]);
+
+  const handleSentenceLayout = (index: number, event: any) => {
+    itemLayouts.current[index] = {
+      y: event.nativeEvent.layout.y,
+      height: event.nativeEvent.layout.height,
+    };
+  };
+  // -----------------------------------
+
   useEffect(() => {
     if (visible) {
       Animated.spring(translateY, {
@@ -81,7 +157,6 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     }
   }, [visible]);
 
-  // Self-Sufficient: Check AsyncStorage whenever the player opens
   useEffect(() => {
     const checkSavedStatus = async () => {
       if (!podcast) return;
@@ -93,36 +168,15 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
         console.error("Error checking saved status:", error);
       }
     };
-
-    if (visible) {
-      checkSavedStatus();
-    }
+    if (visible) checkSavedStatus();
   }, [podcast, visible]);
 
-  // Auto-scroll transcript
-  useEffect(() => {
-    if (!transcriptScrollRef.current || !duration) return;
-
-    const maxScroll = transcriptContentHeight - transcriptViewHeight;
-    if (maxScroll <= 0) return;
-
-    const progress = position / duration;
-    const scrollY = progress * maxScroll;
-
-    transcriptScrollRef.current.scrollTo({
-      y: scrollY,
-      animated: false,
-    });
-  }, [position, duration, transcriptContentHeight, transcriptViewHeight]);
-
-  // Internal function to handle toggling the save state globally
   const handleToggleSave = async () => {
     if (!podcast) return;
     try {
       const savedData = await AsyncStorage.getItem(SAVED_STORAGE_KEY);
       const savedArray = savedData ? JSON.parse(savedData) : [];
       const savedSet = new Set(savedArray);
-
       if (savedSet.has(podcast.id)) {
         savedSet.delete(podcast.id);
         setInternalIsSaved(false);
@@ -130,51 +184,51 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
         savedSet.add(podcast.id);
         setInternalIsSaved(true);
       }
-
       await AsyncStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...savedSet]));
-
-      // If LibraryScreen passed a sync function, call it
-      if (externalOnToggleSave) {
-        externalOnToggleSave();
-      }
+      if (externalOnToggleSave) externalOnToggleSave();
     } catch (error) {
       console.error("Error toggling save:", error);
     }
   };
 
-  // Handler for "Go to Topic"
   const handleGoToTopic = () => {
     if (!podcast) return;
-    onClose(); // Hide the player modal first
+    onClose();
     const topicId = podcast.topic_id || podcast.id; 
     navigation.navigate("TopicDetail", { topicId });
   };
 
-  // Handler for "Discuss"
   const handleDiscuss = async () => {
     if (!podcast) return;
-    onClose(); // Hide the player modal first
-    
+    onClose();
     const topicId = podcast.topic_id || podcast.id;
-
     try {
       const response = await fetch(`${API_BASE_URL}/discussions?topic_id=${topicId}`);
       const data = await response.json();
-
       if (data.discussions && data.discussions.length > 0) {
         navigation.navigate("DiscussionDetail", { discussionId: data.discussions[0].id });
       } else {
-        // Fallback: If no discussion exists yet, just go to the topic detail
         navigation.navigate("TopicDetail", { topicId });
       }
     } catch (error) {
-      console.error("Failed to fetch discussion:", error);
-      navigation.navigate("TopicDetail", { topicId }); // Fallback on error
+      navigation.navigate("TopicDetail", { topicId });
+    }
+  };
+
+  // --- SMART PLAY/PAUSE WRAPPER ---
+  const handlePlayPause = async () => {
+    // If the audio is not playing and we are within 1 second of the end of the track
+    if (!isPlaying && duration > 0 && position >= duration - 1000) {
+      await seekTo(0); // Snap back to the beginning
+      togglePlayPause(); // Start playing
+    } else {
+      togglePlayPause(); // Normal play/pause behavior
     }
   };
 
   const formatTime = (millis: number) => {
-    const totalSeconds = Math.floor(millis / 1000);
+    const safeMillis = Number(millis) || 0;
+    const totalSeconds = Math.floor(safeMillis / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
@@ -185,120 +239,96 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
       finance: "#3B82F6",
       technology: "#EF4444",
       politics: "#8B5CF6",
+      custom: "#10B981"
     };
     return colors[category?.toLowerCase()] || "#6366F1";
   };
 
-  // Pan responder for swipe down
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 10;
-      },
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(gestureState.dy);
-        }
+        if (gestureState.dy > 0) translateY.setValue(gestureState.dy);
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100) {
-          onClose();
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
+        if (gestureState.dy > 100) onClose();
+        else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
         }
       },
     })
   ).current;
 
   if (!podcast) return null;
+  const isCustom = podcast.category?.toLowerCase() === "custom" || podcast.is_custom;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="none"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
       <StatusBar barStyle="light-content" backgroundColor="#8B5CF6" />
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            transform: [{ translateY }],
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom,
-          },
-        ]}
-      >
-        {/* Header */}
+      <Animated.View style={[styles.container, { transform: [{ translateY }], paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="chevron-down" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Now Playing</Text>
           <TouchableOpacity onPress={handleToggleSave} style={styles.saveButton}>
-            <Ionicons
-              name={internalIsSaved ? "bookmark" : "bookmark-outline"}
-              size={24}
-              color={internalIsSaved ? "#FCD34D" : "#FFFFFF"}
-            />
+            <Ionicons name={internalIsSaved ? "bookmark" : "bookmark-outline"} size={24} color={internalIsSaved ? "#FCD34D" : "#FFFFFF"} />
           </TouchableOpacity>
         </View>
 
-        {/* Drag handle */}
         <View style={styles.dragHandleContainer} {...panResponder.panHandlers}>
           <View style={styles.dragHandle} />
         </View>
 
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Album Art */}
-          <View
-            style={[
-              styles.albumArt,
-              { backgroundColor: getCategoryColor(podcast.category) },
-            ]}
-          >
-            <Ionicons name="mic" size={60} color="#FFFFFF" opacity={0.9} />
-            <Text style={styles.podcastTitle} numberOfLines={2}>
-              {podcast.topic_title}
-            </Text>
-            <Text style={styles.podcastCategory}>
-              {podcast.category.toUpperCase()}
-            </Text>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          
+          <View style={[styles.albumArt, { backgroundColor: getCategoryColor(podcast.category) }]}>
+            <Ionicons name={isCustom ? "document-text" : "mic"} size={60} color="#FFFFFF" opacity={0.9} />
+            <Text style={styles.podcastTitle} numberOfLines={2}>{podcast.topic_title}</Text>
+            <Text style={styles.podcastCategory}>{isCustom ? "STUDIO CUSTOM" : podcast.category.toUpperCase()}</Text>
             <Text style={styles.podcastVoice}>Style: {podcast.style}</Text>
-            <Text style={styles.podcastVoice}>Voice Selection: {podcast.voice}</Text>
+            <Text style={styles.podcastVoice}>Voice: {podcast.voice.replace(/_/g, " ")}</Text>
           </View>
 
-          {/* Transcript */}
-          {podcast.script && (
+          {/* TELEPROMPTER TRANSCRIPT */}
+          {sentences.length > 0 && (
             <View style={styles.transcriptContainer}>
               <View style={styles.transcriptHeader}>
-                <Ionicons name="document-text-outline" size={20} color="#E9D5FF" />
-                <Text style={styles.transcriptHeaderText}>Transcript</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="document-text-outline" size={20} color="#E9D5FF" />
+                  <Text style={styles.transcriptHeaderText}>Live Transcript</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowFullTranscript(true)}>
+                  <Text style={styles.expandText}>Expand</Text>
+                </TouchableOpacity>
               </View>
+              
               <View style={styles.transcriptContent}>
-                <ScrollView
-                  ref={transcriptScrollRef}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
-                  onContentSizeChange={(w, h) => setTranscriptContentHeight(h)}
-                  onLayout={(e) => setTranscriptViewHeight(e.nativeEvent.layout.height)}
-                >
-                  <Text style={styles.transcriptText}>{podcast.script}</Text>
-                </ScrollView>
+                <Animated.View style={{ transform: [{ translateY: scrollAnim }], width: '100%', paddingVertical: 60 }}>
+                  {sentences.map((sentenceObj, index) => {
+                    const isActiveWindow = index >= activeIndex - 1 && index <= activeIndex + 1;
+                    return (
+                      <View 
+                        key={index} 
+                        onLayout={(e) => handleSentenceLayout(index, e)}
+                        style={styles.sentenceWrapper}
+                      >
+                        <Text style={[
+                          styles.transcriptText,
+                          isActiveWindow ? styles.transcriptTextActive : styles.transcriptTextDim
+                        ]}>
+                          {sentenceObj.text}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </Animated.View>
               </View>
             </View>
           )}
 
-          {/* Progress Bar */}
           <View style={styles.progressContainer}>
             <View style={styles.timeContainer}>
               <Text style={styles.timeText}>{formatTime(position)}</Text>
@@ -308,7 +338,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
               style={styles.slider}
               minimumValue={0}
               maximumValue={duration || 1}
-              value={position}
+              value={position || 0}
               onSlidingComplete={seekTo}
               minimumTrackTintColor="#FFFFFF"
               maximumTrackTintColor="rgba(255, 255, 255, 0.3)"
@@ -316,99 +346,76 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             />
           </View>
 
-          {/* Playback Controls */}
           <View style={styles.controlsContainer}>
             <TouchableOpacity onPress={skipBackward} style={styles.skipButton}>
               <Ionicons name="play-back" size={32} color="#FFFFFF" />
               <Text style={styles.skipText}>15s</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity onPress={togglePlayPause} style={styles.playButton}>
-              <Ionicons
-                name={isPlaying ? "pause" : "play"}
-                size={40}
-                color="#8B5CF6"
-                style={!isPlaying && { marginLeft: 4 }}
-              />
+            
+            {/* UPDATED PLAY BUTTON WITH SMART WRAPPER */}
+            <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
+              <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#8B5CF6" style={!isPlaying && { marginLeft: 4 }} />
             </TouchableOpacity>
-
+            
             <TouchableOpacity onPress={skipForward} style={styles.skipButton}>
               <Ionicons name="play-forward" size={32} color="#FFFFFF" />
               <Text style={styles.skipText}>15s</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => setShowSpeedMenu(true)}
-            >
-              <View style={styles.speedBadge}>
-                <Text style={styles.speedBadgeText}>{playbackRate}×</Text>
-              </View>
+          <View style={[styles.actionButtons, isCustom && { justifyContent: 'center' }]}>
+            <TouchableOpacity style={styles.actionButton} onPress={() => setShowSpeedMenu(true)}>
+              <View style={styles.speedBadge}><Text style={styles.speedBadgeText}>{playbackRate}×</Text></View>
               <Text style={styles.actionButtonText}>Speed</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleGoToTopic}
-            >
-              <View style={styles.iconCircle}>
-                <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.actionButtonText}>Topic</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleDiscuss}
-            >
-              <View style={styles.iconCircle}>
-                <Ionicons name="chatbubbles-outline" size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.actionButtonText}>Discuss</Text>
-            </TouchableOpacity>
+            {!isCustom && (
+              <>
+                <TouchableOpacity style={styles.actionButton} onPress={handleGoToTopic}>
+                  <View style={styles.iconCircle}><Ionicons name="newspaper-outline" size={20} color="#FFFFFF" /></View>
+                  <Text style={styles.actionButtonText}>Topic</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={handleDiscuss}>
+                  <View style={styles.iconCircle}><Ionicons name="chatbubbles-outline" size={20} color="#FFFFFF" /></View>
+                  <Text style={styles.actionButtonText}>Discuss</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </ScrollView>
 
-        {/* Speed Menu */}
         {showSpeedMenu && (
           <Modal transparent visible={showSpeedMenu} animationType="fade">
-            <TouchableOpacity
-              style={styles.speedMenuOverlay}
-              activeOpacity={1}
-              onPress={() => setShowSpeedMenu(false)}
-            >
+            <TouchableOpacity style={styles.speedMenuOverlay} activeOpacity={1} onPress={() => setShowSpeedMenu(false)}>
               <View style={styles.speedMenuContainer}>
                 <Text style={styles.speedMenuTitle}>Playback Speed</Text>
                 {SPEED_OPTIONS.map((speed) => (
-                  <TouchableOpacity
-                    key={speed}
-                    style={[
-                      styles.speedMenuItem,
-                      playbackRate === speed && styles.speedMenuItemActive,
-                    ]}
-                    onPress={() => {
-                      setRate(speed);
-                      setShowSpeedMenu(false);
-                    }}
+                  <TouchableOpacity 
+                    key={speed} 
+                    style={[styles.speedMenuItem, playbackRate === speed && styles.speedMenuItemActive]} 
+                    onPress={() => { setRate(speed); setShowSpeedMenu(false); }}
                   >
-                    <Text
-                      style={[
-                        styles.speedMenuItemText,
-                        playbackRate === speed && styles.speedMenuItemTextActive,
-                      ]}
-                    >
-                      {speed}×
-                    </Text>
-                    {playbackRate === speed && (
-                      <Ionicons name="checkmark" size={24} color="#8B5CF6" />
-                    )}
+                    <Text style={[styles.speedMenuItemText, playbackRate === speed && styles.speedMenuItemTextActive]}>{speed}×</Text>
+                    {playbackRate === speed && <Ionicons name="checkmark" size={24} color="#8B5CF6" />}
                   </TouchableOpacity>
                 ))}
               </View>
             </TouchableOpacity>
+          </Modal>
+        )}
+
+        {showFullTranscript && (
+          <Modal transparent visible={showFullTranscript} animationType="slide">
+            <View style={styles.fullTranscriptContainer}>
+              <View style={[styles.fullTranscriptHeader, { paddingTop: insets.top + 10 }]}>
+                <Text style={styles.fullTranscriptTitle}>Full Transcript</Text>
+                <TouchableOpacity onPress={() => setShowFullTranscript(false)}>
+                  <Ionicons name="close-circle" size={30} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.fullTranscriptScroll}>
+                <Text style={styles.fullTranscriptText}>{podcast.script}</Text>
+              </ScrollView>
+            </View>
           </Modal>
         )}
       </Animated.View>
@@ -471,11 +478,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
   },
   podcastTitle: {
     fontSize: 18,
@@ -500,7 +502,64 @@ const styles = StyleSheet.create({
     textAlign: "left",
     alignSelf: "flex-start",
     top: 40,
+    textTransform: 'capitalize',
   },
+  
+  // --- TELEPROMPTER STYLES ---
+  transcriptContainer: {
+    width: '100%',
+    backgroundColor: "transparent",
+    paddingHorizontal: 5,
+    paddingVertical: 10,
+  },
+  transcriptHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingHorizontal: 10,
+  },
+  transcriptHeaderText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  transcriptContent: {
+    height: TRANSCRIPT_CONTAINER_HEIGHT,
+    borderWidth: 1,
+    borderRadius: 12,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "#1e13356a",
+    overflow: "hidden",
+    position: "relative",
+    width: '100%',
+  },
+  sentenceWrapper: {
+    paddingVertical: 6,
+    width: '100%', 
+  },
+  transcriptText: {
+    fontSize: 14,
+    paddingHorizontal: 15,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  transcriptTextActive: {
+    color: "#f5f5f5",
+    fontWeight: "500",
+    fontSize: 14, 
+  },
+  transcriptTextDim: {
+    color: "rgba(255, 255, 255, 0.5)", 
+    fontWeight: "500",
+  },
+  expandText: {
+    color: "#A78BFA",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  
   progressContainer: {
     marginBottom: 24,
     marginTop: 16,
@@ -546,17 +605,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
   actionButtons: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginBottom: 32,
     paddingHorizontal: 16,
+    gap: 20,
   },
   actionButton: {
     alignItems: "center",
@@ -589,35 +644,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "rgba(255, 255, 255, 0.9)",
     fontWeight: "500",
-  },
-  transcriptContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderWidth: 2,
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
-    padding: 10,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  transcriptHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 5,
-  },
-  transcriptHeaderText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  transcriptContent: {
-    maxHeight: 160,
-    overflow: "hidden",
-  },
-  transcriptText: {
-    paddingTop: 30,
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.9)",
-    lineHeight: 22,
   },
   speedMenuOverlay: {
     flex: 1,
@@ -661,6 +687,33 @@ const styles = StyleSheet.create({
   },
   speedMenuItemTextActive: {
     color: "#8B5CF6",
+  },
+  fullTranscriptContainer: {
+    flex: 1,
+    backgroundColor: "#1e1335",
+  },
+  fullTranscriptHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  fullTranscriptTitle: {
+    color: "#FFF",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  fullTranscriptScroll: {
+    padding: 24,
+    paddingBottom: 60,
+  },
+  fullTranscriptText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 16,
+    lineHeight: 28,
   },
 });
 

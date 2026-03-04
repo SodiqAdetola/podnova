@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -16,6 +15,7 @@ import { Category, Topic } from "../types/topics";
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { getAuth } from "firebase/auth";
+import HomeSkeleton from "../components/skeletons/HomeSkeleton";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -52,7 +52,7 @@ const fetchRecentTopics = async (categories: Category[]): Promise<Topic[]> => {
     .slice(0, 5);
 };
 
-// NEW: Lightweight fetch just for the unread count
+// Lightweight fetch just for the unread count
 const fetchUnreadCount = async (): Promise<number> => {
   try {
     const auth = getAuth();
@@ -62,7 +62,6 @@ const fetchUnreadCount = async (): Promise<number> => {
     const token = await user.getIdToken();
     if (!token) return 0;
 
-    // We only need 1 item to get the unread_count from the payload
     const response = await fetch(`${API_BASE_URL}/notifications?limit=1&skip=0`, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -100,11 +99,10 @@ const HomeScreen: React.FC = () => {
     staleTime: 1000 * 60 * 2,
   });
 
-  // NEW: Query for the unread badge counter
   const { data: unreadCount = 0, refetch: refetchUnread } = useQuery({
     queryKey: ['unreadNotificationCount'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 1000 * 60, // Auto-refresh every 60 seconds while on this screen
+    refetchInterval: 1000 * 60, 
   });
 
   const onRefresh = async () => {
@@ -121,12 +119,9 @@ const HomeScreen: React.FC = () => {
     }
   };
 
+  // Replaced ActivityIndicator with the production-ready Skeleton
   if (isLoadingCategories || isLoadingTopics) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
-    );
+    return <HomeSkeleton />;
   }
 
   return (
@@ -143,7 +138,6 @@ const HomeScreen: React.FC = () => {
           >
             <Ionicons name="notifications-outline" size={20} color="#ffffff" />
             
-            {/* NEW: Unread Badge UI */}
             {unreadCount > 0 && (
               <View style={styles.badgeContainer}>
                 <Text style={styles.badgeText}>
@@ -163,8 +157,11 @@ const HomeScreen: React.FC = () => {
             key={category.name}
             style={[styles.categoryCard, { borderLeftColor: getCategoryColor(category.name) }]}
             onPress={() => (navigation as any).navigate('MainTabs', {
-              screen: 'CategoryTopics',
-              params: { category: category.name }
+              screen: 'Category',
+              params: { 
+                category: category.name,
+                initialTab: 'topics' 
+              }
             })}
           >
             <View style={styles.categoryIcon}>
@@ -212,7 +209,7 @@ const HomeScreen: React.FC = () => {
                   </View>
                 </View>
                 <Text style={styles.topicMeta}>
-                  {topic.source_count} Sources - {topic.time_ago}
+                  {topic.article_count} Articles - {topic.source_count} Sources - {topic.time_ago}
                 </Text>
               </TouchableOpacity>
             );
@@ -226,12 +223,6 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "#F9FAFB",
   },
   header: {
@@ -260,13 +251,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#6366F1",
     justifyContent: "center",
     alignItems: "center",
-    position: "relative", // Needed for the absolute badge to position correctly
+    position: "relative", 
   },
   badgeContainer: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#EF4444', // Danger red
+    backgroundColor: '#EF4444', 
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -274,7 +265,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     borderWidth: 1,
-    borderColor: '#FFFFFF', // Creates a cutout effect
+    borderColor: '#FFFFFF', 
   },
   badgeText: {
     color: '#FFFFFF',

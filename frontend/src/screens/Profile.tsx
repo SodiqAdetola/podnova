@@ -14,12 +14,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
 import ProfileSettings from "../components/ProfileSettings";
+import ProfileScreenSkeleton from "../components/skeletons/ProfileScreenSkeleton";
+import { useAudio } from "../contexts/AudioContext";
+import { useQueryClient } from "@tanstack/react-query";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const ProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  
+  // NEW: Hooks for stopping audio and clearing the persistent cache
+  const { stopPlayback } = useAudio();
+  const queryClient = useQueryClient();
   
   const [userProfile, setUserProfile] = useState<any>(null);
   const [stats, setStats] = useState({
@@ -135,7 +142,7 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  // Restored Logout logic
+  // Restored Logout logic with Audio and Cache cleanup
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { 
@@ -147,6 +154,13 @@ const ProfileScreen: React.FC = () => {
         style: "destructive",
         onPress: async () => {
           try {
+            // 1. Stop the podcast and hide the MiniPlayer
+            await stopPlayback(); 
+            
+            // 2. Clear the persistent cache for security
+            queryClient.clear(); 
+            
+            // 3. Perform the actual logout
             await signOut(auth);
           } catch (error) {
             Alert.alert("Error", "Failed to logout");
@@ -157,19 +171,14 @@ const ProfileScreen: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    );
+    return <ProfileScreenSkeleton />;
   }
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Restored Header with Logout Button */}
+      {/* Header with Logout Button */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.brandName}>PODNOVA PROFILE</Text>
@@ -227,17 +236,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F9FAFB",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6B7280",
   },
   header: {
     backgroundColor: "#FFFFFF",

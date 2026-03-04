@@ -11,7 +11,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { auth } from "../firebase/config";
+import { auth } from "../../firebase/config";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 

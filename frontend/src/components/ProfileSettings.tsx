@@ -1,11 +1,11 @@
 // frontend/src/components/ProfileSettings.tsx
 import React, { useState } from "react";
 import { View, LayoutAnimation } from "react-native";
-import SettingsList, { SettingItem } from "./SettingsList";
-import VoiceSelector from "./VoiceSelector";
-import AIStyleSelector from "./AIStyleSelector";
-import PodcastLengthSelector from "./PodcastLengthSelector";
-import BlockedUsersModal from "./BlockedUserModal";
+import SettingsList, { SettingItem } from "./lists/SettingsList";
+import VoiceSelector from "./modals/VoiceSelectorModal";
+import AIStyleSelector from "./modals/StyleSelectorModal";
+import PodcastLengthSelector from "./modals/LengthSelectorModal";
+import BlockedUsersModal from "./modals/BlockedUserModal";
 
 interface ProfileSettingsProps { 
   userProfile: any;

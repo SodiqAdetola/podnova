@@ -22,6 +22,7 @@ export interface Podcast {
   error_message?: string;
   custom_prompt?: string;
   focus_areas?: string[];
+  is_custom?: boolean;
 }
 
 export type PodcastStatus = 

@@ -8,13 +8,15 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
+  ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { MainStackParamList } from "../Navigator";
+import { MainStackParamList } from "../../Navigator";
 import { Ionicons } from "@expo/vector-icons";
 import Feather from "@expo/vector-icons/Feather";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import DiscussionListSkeleton from "../skeletons/DiscussionListSkeleton";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -44,7 +46,6 @@ interface DiscussionsListProps {
 
 const PAGE_LIMIT = 20;
 
-// --- API Fetch Function ---
 const fetchDiscussions = async ({ pageParam, queryKey }: any) => {
   const [_, category, discussionType, sortBy] = queryKey;
   
@@ -81,7 +82,6 @@ const DiscussionsList: React.FC<DiscussionsListProps> = ({
   const navigation = useNavigation<NavigationProp>();
   const [sortBy, setSortBy] = useState<"latest" | "most_discussed">("latest");
 
-  // --- TanStack Infinite Query ---
   const {
     data,
     isLoading,
@@ -93,15 +93,13 @@ const DiscussionsList: React.FC<DiscussionsListProps> = ({
   } = useInfiniteQuery({
     queryKey: ['discussions', category, discussionType, sortBy],
     queryFn: fetchDiscussions,
-    initialPageParam: 0, // ✅ FIXED: Required by TanStack Query v5
+    initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
-      // If the last page returned fewer items than the limit, we've reached the end.
       return lastPage.length === PAGE_LIMIT ? allPages.length : undefined;
     },
-    staleTime: 1000 * 60 * 2, // 2 minutes cache
+    staleTime: 1000 * 60 * 2, 
   });
 
-  // Flatten the array of pages into a single array of discussions
   const discussions = data?.pages.flat() || [];
 
   const getTypeStyles = (type: string, categoryName?: string) => {
@@ -123,7 +121,17 @@ const DiscussionsList: React.FC<DiscussionsListProps> = ({
     }
   };
 
-  // --- Render Functions ---
+  // HELPER FOR PILL STYLES (Matching TopicsList)
+  const getSortButtonStyle = (option: string) => [
+    styles.sortPill,
+    sortBy === option && styles.sortPillActive
+  ];
+
+  const getSortTextStyle = (option: string) => [
+    styles.sortPillText,
+    sortBy === option && styles.sortPillTextActive
+  ];
+
   const renderItem = ({ item: discussion }: { item: Discussion }) => {
     const typeStyles = getTypeStyles(discussion.discussion_type, discussion.category);
     const categoryColor = getCategoryColor(discussion.category);
@@ -219,34 +227,26 @@ const DiscussionsList: React.FC<DiscussionsListProps> = ({
   };
 
   if (isLoading && discussions.length === 0) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
-    );
+    return <DiscussionListSkeleton />;
   }
 
   return (
     <View style={styles.container}>
+      {/* REDESIGNED HEADER BAR */}
       <View style={styles.actionsBar}>
-        <View style={styles.sortButtons}>
-          <TouchableOpacity
-            style={[styles.sortButton, sortBy === "latest" && styles.sortButtonActive]}
-            onPress={() => setSortBy("latest")}
-          >
-            <Text style={[styles.sortButtonText, sortBy === "latest" && styles.sortButtonTextActive]}>
-              Latest
-            </Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.sortScroll}
+          style={styles.scrollWrapper}
+        >
+          <TouchableOpacity style={getSortButtonStyle("latest")} onPress={() => setSortBy("latest")}>
+            <Text style={getSortTextStyle("latest")}>Latest</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.sortButton, sortBy === "most_discussed" && styles.sortButtonActive]}
-            onPress={() => setSortBy("most_discussed")}
-          >
-            <Text style={[styles.sortButtonText, sortBy === "most_discussed" && styles.sortButtonTextActive]}>
-              Most Discussed
-            </Text>
+          <TouchableOpacity style={getSortButtonStyle("most_discussed")} onPress={() => setSortBy("most_discussed")}>
+            <Text style={getSortTextStyle("most_discussed")}>Most Discussed</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
 
         {onCreatePress && (
           <TouchableOpacity style={styles.createButton} onPress={onCreatePress}>
@@ -266,9 +266,7 @@ const DiscussionsList: React.FC<DiscussionsListProps> = ({
         ListEmptyComponent={renderEmptyComponent}
         ListFooterComponent={renderFooter}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) {
-            fetchNextPage();
-          }
+          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
         }}
         onEndReachedThreshold={0.5}
         refreshControl={
@@ -292,40 +290,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
   },
+  
+  // MATCHED FILTER DESIGN
   actionsBar: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "transparent",
   },
-  sortButtons: {
-    flexDirection: "row",
+  scrollWrapper: {
+    flex: 1,
+    marginRight: 10,
+  },
+  sortScroll: {
     gap: 8,
   },
-  sortButton: {
-    paddingHorizontal: 14,
+  sortPill: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "transparent",
   },
-  sortButtonActive: {
-    backgroundColor: "#6366F1",
+  sortPillActive: {
+    backgroundColor: "#EEF2FF",
+    borderColor: "#C7D2FE",
   },
-  sortButtonText: {
+  sortPillText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#6B7280",
+    color: "#4B5563",
   },
-  sortButtonTextActive: {
-    color: "#FFFFFF",
+  sortPillTextActive: {
+    color: "#4F46E5",
     fontWeight: "600",
   },
+
   createButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderColor: "#d68b0a",
@@ -338,16 +343,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#d68b0a",
   },
+  
   list: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "transparent",
   },
   listContent: {
     paddingBottom: 20,
   },
   discussionCard: {
     backgroundColor: "#FFFFFF",
-    marginTop: 12,
+    marginBottom: 12,
     padding: 14,
     borderRadius: 12,
     shadowColor: "#000",

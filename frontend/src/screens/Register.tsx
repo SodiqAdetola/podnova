@@ -1,487 +1,495 @@
-import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  StyleSheet, 
-  Alert, 
-  TouchableOpacity, 
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Alert,
+  TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { AuthStackParamList } from "../Navigator";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../firebase/config";
-import { isValidEmail, isValidPassword } from "../utils/validation";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_BASE_URL = 'https://podnova-backend-r8yz.onrender.com';
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  
-  // Username availability states
-  const [checkingUsername, setCheckingUsername] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  
-  // Debounce username check
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [showRequirements, setShowRequirements] = useState(false);
+
+  // Password strength tracking with case requirement
+  const [passwordStrength, setPasswordStrength] = useState({
+    score: 0, // 0-4
+    label: "",
+    color: "#E5E7EB",
+    requirements: {
+      length: false,
+      number: false,
+      uppercase: false,
+      lowercase: false,
+    }
+  });
+
+  const usernameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
+
+  // Real-time password analysis with case requirement
   useEffect(() => {
-    const checkUsername = async () => {
-      if (!username.trim() || username.length < 3) {
-        setUsernameAvailable(null);
-        setUsernameError(username.length > 0 ? "Username must be at least 3 characters" : null);
-        return;
-      }
-
-      setCheckingUsername(true);
-      setUsernameError(null);
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/users/check-username/${encodeURIComponent(username.trim())}`);
-        const data = await response.json();
-
-        if (response.ok) {
-          setUsernameAvailable(data.available);
-          setUsernameError(data.available ? null : "Username is already taken");
-        } else {
-          setUsernameAvailable(null);
-          setUsernameError("Could not check username availability");
+    if (!password) {
+      setPasswordStrength({
+        score: 0,
+        label: "",
+        color: "#E5E7EB",
+        requirements: {
+          length: false,
+          number: false,
+          uppercase: false,
+          lowercase: false,
         }
-      } catch (error) {
-        console.error("Error checking username:", error);
-        setUsernameAvailable(null);
-        setUsernameError("Network error checking username");
-      } finally {
-        setCheckingUsername(false);
-      }
+      });
+      return;
+    }
+
+    const requirements = {
+      length: password.length >= 6,
+      number: /[0-9]/.test(password),
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
     };
 
-    const timer = setTimeout(() => {
-      if (username) {
-        checkUsername();
-      }
-    }, 500); // Debounce for 500ms
+    const metCount = Object.values(requirements).filter(Boolean).length;
+    
+    let score = 0;
+    let label = "";
+    let color = "#EF4444"; // Red
 
-    return () => clearTimeout(timer);
-  }, [username]);
+    if (metCount <= 1) {
+      score = 1;
+      label = "Weak";
+      color = "#EF4444";
+    } else if (metCount === 2) {
+      score = 2;
+      label = "Fair";
+      color = "#F59E0B";
+    } else if (metCount === 3) {
+      score = 3;
+      label = "Good";
+      color = "#3B82F6";
+    } else if (metCount === 4) {
+      score = 4;
+      label = "Strong";
+      color = "#10B981";
+    }
+
+    setPasswordStrength({
+      score,
+      label,
+      color,
+      requirements,
+    });
+  }, [password]);
+
+  const passwordsMatch = password === confirmPassword && password.length > 0;
+
+  // Show requirements when password field is focused
+  useEffect(() => {
+    if (focusedField === 'password') {
+      setShowRequirements(true);
+    } else if (focusedField !== 'password' && !password) {
+      setShowRequirements(false);
+    }
+  }, [focusedField, password]);
+
+  const canSubmit = passwordStrength.score >= 3 && passwordsMatch && username && email;
 
   const handleRegister = async () => {
-    // Validate username
-    if (!username.trim()) {
-      Alert.alert("Missing Information", "Please enter your username.");
+    const trimmedEmail = email.trim();
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedUsername || !trimmedEmail || !trimmedPassword) {
+      Alert.alert("Missing information", "Please fill in all fields.");
       return;
     }
 
-    if (username.length < 3) {
-      Alert.alert("Invalid Username", "Username must be at least 3 characters.");
+    if (password.length < 6) {
+      Alert.alert("Weak password", "Password must be at least 6 characters.");
       return;
     }
 
-    if (usernameAvailable === false) {
-      Alert.alert("Username Taken", "This username is already taken. Please choose another one.");
+    if (!passwordStrength.requirements.number) {
+      Alert.alert("Weak password", "Include at least one number.");
       return;
     }
 
-    if (usernameAvailable === null && !usernameError) {
-      Alert.alert("Please wait", "Still checking username availability...");
+    if (!passwordStrength.requirements.uppercase || !passwordStrength.requirements.lowercase) {
+      Alert.alert("Weak password", "Include both uppercase and lowercase letters.");
       return;
     }
 
-    if (!email.trim()) {
-      Alert.alert("Missing Information", "Please enter your email address.");
-      return;
-    }
-
-    if (!password) {
-      Alert.alert("Missing Information", "Please enter a password.");
-      return;
-    }
-
-    if (!confirm) {
-      Alert.alert("Missing Information", "Please confirm your password.");
-      return;
-    }
-
-    if (!isValidEmail(email)) {
-      Alert.alert("Invalid Email", "Please enter a valid email address.");
-      return;
-    }
-
-    if (!isValidPassword(password)) {
-      Alert.alert(
-        "Weak Password",
-        "Password must be at least 5 characters and include uppercase, lowercase, and a number."
-      );
-      return;
-    }
-
-    if (password !== confirm) {
-      Alert.alert("Password Mismatch", "Passwords do not match.");
+    if (!passwordsMatch) {
+      Alert.alert("Password mismatch", "Passwords do not match.");
       return;
     }
 
     setLoading(true);
-
     try {
-      const cred = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-      );
+      const cred = await createUserWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+      await updateProfile(cred.user, { displayName: trimmedUsername });
 
-      const firebaseUser = cred.user;
-
-      await updateProfile(firebaseUser, {
-        displayName: username.trim(),
-      });
-
-      const token = await firebaseUser.getIdToken();
-
+      const token = await cred.user.getIdToken();
       const response = await fetch(`${API_BASE_URL}/users/profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to create user profile');
-      }
-
-      Alert.alert(
-        "Success!",
-        "Your account has been created successfully!",
-        [{ text: "OK" }]
-      );
-
+      if (!response.ok) throw new Error('Failed to create profile');
     } catch (error: any) {
-      console.error("Registration error:", error);
-      
-      let errorMessage = "An unexpected error occurred. Please try again.";
-
-      if (error.code) {
-        switch (error.code) {
-          case "auth/email-already-in-use":
-            errorMessage = "This email is already registered. Please login or use a different email.";
-            break;
-          case "auth/weak-password":
-            errorMessage = "Your password is too weak. Please choose a stronger password.";
-            break;
-          case "auth/invalid-email":
-            errorMessage = "The email address is invalid.";
-            break;
-          case "auth/network-request-failed":
-            errorMessage = "Network error. Please check your internet connection.";
-            break;
-          default:
-            errorMessage = error.message || errorMessage;
-        }
-      } else if (error.message) {
-        errorMessage = error.message;
+      console.error(error);
+      let message = "Registration failed. Please try again.";
+      if (error.code === 'auth/email-already-in-use') {
+        message = "This email is already registered.";
       }
-
-      Alert.alert("Registration Failed", errorMessage);
+      Alert.alert("Registration failed", message);
     } finally {
       setLoading(false);
     }
   };
 
-  const getUsernameIcon = () => {
-    if (checkingUsername) {
-      return <ActivityIndicator size="small" color="#6366F1" />;
-    }
-    if (usernameAvailable === true) {
-      return <Ionicons name="checkmark-circle" size={20} color="#10B981" />;
-    }
-    if (usernameAvailable === false || usernameError) {
-      return <Ionicons name="close-circle" size={20} color="#EF4444" />;
-    }
-    return <Ionicons name="person-outline" size={20} color="#9CA3AF" />;
-  };
+  // Render requirement item with checkmark
+  const renderRequirement = (met: boolean, text: string) => (
+    <View style={styles.requirementRow}>
+      <Ionicons 
+        name={met ? "checkmark-circle" : "ellipse-outline"} 
+        size={14} 
+        color={met ? "#10B981" : "#9CA3AF"} 
+      />
+      <Text style={[styles.requirementText, met && styles.requirementMet]}>
+        {text}
+      </Text>
+    </View>
+  );
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-    >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
       >
-        {/* Header Section */}
-        <View style={styles.headerContainer}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#111827" />
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#374151" />
           </TouchableOpacity>
-          
-          <View style={styles.logoContainer}>
-            <LinearGradient
-              colors={['#8B5CF6', '#6366F1']}
-              style={styles.logoGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name="mic" size={28} color="#FFFFFF" />
-            </LinearGradient>
-          </View>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join PodNova today</Text>
-        </View>
 
-        {/* Form Section */}
-        <View style={styles.formContainer}>
-          {/* Username Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Username</Text>
-            <View style={[
-              styles.inputWrapper,
-              usernameAvailable === false && styles.inputWrapperError,
-              usernameAvailable === true && styles.inputWrapperSuccess
-            ]}>
-              <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="JohnDoe"
-                placeholderTextColor="#9CA3AF"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="words"
-                editable={!loading}
-              />
-              <View style={styles.usernameStatus}>
-                {getUsernameIcon()}
+          <Text style={styles.title}>Create account</Text>
+          <Text style={styles.subtitle}>
+            Join PodNova to get AI‑generated podcasts from premium sources.
+          </Text>
+
+          <View style={styles.form}>
+            {/* Username */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Display name</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'username' && styles.inputWrapperFocused,
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={focusedField === 'username' ? '#6366F1' : '#9CA3AF'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  ref={usernameRef}
+                  style={styles.input}
+                  placeholder="Alex Johnson"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                  value={username}
+                  onChangeText={setUsername}
+                  onFocus={() => setFocusedField('username')}
+                  onBlur={() => setFocusedField(null)}
+                  returnKeyType="next"
+                  onSubmitEditing={() => emailRef.current?.focus()}
+                  editable={!loading}
+                />
               </View>
             </View>
-            {usernameError && (
-              <Text style={styles.errorText}>{usernameError}</Text>
-            )}
-            {usernameAvailable === true && (
-              <Text style={styles.successText}>Username is available!</Text>
-            )}
-            <Text style={styles.hintText}>Minimum 3 characters</Text>
-          </View>
 
-          {/* Email Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="you@example.com"
-                placeholderTextColor="#9CA3AF"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-                editable={!loading}
-              />
-            </View>
-          </View>
-
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Password</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Create a password"
-                placeholderTextColor="#9CA3AF"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                editable={!loading}
-              />
-              <TouchableOpacity 
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
+            {/* Email */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Email</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'email' && styles.inputWrapperFocused,
+                ]}
               >
-                <Ionicons 
-                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color="#9CA3AF" 
+                <Ionicons
+                  name="mail-outline"
+                  size={18}
+                  color={focusedField === 'email' ? '#6366F1' : '#9CA3AF'}
+                  style={styles.inputIcon}
                 />
-              </TouchableOpacity>
+                <TextInput
+                  ref={emailRef}
+                  style={styles.input}
+                  placeholder="name@company.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  editable={!loading}
+                />
+              </View>
             </View>
-          </View>
 
-          {/* Confirm Password Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Confirm Password</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Confirm your password"
-                placeholderTextColor="#9CA3AF"
-                value={confirm}
-                onChangeText={setConfirm}
-                secureTextEntry={!showConfirm}
-                autoCapitalize="none"
-                editable={!loading}
-              />
-              <TouchableOpacity 
-                onPress={() => setShowConfirm(!showConfirm)}
-                style={styles.eyeIcon}
+            {/* Password */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'password' && styles.inputWrapperFocused,
+                ]}
               >
-                <Ionicons 
-                  name={showConfirm ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color="#9CA3AF" 
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={focusedField === 'password' ? '#6366F1' : '#9CA3AF'}
+                  style={styles.inputIcon}
                 />
-              </TouchableOpacity>
-            </View>
-          </View>
+                <TextInput
+                  ref={passwordRef}
+                  style={styles.input}
+                  placeholder="Min. 6 characters"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  value={password}
+                  onChangeText={setPassword}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmRef.current?.focus()}
+                  editable={!loading}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
 
-          {/* Password Requirements */}
-          <View style={styles.requirementsContainer}>
-            <View style={styles.requirementRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text style={styles.requirementText}>At least 5 characters</Text>
-            </View>
-            <View style={styles.requirementRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text style={styles.requirementText}>Uppercase & lowercase letters</Text>
-            </View>
-            <View style={styles.requirementRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text style={styles.requirementText}>At least one number</Text>
-            </View>
-          </View>
+              {/* Compact strength meter */}
+              {password.length > 0 && (
+                <View style={styles.strengthContainer}>
+                  <View style={styles.strengthBar}>
+                    {[1, 2, 3, 4].map((level) => (
+                      <View
+                        key={level}
+                        style={[
+                          styles.strengthSegment,
+                          { backgroundColor: level <= passwordStrength.score 
+                              ? passwordStrength.color 
+                              : "#E5E7EB" 
+                          }
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[styles.strengthLabel, { color: passwordStrength.color }]}>
+                    {passwordStrength.label}
+                  </Text>
+                </View>
+              )}
 
-          {/* Create Account Button */}
-          <TouchableOpacity
-            style={[
-              styles.createButton, 
-              (loading || checkingUsername || usernameAvailable === false) && styles.createButtonDisabled
-            ]}
-            onPress={handleRegister}
-            disabled={loading || checkingUsername || usernameAvailable === false}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={(loading || checkingUsername || usernameAvailable === false) 
-                ? ['#9CA3AF', '#6B7280'] 
-                : ['#8B5CF6', '#6366F1']
-              }
-              style={styles.createButtonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+              {/* Progressive disclosure of requirements */}
+              {(showRequirements || password.length > 0) && (
+                <View style={styles.requirementsContainer}>
+                  {renderRequirement(passwordStrength.requirements.length, "At least 6 characters")}
+                  {renderRequirement(passwordStrength.requirements.number, "At least one number")}
+                  {renderRequirement(passwordStrength.requirements.uppercase, "Uppercase letter")}
+                  {renderRequirement(passwordStrength.requirements.lowercase, "Lowercase letter")}
+                </View>
+              )}
+            </View>
+
+            {/* Confirm Password */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Confirm password</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'confirm' && styles.inputWrapperFocused,
+                  confirmPassword.length > 0 && {
+                    borderColor: passwordsMatch ? '#10B981' : '#EF4444',
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={
+                    focusedField === 'confirm'
+                      ? '#6366F1'
+                      : confirmPassword.length > 0
+                      ? passwordsMatch
+                        ? '#10B981'
+                        : '#EF4444'
+                      : '#9CA3AF'
+                  }
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  ref={confirmRef}
+                  style={styles.input}
+                  placeholder="Re‑enter password"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showConfirm}
+                  autoCapitalize="none"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  onFocus={() => setFocusedField('confirm')}
+                  onBlur={() => setFocusedField(null)}
+                  returnKeyType="done"
+                  onSubmitEditing={handleRegister}
+                  editable={!loading}
+                />
+                <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
+                  <Ionicons
+                    name={showConfirm ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Compact match indicator */}
+              {confirmPassword.length > 0 && (
+                <View style={styles.matchContainer}>
+                  <Ionicons
+                    name={passwordsMatch ? "checkmark-circle" : "close-circle"}
+                    size={14}
+                    color={passwordsMatch ? "#10B981" : "#EF4444"}
+                  />
+                  <Text
+                    style={[
+                      styles.matchText,
+                      { color: passwordsMatch ? "#10B981" : "#EF4444" },
+                    ]}
+                  >
+                    {passwordsMatch ? "Match" : "No match"}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.createButton, (!canSubmit || loading) && styles.createButtonDisabled]}
+              onPress={handleRegister}
+              disabled={!canSubmit || loading}
             >
               {loading ? (
-                <View style={styles.buttonContent}>
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                  <Text style={styles.createButtonText}>Creating Account...</Text>
-                </View>
+                <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.createButtonText}>Create Account</Text>
+                <Text style={styles.createButtonText}>Create account</Text>
               )}
-            </LinearGradient>
-          </TouchableOpacity>
+            </TouchableOpacity>
 
-          {/* Login Link */}
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.loginLink}
-            disabled={loading}
-          >
-            <Text style={styles.loginLinkText}>
-              Already have an account?{" "}
-              <Text style={styles.loginLinkTextBold}>Sign In</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <TouchableOpacity 
+                onPress={() => navigation.replace('Login')}
+                // No animation for auth swap
+              >
+                <Text style={styles.linkText}>Sign in</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
-
-export default RegisterScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
-  scrollContainer: {
-    top: 50,
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 20,
-  },
-  headerContainer: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  backButton: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoContainer: {
-    marginBottom: 12,
-  },
-  logoGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#8B5CF6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-    textAlign: "center",
-  },
-  formContainer: {
+  keyboardView: {
     flex: 1,
   },
-  inputContainer: {
-    marginBottom: 14,
+  scroll: {
+    paddingHorizontal: 24,
+    paddingTop: 50,
+    paddingBottom: 30,
   },
-  inputLabel: {
-    fontSize: 14,
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#111827",
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: "#6B7280",
+    lineHeight: 20,
+    marginBottom: 28,
+  },
+  form: {
+    width: "100%",
+  },
+  field: {
+    marginBottom: 18,
+  },
+  label: {
+    fontSize: 13,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 6,
@@ -489,112 +497,107 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
+    height: 48,
     backgroundColor: "#F9FAFB",
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 50,
+    paddingHorizontal: 14,
   },
-  inputWrapperError: {
-    borderColor: "#EF4444",
-    backgroundColor: "#FEF2F2",
-  },
-  inputWrapperSuccess: {
-    borderColor: "#10B981",
-    backgroundColor: "#F0FDF4",
+  inputWrapperFocused: {
+    borderColor: "#6366F1",
+    backgroundColor: "#FFFFFF",
   },
   inputIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   input: {
     flex: 1,
+    height: "100%",
     fontSize: 15,
     color: "#111827",
+  },
+  strengthContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 8,
+  },
+  strengthBar: {
+    width: 80, // Fixed width instead of flex: 1
+    flexDirection: "row",
+    height: 4,
+    gap: 4,
+  },
+  strengthSegment: {
+    flex: 1,
     height: "100%",
+    borderRadius: 2,
   },
-  usernameStatus: {
-    marginLeft: 8,
-  },
-  eyeIcon: {
-    padding: 4,
-  },
-  errorText: {
+  strengthLabel: {
     fontSize: 12,
-    color: "#EF4444",
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  successText: {
-    fontSize: 12,
-    color: "#10B981",
-    marginTop: 4,
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  hintText: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    marginTop: 4,
-    marginLeft: 4,
+    fontWeight: "600",
+    width: 45,
   },
   requirementsContainer: {
-    backgroundColor: "#F0FDF4",
-    borderRadius: 12,
+    marginTop: 10,
+    backgroundColor: "#F9FAFB",
     padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
+    borderRadius: 8,
+    gap: 6,
   },
   requirementRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    gap: 6,
   },
   requirementText: {
     fontSize: 12,
-    color: "#166534",
-    marginLeft: 6,
+    color: "#6B7280",
+  },
+  requirementMet: {
+    color: "#374151",
+  },
+  matchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    gap: 4,
+  },
+  matchText: {
+    fontSize: 12,
     fontWeight: "500",
   },
   createButton: {
-    marginBottom: 12,
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#8B5CF6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  createButtonDisabled: {
-    shadowOpacity: 0,
-  },
-  createButtonGradient: {
-    height: 50,
+    height: 48, // Reduced from 52
+    backgroundColor: "#6366F1",
+    borderRadius: 10, // Slightly smaller radius
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 16,
   },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  createButtonDisabled: {
+    opacity: 0.5,
   },
   createButtonText: {
-    fontSize: 16,
+    fontSize: 15, // Reduced from 16
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  loginLink: {
-    alignItems: "center",
-    paddingVertical: 12,
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 22,
   },
-  loginLinkText: {
-    fontSize: 15,
+  footerText: {
+    fontSize: 14,
     color: "#6B7280",
   },
-  loginLinkTextBold: {
+  linkText: {
+    fontSize: 14,
     fontWeight: "600",
     color: "#6366F1",
   },
 });
+
+export default RegisterScreen;

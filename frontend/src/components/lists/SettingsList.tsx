@@ -74,7 +74,7 @@ const SettingsList: React.FC<Props> = ({ sections }) => {
               value={item.value as boolean}
               onValueChange={item.onToggle}
               trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
-              thumbColor={item.value ? "#6366F1" : "#F3F4F6"}
+              thumbColor={item.value ? "#ffffff" : "#F3F4F6"}
               ios_backgroundColor="#D1D5DB"
             />
           </View>
@@ -88,7 +88,7 @@ const SettingsList: React.FC<Props> = ({ sections }) => {
                     value={subItem.value as boolean}
                     onValueChange={subItem.onToggle}
                     trackColor={{ false: "#E5E7EB", true: "#adbdff" }}
-                    thumbColor={subItem.value ? "#6366F1" : "#ffffff"}
+                    thumbColor={subItem.value ? "#ffffff" : "#ffffff"}
                     style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                   />
                 </View>

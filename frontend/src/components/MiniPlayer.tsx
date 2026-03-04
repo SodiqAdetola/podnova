@@ -38,7 +38,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ onExpand, hasTabBar = true }) =
   
   // When dropping to the bottom, use the iPhone's safe area inset so the home indicator 
   // doesn't overlap the buttons. Fallback to 10px on Android/older iPhones.
-  const paddingBottomPosition = hasTabBar ? 0 : Math.max(insets.bottom, 10);
+  const paddingBottomPosition = hasTabBar ? 0 : 15;
   const paddingTopPosition = hasTabBar ? 0 : 0;
 
   return (

@@ -57,11 +57,14 @@ async def list_categories():
 @router.get("/categories/{category_name}")
 async def get_category_topics(
     category_name: str,
-    sort_by: Optional[str] = Query("latest", regex="^(latest|reliable|most_discussed)$")
+    sort_by: Optional[str] = Query("latest", regex="^(latest|reliable|most_discussed)$"),
+    limit: int = Query(10, ge=1, le=100, description="Maximum results to return"),
+    skip: int = Query(0, ge=0, description="Pagination offset") 
 ):
-    """Get topics for a specific category with optional sorting"""
+    """Get topics for a specific category with optional sorting and pagination"""
     try:
-        topics = await get_topics_by_category(category_name, sort_by)
+        # Pass limit and skip to the controller
+        topics = await get_topics_by_category(category_name, sort_by, limit, skip)
         return {
             "category": category_name,
             "sort_by": sort_by,

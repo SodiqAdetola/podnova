@@ -90,7 +90,7 @@ class DiscussionService:
         topic_id: Optional[str] = None,
         category: Optional[str] = None,
         sort_by: str = "latest",
-        limit: int = 20,
+        limit: int = 10,
         skip: int = 0,
         user_id: Optional[str] = None,
         search_query: Optional[str] = None
@@ -101,7 +101,7 @@ class DiscussionService:
             
             # --- SCENARIO A: SEARCH MODE ---
             if search_query and search_query.strip():
-                print(f"🔎 SMART SEARCH MODE: '{search_query}'")
+                print(f"SMART SEARCH MODE: '{search_query}'")
                 
                 pipeline = [
                     {

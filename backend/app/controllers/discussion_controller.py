@@ -43,7 +43,7 @@ async def get_discussions(
     topic_id: Optional[str] = None,
     category: Optional[str] = None,
     sort_by: str = "latest",
-    limit: int = 20,
+    limit: int = 10,
     skip: int = 0,
     user_id: Optional[str] = None,
     q: Optional[str] = None

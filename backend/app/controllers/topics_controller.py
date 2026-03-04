@@ -46,8 +46,13 @@ async def get_all_categories() -> List[Dict]:
     return result
 
 
-async def get_topics_by_category(category: str, sort_by: str = "latest") -> List[Dict]:
-    """Get topics for a specific category with sorting"""
+async def get_topics_by_category(
+    category: str, 
+    sort_by: str = "latest",
+    limit: int = 10, 
+    skip: int = 0  
+) -> List[Dict]:
+    """Get topics for a specific category with sorting and pagination"""
     query = {
         "category": category,
         "status": "active",
@@ -63,7 +68,8 @@ async def get_topics_by_category(category: str, sort_by: str = "latest") -> List
     else:
         sort = [("last_updated", -1)]
     
-    cursor = db["topics"].find(query).sort(sort).limit(50)
+    # APPLY THE PAGINATION HERE INSTEAD OF HARDCODING .limit(50)
+    cursor = db["topics"].find(query).sort(sort).skip(skip).limit(limit)
     topics = []
     
     async for topic in cursor:

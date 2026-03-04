@@ -16,15 +16,14 @@ import traceback
 
 router = APIRouter()
 
-# PUBLIC GET ENDPOINTS - auth optional
 @router.get("/")
 async def list_discussions(
     discussion_type: Optional[str] = Query(None, description="topic or community"),
     topic_id: Optional[str] = Query(None, description="Filter by specific topic"),
     category: Optional[str] = Query(None, description="Filter by category"),
     sort_by: str = Query("latest", regex="^(latest|most_discussed)$"),
-    limit: int = Query(20, ge=1, le=50),
-    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=50),
+    skip: int = Query(0, ge=0),  
     q: Optional[str] = Query(None, description="Search query string"),
     firebase_user: Optional[dict] = Depends(verify_firebase_token)
 ):
@@ -32,11 +31,7 @@ async def list_discussions(
     Get discussions with filtering
     """
     try:
-        print(f"\n📥 GET /discussions called")
-        print(f"  📌 Params: type={discussion_type}, topic={topic_id}, category={category}, sort={sort_by}, q={q}")
-        
         user_id = firebase_user.get("uid") if firebase_user else None
-        print(f"  👤 User ID: {user_id}")
         
         discussions = await get_discussions(
             discussion_type=discussion_type,
@@ -44,12 +39,10 @@ async def list_discussions(
             category=category,
             sort_by=sort_by,
             limit=limit,
-            skip=skip,
+            skip=skip,   
             user_id=user_id,
             q=q
         )
-        
-        print(f"  ✅ Returning {len(discussions)} discussions\n")
         
         return {
             "discussions": discussions,

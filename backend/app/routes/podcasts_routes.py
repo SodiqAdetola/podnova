@@ -83,7 +83,7 @@ async def generate_podcast(
 @router.post("/generate-custom")
 async def generate_custom_podcast_endpoint(
     files: List[UploadFile] = File(default=[]),
-    podcast_title: str = Form("Custom Studio Podcast"), # <--- CHANGED TO podcast_title
+    podcast_title: str = Form("Custom Studio Podcast"), 
     custom_prompt: Optional[str] = Form(""),
     voice: str = Form(PodcastVoice.CALM_FEMALE),
     style: str = Form(PodcastStyle.STANDARD),
@@ -100,7 +100,7 @@ async def generate_custom_podcast_endpoint(
         result = await create_custom_podcast(
             user_id=user_uid,
             files=files, 
-            title=podcast_title, # <--- Pass the new variable here
+            title=podcast_title,
             custom_prompt=custom_prompt or "",
             voice=voice,
             style=style,

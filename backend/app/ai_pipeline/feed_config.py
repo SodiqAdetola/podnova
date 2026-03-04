@@ -37,10 +37,7 @@ RSS_FEEDS = {
         {"name": "VentureBeat - AI", "url": "https://venturebeat.com/category/ai/feed/"},
         {"name": "Wired - Business Tech", "url": "https://www.wired.com/feed/category/business/latest/rss"},
         
-        # --- Global: Tech Law, Regulation & Policy ---
-        {"name": "Ars Technica - Tech Policy", "url": "https://feeds.arstechnica.com/arstechnica/tech-policy"}, 
-        {"name": "Techdirt", "url": "https://www.techdirt.com/techdirt_rss.xml"}, 
-        
+
     ],
 
     "finance": [

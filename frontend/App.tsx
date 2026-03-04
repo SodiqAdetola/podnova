@@ -4,12 +4,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from "./src/contexts/AuthContext";
 import { AudioProvider } from "./src/contexts/AudioContext";
 import RootNavigator from "./src/Navigator";
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// 1. IMPORT EXPO NOTIFICATIONS
+// 1. PERSIST PROVIDER AND YOUR CUSTOM CACHING SETUP
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { queryClient, asyncStoragePersister } from './src/queryClient';
+
+// EXPO NOTIFICATIONS
 import * as Notifications from 'expo-notifications';
 
-// 2. CONFIGURE FOREGROUND NOTIFICATIONS
+// CONFIGURE FOREGROUND NOTIFICATIONS
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,   // Keeps compatibility with older Androids
@@ -20,20 +23,21 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Create a client
-const queryClient = new QueryClient();
-
 export default function App() {
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
+      {/* 2. APP WRAPPED IN THE PERSISTENT QUERY PROVIDER */}
+      <PersistQueryClientProvider 
+        client={queryClient}
+        persistOptions={{ persister: asyncStoragePersister }}
+      >
         <AuthProvider>
           <AudioProvider>
             <RootNavigator />
             <StatusBar style="auto" />
           </AudioProvider>
         </AuthProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </SafeAreaProvider>
   );
 }

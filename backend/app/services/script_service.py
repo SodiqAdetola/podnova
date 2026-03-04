@@ -69,6 +69,10 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
 6. WRITE FOR THE EAR. Spell out symbols when helpful (e.g., write "one point five billion dollars" instead of "$1.5B", or "percent" instead of "%").
 7. USE PUNCTUATION FOR PACING. Use commas, periods, and em-dashes (—) to create natural pauses and breathing room for the AI voice.
 8. USE FREQUENT PARAGRAPH BREAKS. Do not write a wall of text. Hit "Enter" twice between every few sentences to separate thoughts into short, distinct paragraphs.
+9. Use Ellipses for "Thinking" Pauses: Instead of "Today we look at tech," write "Today... we’re taking a look at tech."
+10. Add Exclamation Points (Sparingly)
+11. Use Contractions: For example instead of "It is a great day" use "It’s a great day."
+12. Hyphens for Emphasis: Use hyphens to break up technical terms. "The Q-3-report" will sound more natural than "The Q3 report,"
 """
     
     def __init__(self):

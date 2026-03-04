@@ -49,12 +49,12 @@ class PodcastVoice(str, Enum):
 
 # Voice configuration mapping
 VOICE_CONFIGS = {
-    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       # Smooth, soothing, ideal for relaxed news delivery
-    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            # Warm, relaxed, lower register
-    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Kore",     # Dynamic, bright, highly engaging
-    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Puck",       # The ultimate "Podcast Host" energy
-    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", # Crisp, authoritative (NPR-style)
-    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  # Deep, trustworthy newscaster baritone
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       # Stable, high-clarity anchor for technical reporting
+    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            # Grounded baritone with premium authoritative resonance
+    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Zephyr",    # Highly dynamic with natural breath and conversational arc
+    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Schedar",     # Versatile narrator with modern podcast-host pacing
+    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", # Sophisticated reporter with superior punctuation handling
+    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  # Clinical precision for data-heavy and technical analysis
 }
 
 # Map user preferences to podcast settings

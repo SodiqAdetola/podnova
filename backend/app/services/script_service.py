@@ -38,14 +38,14 @@ class ScriptService:
             "approach": "Balanced and professional",
             "depth": "Provide comprehensive coverage of the topic. Explain key concepts clearly while diving into important details.",
             "analysis": "Explore both 'what happened' and 'why it matters'. Include context, multiple perspectives, and immediate implications.",
-            "language": "Clear professional language. Use industry terms but keep the surrounding sentence structure accessible.",
+            "language": "Professional and articulate, yet highly accessible. Introduce necessary industry concepts, but explain them immediately in plain English.",
             "audience": "Informed readers who follow news regularly"
         },
         "expert": {
             "approach": "In-depth and critical",
             "depth": "Go beyond surface-level reporting. Analyze underlying factors, systemic issues, and broader patterns. Connect to related developments and historical context.",
             "analysis": "Critical examination of causes, effects, and stakeholder motivations. Question assumptions. Explore second and third-order consequences.",
-            "language": "Industry terminology is expected, but it must serve the analysis, not replace it. Focus on substance over unnecessarily complex adjectives.",
+            "language": "Sophisticated in thought but direct in phrasing. You may explore highly technical or complex concepts, but you MUST translate the terminology into crisp, spoken English.",
             "audience": "Professionals and enthusiasts with domain knowledge"
         }
     }
@@ -76,12 +76,12 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
 12. Hyphens for Emphasis: Use hyphens to break up technical terms. "The Q-3-report" will sound more natural than "The Q3 report,"
 """
 
-    # NEW: Rules to ensure high intellectual quality but accessible, inclusive vocabulary
+    # NEW: Bridging the gap between intellectual depth and inclusive vocabulary
     ACCESSIBILITY_RULES = """
 CRITICAL INCLUSIVITY & VOCABULARY RULES:
-1. ACCESSIBLE INTELLIGENCE: Your analysis must be intellectually rigorous, but your vocabulary MUST remain plain and inclusive. Do not "dumb down" the ideas, but DO simplify the words used to explain them.
+1. SEPARATE DEPTH FROM VOCABULARY: Adhere strictly to the 'Comprehension Level' for how deeply you analyze the topic, but NEVER use convoluted academic vocabulary to sound 'smart'. High-level analysis should be explained using plain, inclusive, everyday words.
 2. BAN AI-SPEAK: Absolutely NO overly academic or cliché AI words. You are strictly forbidden from using words like: "delve", "multifaceted", "myriad", "tapestry", "overarching", "paradigm", "catalyst", "realm", "intricate", "navigate", "foster", or "testament".
-3. INLINE DEFINITIONS: If you must use a complex industry term, acronym, or jargon (e.g., "quantitative easing", "API", "filibuster"), you MUST immediately define it in half a sentence using plain English so all listeners can follow along.
+3. INLINE DEFINITIONS: If the Comprehension Level requires you to use a complex industry term, acronym, or jargon, you MUST immediately define it in half a sentence using plain English so all listeners can follow along.
 4. SHORT, PUNCHY SENTENCES: Avoid long, winding sentences with multiple clauses. Keep phrasing direct, conversational, and easy for the ear to process.
 """
     
@@ -170,7 +170,7 @@ CRITICAL INCLUSIVITY & VOCABULARY RULES:
                 "title": article["title"],
                 "source": article["source"],
                 "content": article.get("content", article.get("description", "")),
-                "published_date_raw": article.get("published_date"), # Keep raw for comparison
+                "published_date_raw": article.get("published_date"), 
                 "published": article["published_date"].strftime("%Y-%m-%d") if article.get("published_date") else "Unknown"
             })
         return articles
@@ -276,6 +276,7 @@ STYLE PROFILE:
 - Approach: {style_config['approach']}
 - Depth Required: {style_config['depth']}
 - Analysis Style: {style_config['analysis']}
+- Language Guidelines: {style_config['language']}
 
 {self.ACCESSIBILITY_RULES}
 
@@ -330,6 +331,7 @@ STYLE PROFILE:
 - Approach: {style_config['approach']}
 - Depth Required: {style_config['depth']}
 - Analysis Style: {style_config['analysis']}
+- Language Guidelines: {style_config['language']}
 
 {self.ACCESSIBILITY_RULES}
 
@@ -373,6 +375,8 @@ STYLE PROFILE:
 - Audience: {style_config['audience']}
 - Approach: {style_config['approach']}
 - Depth Required: {style_config['depth']}
+- Analysis Style: {style_config.get('analysis', 'Standard analytical approach')}
+- Language Guidelines: {style_config['language']}
 
 {self.ACCESSIBILITY_RULES}
 

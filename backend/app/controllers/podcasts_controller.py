@@ -358,15 +358,14 @@ async def get_user_podcasts(
                 )
 
     podcasts = []
-    cursor = db["podcasts"].find(query).sort("created_at", -1).skip(skip).limit(limit)
-    
+    cursor = db["podcasts"].find(query).sort([("updated_at", -1)]).skip(skip).limit(limit)
     async for podcast in cursor:
         # Check if topic is updated
         has_update = False
         if not podcast.get("is_custom") and podcast.get("topic_id"):
             topic = await db["topics"].find_one(
                 {"_id": ObjectId(podcast["topic_id"])}, 
-                {"last_history_point": 1} # <--- CHANGED THIS TO CHECK HISTORY
+                {"last_history_point": 1} 
             )
             
             if topic and topic.get("last_history_point"):

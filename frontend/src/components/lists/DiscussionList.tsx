@@ -44,7 +44,7 @@ interface DiscussionsListProps {
   onCreatePress?: () => void;
 }
 
-const PAGE_LIMIT = 20;
+const PAGE_LIMIT = 10;
 
 const fetchDiscussions = async ({ pageParam, queryKey }: any) => {
   const [_, category, discussionType, sortBy] = queryKey;

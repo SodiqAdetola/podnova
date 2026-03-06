@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
-const PAGE_LIMIT = 20;
+const PAGE_LIMIT = 10;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
 

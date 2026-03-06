@@ -7,7 +7,6 @@ import {
   ScrollView,
   Alert,
   StatusBar,
-  ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,9 +21,6 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const ProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  
-  // NEW: Hooks for stopping audio and clearing the persistent cache
   const { stopPlayback } = useAudio();
   const queryClient = useQueryClient();
   
@@ -36,8 +32,7 @@ const ProfileScreen: React.FC = () => {
   });
 
   useEffect(() => {
-    loadUserProfile();
-    loadStats();
+    fetchProfileData();
   }, []);
 
   const getAuthToken = async () => {
@@ -46,60 +41,32 @@ const ProfileScreen: React.FC = () => {
     return token;
   };
 
-  const loadUserProfile = async () => {
+  const fetchProfileData = async () => {
     try {
       setLoading(true);
       const token = await getAuthToken();
 
-      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+      // Fetch Profile
+      const profileRes = await fetch(`${API_BASE_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (response.status === 404) {
-        await createUserProfile();
-        return;
+      if (profileRes.ok) {
+        setUserProfile(await profileRes.json());
+      } else if (profileRes.status === 404) {
+        // Create profile if missing
+        const newProfileRes = await fetch(`${API_BASE_URL}/users/profile`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        });
+        if (newProfileRes.ok) setUserProfile(await newProfileRes.json());
       }
 
-      if (response.ok) {
-        const profile = await response.json();
-        setUserProfile(profile);
-      }
-    } catch (error) {
-      console.error("Error loading profile:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createUserProfile = async () => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/users/profile`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.ok) {
-        const profile = await response.json();
-        setUserProfile(profile);
-      }
-    } catch (error) {
-      console.error("Error creating profile:", error);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/users/stats`, {
+      // Fetch Stats
+      const statsRes = await fetch(`${API_BASE_URL}/users/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (response.ok) {
-        const data = await response.json();
+      if (statsRes.ok) {
+        const data = await statsRes.json();
         setStats({
           podcasts: data.podcasts || 0,
           discussions: data.discussions || 0,
@@ -107,60 +74,22 @@ const ProfileScreen: React.FC = () => {
         });
       }
     } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
-
-  const updatePreference = async (updates: any) => {
-    try {
-      setUpdating(true);
-      
-      if (userProfile) {
-        setUserProfile({
-          ...userProfile,
-          preferences: { ...userProfile.preferences, ...updates },
-        });
-      }
-
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/users/preferences`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updates),
-      });
-
-      if (!response.ok) throw new Error("Failed to update");
-    } catch (error) {
-      console.error("Error updating preference:", error);
-      Alert.alert("Error", "Failed to update preferences. Reverting changes.");
-      loadUserProfile();
+      console.error("Error loading profile data:", error);
     } finally {
-      setUpdating(false);
+      setLoading(false);
     }
   };
 
-  // Restored Logout logic with Audio and Cache cleanup
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
-      { 
-        text: "Cancel", 
-        style: "cancel" 
-      },
+      { text: "Cancel", style: "cancel" },
       {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
           try {
-            // 1. Stop the podcast and hide the MiniPlayer
             await stopPlayback(); 
-            
-            // 2. Clear the persistent cache for security
             queryClient.clear(); 
-            
-            // 3. Perform the actual logout
             await signOut(auth);
           } catch (error) {
             Alert.alert("Error", "Failed to logout");
@@ -170,15 +99,12 @@ const ProfileScreen: React.FC = () => {
     ]);
   };
 
-  if (loading) {
-    return <ProfileScreenSkeleton />;
-  }
+  if (loading) return <ProfileScreenSkeleton />;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header with Logout Button */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.brandName}>PODNOVA PROFILE</Text>
@@ -214,132 +140,101 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Encapsulated Settings Logic */}
         <ProfileSettings 
           userProfile={userProfile} 
-          onUpdatePreference={updatePreference} 
+          onProfileUpdated={fetchProfileData} 
         />
 
         <View style={styles.footer} />
       </ScrollView>
-
-      {updating && (
-        <View style={styles.updateOverlay}>
-          <ActivityIndicator size="small" color="#6366F1" />
-          <Text style={styles.updateText}>Updating...</Text>
-        </View>
-      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F9FAFB",
+  container: { 
+    flex: 1, 
+    backgroundColor: "#F9FAFB", 
+    marginBottom: 70,
   },
-  header: {
-    backgroundColor: "#FFFFFF",
-    paddingTop: 70,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
+  header: { 
+    backgroundColor: "#FFFFFF", 
+    paddingTop: 70, 
+    paddingBottom: 16, 
+    paddingHorizontal: 20, 
+    borderBottomWidth: 1, 
     borderBottomColor: "#E5E7EB",
   },
-  brandName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#6366F1",
+  brandName: { 
+    fontSize: 18, 
+    fontWeight: "700", 
+    color: "#6366F1", 
     letterSpacing: 1,
   },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerContent: { 
+    flexDirection: "row", 
+    alignItems: "center", 
     justifyContent: "space-between",
-    gap: 12,
   },
-  scrollView: {
+  scrollView: { 
     flex: 1,
   },
-  userSection: {
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    alignItems: "center",
+  userSection: { 
+    backgroundColor: "#FFFFFF", 
+    paddingVertical: 32, 
+    paddingHorizontal: 20, 
+    alignItems: "center", 
     marginBottom: 16,
   },
-  avatarPlaceholder: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#6366F1",
-    justifyContent: "center",
-    alignItems: "center",
+  avatarPlaceholder: { 
+    width: 96, 
+    height: 96, 
+    borderRadius: 48, 
+    backgroundColor: "#6366F1", 
+    justifyContent: "center", 
+    alignItems: "center", 
     marginBottom: 16,
   },
-  userName: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
+  userName: { 
+    fontSize: 20, 
+    fontWeight: "700", 
+    color: "#111827", 
     marginBottom: 4,
   },
-  userEmail: {
-    fontSize: 14,
-    color: "#6B7280",
+  userEmail: { 
+    fontSize: 14, 
+    color: "#6B7280", 
     marginBottom: 24,
   },
-  statsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    paddingTop: 20,
-    borderTopWidth: 1,
+  statsContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    width: "100%", 
+    paddingTop: 20, 
+    borderTopWidth: 1, 
     borderTopColor: "#F3F4F6",
   },
-  statItem: {
-    flex: 1,
+  statItem: { 
+    flex: 1, 
     alignItems: "center",
   },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#3d424d",
+  statValue: { 
+    fontSize: 20, 
+    fontWeight: "600", 
+    color: "#3d424d", 
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 13,
+  statLabel: { 
+    fontSize: 13, 
     color: "#6B7280",
   },
-  statDivider: {
-    width: 1,
-    height: 40,
+  statDivider: { 
+    width: 1, 
+    height: 40, 
     backgroundColor: "#E5E7EB",
   },
-  updateOverlay: {
-    position: "absolute",
-    top: 100,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    gap: 8,
-  },
-  updateText: {
-    fontSize: 13,
-    color: "#6B7280",
-    fontWeight: "500",
-  },
-  footer: {
+  footer: { 
     height: 40,
   },
 });

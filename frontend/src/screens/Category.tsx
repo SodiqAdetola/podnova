@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    flexGrow: 1,
+    flex: 1,
   },
 });
 

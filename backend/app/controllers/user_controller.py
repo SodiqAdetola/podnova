@@ -4,8 +4,8 @@ from typing import Optional, Dict, List
 from bson import ObjectId
 from app.db import db
 from app.models.user import UserProfile, UserPreferences
-from backend.app.middleware import firebase_auth
-from backend.app.services.storage_service import StorageService
+from app.middleware import firebase_auth
+from app.services.storage_service import StorageService
 
 storage_service = StorageService()
 

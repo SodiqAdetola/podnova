@@ -195,9 +195,37 @@ class NotificationService:
     # --- RESTORED SPECIALIZED CREATORS ---
 
     async def create_podcast_ready_notification(
-        self, user_id: str, podcast_id: str, topic_title: str
+        self, user_id: str, podcast_id: str, topic_title: str, podcast_type: str = None
     ) -> Optional[str]:
         """Triggered when the background podcast generation finishes"""
+        
+        # 1. Smart DB inference if type isn't explicitly provided
+        if not podcast_type:
+            podcast_type = "topic"
+            try:
+                podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
+                if podcast:
+                    if podcast.get("is_custom"):
+                        podcast_type = "custom"
+                    elif podcast.get("created_at") and podcast.get("completed_at"):
+                        # If completed more than 15 minutes after creation, it's a regeneration!
+                        diff = podcast["completed_at"] - podcast["created_at"]
+                        if diff.total_seconds() > 900:
+                            podcast_type = "regenerated"
+            except Exception as e:
+                logger.error(f"Error inferring podcast type: {e}")
+
+        # 2. Set dynamic titles and messages based on inferred type
+        if podcast_type == "custom":
+            title = "Your Custom Podcast is Ready"
+            message = f"Your studio podcast '{topic_title[:50]}...' has been generated."
+        elif podcast_type == "regenerated":
+            title = "Your Regenerated Podcast is Ready"
+            message = f"Your updated podcast on '{topic_title[:50]}...' is ready to play."
+        else:
+            title = "Your Topic Podcast is Ready"
+            message = f"Your podcast on '{topic_title[:50]}...' has been generated."
+
         req = CreateNotificationRequest(
             user_id=user_id,
             type=NotificationType.PODCAST_READY,
@@ -206,8 +234,8 @@ class NotificationService:
             source_id=podcast_id,
             actor_user_id=None,
             actor_username=None,
-            title="Your Podcast is Ready!",
-            message=f"Your podcast on '{topic_title[:50]}...' has been generated.",
+            title=title,
+            message=message,
             preview="Tap here to listen in your library.",
             action_path="/library"
         )

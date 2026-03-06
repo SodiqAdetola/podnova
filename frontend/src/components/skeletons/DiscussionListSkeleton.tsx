@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import Skeleton from '../ui/Skeleton';
+import Skeleton from '../Skeleton';
 
 const DiscussionListSkeleton: React.FC = () => {
   const renderItem = () => (

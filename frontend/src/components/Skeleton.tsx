@@ -1,4 +1,4 @@
-// frontend/src/components/ui/Skeleton.tsx
+// frontend/src/components/Skeleton.tsx
 import React, { useEffect, useRef } from 'react';
 import { Animated, ViewStyle, StyleProp, DimensionValue } from 'react-native';
 

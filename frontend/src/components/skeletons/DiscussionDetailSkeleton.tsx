@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import Skeleton from '../ui/Skeleton';
+import Skeleton from '../Skeleton';
 import DiscussionThreadSkeleton from './DiscussionThreadSkeleton';
 
 const DiscussionDetailSkeleton: React.FC = () => {

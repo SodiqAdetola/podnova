@@ -477,7 +477,8 @@ async def regenerate_podcast(
         "transcript_url": None,
         "duration_seconds": None,
         "error_message": None,
-        "completed_at": None
+        "completed_at": None,
+        "is_regenerated": True
     })
     
     await db["podcasts"].update_one(

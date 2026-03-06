@@ -199,7 +199,7 @@ class NotificationService:
     ) -> Optional[str]:
         """Triggered when the background podcast generation finishes"""
         
-        # 1. Smart DB inference if type isn't explicitly provided
+        # 1. Smart DB inference using explicit flags
         if not podcast_type:
             podcast_type = "topic"
             try:
@@ -207,11 +207,8 @@ class NotificationService:
                 if podcast:
                     if podcast.get("is_custom"):
                         podcast_type = "custom"
-                    elif podcast.get("created_at") and podcast.get("completed_at"):
-                        # If completed more than 15 minutes after creation, it's a regeneration!
-                        diff = podcast["completed_at"] - podcast["created_at"]
-                        if diff.total_seconds() > 900:
-                            podcast_type = "regenerated"
+                    elif podcast.get("is_regenerated"): 
+                        podcast_type = "regenerated"
             except Exception as e:
                 logger.error(f"Error inferring podcast type: {e}")
 

@@ -23,6 +23,7 @@ export interface Podcast {
   custom_prompt?: string;
   focus_areas?: string[];
   is_custom?: boolean;
+  has_topic_update?: boolean;
 }
 
 export type PodcastStatus = 
@@ -47,4 +48,5 @@ export interface PodcastPlayerProps {
   onClose: () => void;
   isSaved: boolean;
   onToggleSave: () => void;
+  onRegenerateRequest?: (podcast: Podcast) => void;
 }

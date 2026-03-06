@@ -1,4 +1,5 @@
 // frontend/src/components/PodcastPlayer.tsx
+
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -36,6 +37,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
   onClose,
   isSaved: externalIsSaved,
   onToggleSave: externalOnToggleSave,
+  onRegenerateRequest,
 }) => {
   const insets = useSafeAreaInsets();
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -58,15 +60,12 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
 
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   
-  // --- PRODUCTION-READY TELEPROMPTER STATE ---
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const [sentences, setSentences] = useState<{text: string, length: number}[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
-  // Store both Y position and height of each sentence for continuous fractional scrolling
   const itemLayouts = useRef<{ [key: number]: { y: number, height: number } }>({});
 
-  // 1. Clean and split script into sentences
   useEffect(() => {
     const rawText = podcast?.script || (podcast as any)?.transcript || "";
     if (rawText) {
@@ -83,7 +82,6 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     }
   }, [podcast?.script]);
 
-  // 2. Fractional Continuous Sync Logic
   useEffect(() => {
     if (!duration || totalChars === 0 || showFullTranscript || sentences.length === 0) return;
 
@@ -129,7 +127,6 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
         }).start();
       }
     }
-
   }, [position, duration, totalChars, sentences, showFullTranscript, activeIndex]);
 
   const handleSentenceLayout = (index: number, event: any) => {
@@ -138,7 +135,6 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
       height: event.nativeEvent.layout.height,
     };
   };
-  // -----------------------------------
 
   useEffect(() => {
     if (visible) {
@@ -215,14 +211,12 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
     }
   };
 
-  // --- SMART PLAY/PAUSE WRAPPER ---
   const handlePlayPause = async () => {
-    // If the audio is not playing and we are within 1 second of the end of the track
     if (!isPlaying && duration > 0 && position >= duration - 1000) {
-      await seekTo(0); // Snap back to the beginning
-      togglePlayPause(); // Start playing
+      await seekTo(0); 
+      togglePlayPause(); 
     } else {
-      togglePlayPause(); // Normal play/pause behavior
+      togglePlayPause(); 
     }
   };
 
@@ -292,6 +286,27 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
             <Text style={styles.podcastVoice}>Voice: {podcast.voice.replace(/_/g, " ")}</Text>
           </View>
 
+          {/* Topic Update Banner */}
+          {podcast.has_topic_update && (
+            <TouchableOpacity 
+              style={styles.playerUpdateBanner}
+              activeOpacity={0.8}
+              onPress={() => {
+                onClose(); 
+                if (onRegenerateRequest) onRegenerateRequest(podcast);
+              }}
+            >
+              <View style={styles.playerUpdateBannerIcon}>
+                <Ionicons name="flash" size={18} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.playerUpdateTitle}>New Updates Available!</Text>
+                <Text style={styles.playerUpdateSubtitle}>Tap to regenerate this podcast with the latest news timeline.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#F59E0B" />
+            </TouchableOpacity>
+          )}
+
           {/* TELEPROMPTER TRANSCRIPT */}
           {sentences.length > 0 && (
             <View style={styles.transcriptContainer}>
@@ -352,7 +367,6 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
               <Text style={styles.skipText}>15s</Text>
             </TouchableOpacity>
             
-            {/* UPDATED PLAY BUTTON WITH SMART WRAPPER */}
             <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
               <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#8B5CF6" style={!isPlaying && { marginLeft: 4 }} />
             </TouchableOpacity>
@@ -368,6 +382,16 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
               <View style={styles.speedBadge}><Text style={styles.speedBadgeText}>{playbackRate}×</Text></View>
               <Text style={styles.actionButtonText}>Speed</Text>
             </TouchableOpacity>
+            
+            {/* NEW: Generic Redo/Regenerate Button */}
+            <TouchableOpacity style={styles.actionButton} onPress={() => {
+                onClose();
+                if (onRegenerateRequest) onRegenerateRequest(podcast);
+            }}>
+              <View style={styles.iconCircle}><Ionicons name="refresh-outline" size={20} color="#FFFFFF" /></View>
+              <Text style={styles.actionButtonText}>Redo</Text>
+            </TouchableOpacity>
+
             {!isCustom && (
               <>
                 <TouchableOpacity style={styles.actionButton} onPress={handleGoToTopic}>
@@ -505,7 +529,38 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   
-  // --- TELEPROMPTER STYLES ---
+  playerUpdateBanner: {
+    flexDirection: "row",
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    marginBottom: 20,
+    marginTop: 5,
+  },
+  playerUpdateBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F59E0B",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  playerUpdateTitle: {
+    color: "#FCD34D",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  playerUpdateSubtitle: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  
   transcriptContainer: {
     width: '100%',
     backgroundColor: "transparent",
@@ -543,7 +598,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     lineHeight: 20,
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 30,
   },
   transcriptTextActive: {
     color: "#f5f5f5",

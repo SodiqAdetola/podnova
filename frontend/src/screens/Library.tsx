@@ -21,6 +21,7 @@ import { File, Paths } from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAudio } from "../contexts/AudioContext";
 import PodcastPlayer from "../components/PodcastPlayer";
+import RegeneratePodcastModal from "../components/modals/RegeneratePodcastModal"; // <-- IMPORT NEW MODAL
 import { Podcast, TabType, PodcastLibraryResponse } from "../types/podcasts";
 import { LinearGradient } from 'expo-linear-gradient';
 import PodcastListSkeleton from "../components/skeletons/PodcastListSkeleton";
@@ -32,7 +33,6 @@ const STORAGE_KEYS = {
   SAVED: "@podnova_saved",
 };
 
-// Predefined categories for the filter pill bar
 const LIBRARY_CATEGORIES = ["All", "Custom", "Finance", "Technology", "Politics"];
 
 const LibraryScreen: React.FC = () => {
@@ -40,7 +40,7 @@ const LibraryScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [activeCategory, setActiveCategory] = useState<string>("All"); // <-- NEW STATE
+  const [activeCategory, setActiveCategory] = useState<string>("All");
   
   const [downloadedPodcasts, setDownloadedPodcasts] = useState<Set<string>>(new Set());
   const [savedPodcasts, setSavedPodcasts] = useState<Set<string>>(new Set());
@@ -49,6 +49,10 @@ const LibraryScreen: React.FC = () => {
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   
+  // NEW REGENERATE MODAL STATE
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [selectedPodcast, setSelectedPodcast] = useState<Podcast | null>(null);
+
   const { loadPodcast, showPlayer, currentPodcast } = useAudio();
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const previousPodcastCount = useRef<number>(0);
@@ -226,14 +230,11 @@ const LibraryScreen: React.FC = () => {
     ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
   );
 
-  // --- UPDATED: Apply both Tab Filter AND Category Filter ---
   const filteredPodcasts = completedPodcasts.filter((podcast) => {
-    // 1. Tab Filter
     let matchesTab = true;
     if (activeTab === "downloads") matchesTab = downloadedPodcasts.has(podcast.id);
     if (activeTab === "saved") matchesTab = savedPodcasts.has(podcast.id);
 
-    // 2. Category Filter
     let matchesCategory = true;
     if (activeCategory !== "All") {
       matchesCategory = (podcast.category?.toLowerCase() || "") === activeCategory.toLowerCase();
@@ -286,18 +287,36 @@ const LibraryScreen: React.FC = () => {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setActiveMenu(null)}>
           <View style={styles.menuContainer}>
             <Text style={styles.menuTitle} numberOfLines={2}>{podcast.topic_title}</Text>
+            
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => {
+                setActiveMenu(null);
+                setSelectedPodcast(podcast);
+                setShowRegenerateModal(true);
+              }}
+            >
+              <Ionicons name="refresh-circle-outline" size={22} color="#8B5CF6" />
+              <Text style={[styles.menuItemText, { color: "#8B5CF6" }]}>
+                {podcast.has_topic_update ? "Regenerate (Update Available!)" : "Regenerate Podcast"}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.menuItem} onPress={() => toggleSaved(podcast.id)}>
               <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={22} color={isSaved ? "#F59E0B" : "#374151"} />
               <Text style={styles.menuItemText}>{isSaved ? "Remove from Saved" : "Save for Later"}</Text>
             </TouchableOpacity>
+
             <TouchableOpacity style={styles.menuItem} onPress={() => downloadPodcast(podcast)} disabled={isDownloaded}>
               <Ionicons name={isDownloaded ? "checkmark-circle" : "download-outline"} size={22} color={isDownloaded ? "#10B981" : "#374151"} />
               <Text style={[styles.menuItemText, isDownloaded && styles.menuItemTextDisabled]}>{isDownloaded ? "Already Downloaded" : "Download"}</Text>
             </TouchableOpacity>
+
             <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={() => deletePodcast(podcast)}>
               <Ionicons name="trash-outline" size={22} color="#EF4444" />
               <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>Delete Podcast</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity style={styles.menuCancel} onPress={() => setActiveMenu(null)}>
               <Text style={styles.menuCancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -339,6 +358,15 @@ const LibraryScreen: React.FC = () => {
                 <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(item.category) + "20" }]}>
                   <Text style={[styles.categoryText, { color: getCategoryColor(item.category) }]}>{isCustom ? "Studio Custom" : item.category}</Text>
                 </View>
+                
+                {/* NEW: Topic Update Badge */}
+                {item.has_topic_update && (
+                  <View style={[styles.categoryTag, { backgroundColor: "#FEF3C7" }]}>
+                    <Ionicons name="flash" size={10} color="#D97706" style={{ marginRight: 2 }} />
+                    <Text style={[styles.categoryText, { color: "#D97706" }]}>Update Available</Text>
+                  </View>
+                )}
+
                 {isDownloaded && (
                   <View style={styles.downloadBadge}><Ionicons name="download-outline" size={12} color="#0e9b6c" /></View>
                 )}
@@ -416,7 +444,6 @@ const LibraryScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* NEW: Category Filter Pills */}
       <View style={styles.filterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           {LIBRARY_CATEGORIES.map((category) => (
@@ -470,6 +497,22 @@ const LibraryScreen: React.FC = () => {
         onClose={() => setShowFullPlayer(false)}
         isSaved={currentPodcast ? savedPodcasts.has(currentPodcast.id) : false}
         onToggleSave={() => { if (currentPodcast) toggleSaved(currentPodcast.id); }}
+        onRegenerateRequest={(podcast: Podcast) => {
+          setSelectedPodcast(podcast);
+          setShowRegenerateModal(true);
+        }}
+      />
+
+      <RegeneratePodcastModal
+        visible={showRegenerateModal}
+        podcast={selectedPodcast}
+        onClose={() => {
+          setShowRegenerateModal(false);
+          setSelectedPodcast(null);
+        }}
+        onSuccess={() => {
+          fetchPodcasts(true); // Refresh list to show 'generating' state
+        }}
       />
     </View>
   );
@@ -531,8 +574,6 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: "#6366F1",
   },
-  
-  // NEW STYLES: Filter Pills
   filterContainer: {
     backgroundColor: "#FFFFFF",
     paddingVertical: 20,
@@ -642,11 +683,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexWrap: "wrap",
   },
   categoryTag: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
   },
   categoryText: {
     fontSize: 11,
@@ -683,16 +727,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 5,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6B7280",
   },
   emptyState: {
     alignItems: "center",

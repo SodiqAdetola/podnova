@@ -324,6 +324,7 @@ const NotificationsScreen: React.FC = () => {
         onLongPress={() => openActionMenu(notification)} 
         activeOpacity={0.7}
       >
+        {/* 1. Left: Selection Checkbox */}
         {isSelectMode && (
           <View style={styles.checkboxContainer}>
             <Ionicons 
@@ -334,28 +335,34 @@ const NotificationsScreen: React.FC = () => {
           </View>
         )}
 
+        {/* 2. Left: Icon */}
         <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(notification.type) + "20" }]}>
           <Ionicons name={getNotificationIcon(notification.type) as any} size={20} color={getNotificationColor(notification.type)} />
         </View>
 
+        {/* 3. Middle: Text Content */}
         <View style={styles.notificationContent}>
           <View style={styles.titleRow}>
             <Text style={styles.notificationTitle} numberOfLines={1}>
               {notification.title || "Notification"}
             </Text>
           </View>
-
           <Text style={styles.notificationPreview} numberOfLines={2}>
             {notification.message || notification.preview || "You have a new update."}
           </Text>
-          
           <View style={styles.footerRow}>
             <Text style={styles.notificationTime}>
               {notification.time_ago || "Recently"}
             </Text>
-            {!notification.is_read && <View style={styles.unreadDot} />}
           </View>
         </View>
+
+        {/* 4. Right: Vertical Centered Dot (MOVED HERE) */}
+        {!notification.is_read && (
+          <View style={styles.unreadDotContainer}>
+            <View style={styles.unreadDot} />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -622,11 +629,27 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center", 
     backgroundColor: "#FFFFFF",
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
+  },
+  notificationContent: {
+    flex: 1, 
+  },
+  unreadDotContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 12,
+    width: 20, 
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 5,
+    backgroundColor: "#6366F1",
+    bottom: 4,
   },
   notificationCardUnread: {
     backgroundColor: "#FAFBFF",
@@ -647,9 +670,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-  },
-  notificationContent: {
-    flex: 1,
   },
   titleRow: {
     flexDirection: "row",
@@ -678,12 +698,6 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 12,
     color: "#9CA3AF",
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#6366F1",
   },
   emptyState: {
     paddingTop: 100,

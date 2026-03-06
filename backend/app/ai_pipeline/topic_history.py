@@ -14,6 +14,7 @@ import certifi
 import os
 import json
 import asyncio
+import traceback
 from google import genai
 from google.genai import types
 import logging
@@ -31,21 +32,24 @@ TEXT_MODEL = "gemini-2.5-flash"
 
 class HistoryConfig:
     """Configuration for topic history snapshots"""
-    MIN_NEW_ARTICLES = 5          
-    MIN_NEW_SOURCES = 2           
+    # 1. Lowered thresholds to catch breaking developments faster
+    MIN_NEW_ARTICLES = 3          
+    MIN_NEW_SOURCES = 1           
     CONFIDENCE_CHANGE = 0.15      
-    EMBEDDING_DRIFT = 0.20        
-    TIME_ELAPSED_HOURS = 48       
+    EMBEDDING_DRIFT = 0.15        
+    TIME_ELAPSED_HOURS = 24       
     
+    # 2. Shifted weights to favor AI semantics (drift) over raw volume
     SIGNIFICANCE_WEIGHTS = {
-        "article_growth": 0.30,
-        "source_diversity": 0.25,
-        "confidence_change": 0.20,
-        "embedding_drift": 0.15,
+        "embedding_drift": 0.35,  
+        "article_growth": 0.20,
+        "source_diversity": 0.20,
+        "confidence_change": 0.15,
         "time_factor": 0.10
     }
     
-    SIGNIFICANCE_THRESHOLD = 0.60  
+    # 3. Slightly lower threshold for faster updates
+    SIGNIFICANCE_THRESHOLD = 0.55  
     
     HISTORY_TYPES = {
         "initial": "Initial topic creation",
@@ -92,7 +96,6 @@ class TopicHistoryService:
         except Exception as e:
             logger.error(f"Error creating indexes: {e}")
 
-    # ✅ ADDED: The missing retrieval function to send data to the frontend
     async def get_topic_timeline(self, topic_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Fetch the formatted history timeline for a topic"""
         try:
@@ -149,7 +152,7 @@ class TopicHistoryService:
         
         if new_articles >= self.config.MIN_NEW_ARTICLES:
             growth_ratio = new_articles / max(prev_count, 1)
-            absolute_score = min(1.0, new_articles / 20)
+            absolute_score = min(1.0, new_articles / 10) # Made this scale faster
             article_score = min(1.0, (growth_ratio * 0.5 + absolute_score * 0.5))
         else:
             article_score = min(1.0, new_articles / self.config.MIN_NEW_ARTICLES)
@@ -291,7 +294,6 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
             if not topic:
                 return None
             
-            # ✅ FIXED: Use datetime.utcnow() to prevent PyMongo Timezone crashes
             history_doc = {
                 "topic_id": ObjectId(topic_id),
                 "history_type": history_type,

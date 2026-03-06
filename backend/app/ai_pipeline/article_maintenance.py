@@ -13,6 +13,7 @@ import certifi
 import numpy as np
 import asyncio
 import logging
+import traceback
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -24,12 +25,8 @@ UK_TZ = ZoneInfo("Europe/London")
 class MaintenanceConfig:
     """All maintenance-related settings"""
     
-    # Topic article limits by age
-    TOPIC_LIMITS = {
-        "new": {"max_age_days": 7, "max_articles": 30},
-        "active": {"max_age_days": 30, "max_articles": 15},
-        "mature": {"max_age_days": None, "max_articles": 10}
-    }
+    # Universal flat cap to prevent token bloat without deleting history
+    MAX_ARTICLES_PER_TOPIC = 20
     
     # Topic lifecycle thresholds (days)
     TOPIC_STALE_DAYS = 14          # Topics become stale after 14 days of no activity
@@ -88,10 +85,13 @@ class MaintenanceService:
             logger.error(f"Error creating indexes: {e}")
     
     def cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calculate cosine similarity between two vectors"""
-        dot_product = np.dot(vec1, vec2)
-        norm_product = np.linalg.norm(vec1) * np.linalg.norm(vec2)
-        return float(dot_product / norm_product) if norm_product != 0 else 0.0
+        """Calculate cosine similarity safely"""
+        try:
+            dot_product = np.dot(vec1, vec2)
+            norm_product = np.linalg.norm(vec1) * np.linalg.norm(vec2)
+            return float(dot_product / norm_product) if norm_product != 0 else 0.0
+        except Exception:
+            return 0.0
     
     def rank_article(self, article: Dict[str, Any], topic: Dict[str, Any], now: datetime) -> float:
         """Calculate ranking score for an article within its topic"""
@@ -114,7 +114,8 @@ class MaintenanceService:
         score += source_score * weights["source_priority"]
         
         # 3. Similarity to centroid score (0-1)
-        if "embedding" in article and "centroid_embedding" in topic:
+        # Added safety check for missing embeddings
+        if article.get("embedding") and topic.get("centroid_embedding"):
             article_emb = np.array(article["embedding"])
             centroid_emb = np.array(topic["centroid_embedding"])
             score += self.cosine_similarity(article_emb, centroid_emb) * weights["similarity_to_centroid"]
@@ -128,106 +129,95 @@ class MaintenanceService:
         
         return score
     
-    def get_topic_age_category(self, topic: Dict[str, Any]) -> str:
-        """Determine topic age category"""
-        created_at = topic.get("created_at", datetime.now(UK_TZ))
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=UK_TZ)
-            
-        age_days = (datetime.now(UK_TZ) - created_at).days
-        
-        if age_days <= self.config.TOPIC_LIMITS["new"]["max_age_days"]:
-            return "new"
-        elif age_days <= self.config.TOPIC_LIMITS["active"]["max_age_days"]:
-            return "active"
-        else:
-            return "mature"
-    
     async def trim_topic_articles(self, topic_id: str) -> Dict[str, Any]:
         """
-        Trim articles from a topic if it exceeds limits.
-        FIXED: Centroid is now calculated in-memory without double-querying the DB.
+        Trim articles from a topic if it exceeds the flat MAX_ARTICLES_PER_TOPIC limit.
+        Safely handles missing embeddings to prevent crashes.
         """
-        topic = await self.topics_collection.find_one({"_id": topic_id})
-        if not topic:
-            return {"error": "Topic not found"}
-        
-        age_category = self.get_topic_age_category(topic)
-        max_articles = self.config.TOPIC_LIMITS[age_category]["max_articles"]
-        current_count = len(topic.get("article_ids", []))
-        
-        if current_count <= max_articles:
-            return {"trimmed": 0, "retained": current_count}
-        
-        articles = []
-        cursor = self.articles_collection.find({"_id": {"$in": topic["article_ids"]}})
-        async for article in cursor:
-            articles.append(article)
-        
-        now = datetime.now(UK_TZ)
-        ranked_articles = []
-        for article in articles:
-            score = self.rank_article(article, topic, now)
-            ranked_articles.append({
-                "article": article,
-                "score": score,
-                "is_seed": article["_id"] == topic["article_ids"][0]
-            })
-        
-        # Sort by score (keep seed article safe at the top)
-        ranked_articles.sort(key=lambda x: (x["is_seed"], x["score"]), reverse=True)
-        
-        to_keep = ranked_articles[:max_articles]
-        to_remove = ranked_articles[max_articles:]
-        
-        kept_ids = [item["article"]["_id"] for item in to_keep]
-        removed_ids = [item["article"]["_id"] for item in to_remove]
-        
-        # 1. Safely detach and archive removed articles
-        if removed_ids:
-            await self.articles_collection.update_many(
-                {"_id": {"$in": removed_ids}},
-                {
-                    "$set": {
-                        "status": "archived_from_topic",
-                        "archived_at": now,
-                        "former_topic_id": topic_id
-                    },
-                    "$unset": {"topic_id": ""}
-                }
-            )
-        
-        # 2. Recalculate centroid instantly in memory (saves a DB query!)
-        kept_embeddings = [
-            np.array(item["article"]["embedding"]) 
-            for item in to_keep if "embedding" in item["article"]
-        ]
-        new_centroid = np.mean(kept_embeddings, axis=0) if kept_embeddings else None
+        try:
+            topic = await self.topics_collection.find_one({"_id": topic_id})
+            if not topic:
+                return {"error": "Topic not found"}
+            
+            max_articles = self.config.MAX_ARTICLES_PER_TOPIC
+            current_count = len(topic.get("article_ids", []))
+            
+            if current_count <= max_articles:
+                return {"trimmed": 0, "retained": current_count}
+            
+            articles = []
+            cursor = self.articles_collection.find({"_id": {"$in": topic["article_ids"]}})
+            async for article in cursor:
+                articles.append(article)
+            
+            now = datetime.now(UK_TZ)
+            ranked_articles = []
+            
+            # The first article in the list is usually the seed that started the topic
+            seed_id = str(topic["article_ids"][0]) if topic.get("article_ids") else None
+            
+            for article in articles:
+                score = self.rank_article(article, topic, now)
+                ranked_articles.append({
+                    "article": article,
+                    "score": score,
+                    "is_seed": str(article["_id"]) == seed_id
+                })
+            
+            # Sort by score (keep seed article absolutely safe at the top)
+            ranked_articles.sort(key=lambda x: (x["is_seed"], x["score"]), reverse=True)
+            
+            to_keep = ranked_articles[:max_articles]
+            to_remove = ranked_articles[max_articles:]
+            
+            kept_ids = [item["article"]["_id"] for item in to_keep]
+            removed_ids = [item["article"]["_id"] for item in to_remove]
+            
+            # 1. Safely detach and archive removed articles
+            if removed_ids:
+                await self.articles_collection.update_many(
+                    {"_id": {"$in": removed_ids}},
+                    {
+                        "$set": {
+                            "status": "archived_from_topic",
+                            "archived_at": now,
+                            "former_topic_id": topic_id
+                        },
+                        "$unset": {"topic_id": ""}
+                    }
+                )
+            
+            # 2. Recalculate centroid instantly in memory securely
+            kept_embeddings = [
+                np.array(item["article"]["embedding"]) 
+                for item in to_keep if item["article"].get("embedding") is not None
+            ]
+            new_centroid = np.mean(kept_embeddings, axis=0) if kept_embeddings else None
 
-        # 3. Update the topic
-        update_doc = {
-            "article_ids": kept_ids,
-            "article_count": len(kept_ids),
-            "last_trimmed": now
-        }
-        if new_centroid is not None:
-            update_doc["centroid_embedding"] = new_centroid.tolist()
+            # 3. Update the topic
+            update_doc = {
+                "article_ids": kept_ids,
+                "article_count": len(kept_ids),
+                "last_trimmed": now
+            }
+            if new_centroid is not None:
+                update_doc["centroid_embedding"] = new_centroid.tolist()
 
-        await self.topics_collection.update_one({"_id": topic_id}, {"$set": update_doc})
-        
-        return {
-            "trimmed": len(removed_ids),
-            "retained": len(kept_ids),
-            "age_category": age_category,
-            "max_allowed": max_articles
-        }
+            await self.topics_collection.update_one({"_id": topic_id}, {"$set": update_doc})
+            
+            return {
+                "trimmed": len(removed_ids),
+                "retained": len(kept_ids),
+                "max_allowed": max_articles
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to trim topic {topic_id}: {e}")
+            traceback.print_exc()
+            return {"error": str(e)}
     
     async def purge_deleted_articles(self) -> int:
-        """
-        FIXED: Acts as a pure garbage collector.
-        Permanently deletes articles that have ALREADY been safely detached 
-        from topics and have aged out of the archive grace period.
-        """
+        """Permanently deletes completely detached articles past grace period."""
         delete_cutoff = datetime.now(UK_TZ) - timedelta(days=self.config.ARCHIVED_ARTICLE_PURGE_DAYS)
         
         result = await self.articles_collection.delete_many({
@@ -238,7 +228,6 @@ class MaintenanceService:
             ]},
             "archived_at": {"$lt": delete_cutoff}
         })
-        
         return result.deleted_count
     
     async def cleanup_orphan_articles(self) -> int:
@@ -264,7 +253,6 @@ class MaintenanceService:
         now = datetime.now(UK_TZ)
         stats = {"marked_stale": 0, "marked_archived": 0, "deleted": 0}
         
-        # 1. Active → Stale
         stale_cutoff = now - timedelta(days=self.config.TOPIC_STALE_DAYS)
         result = await self.topics_collection.update_many(
             {"status": "active", "last_updated": {"$lt": stale_cutoff}},
@@ -272,7 +260,6 @@ class MaintenanceService:
         )
         stats["marked_stale"] = result.modified_count
         
-        # 2. Stale → Archived
         archive_cutoff = now - timedelta(days=self.config.TOPIC_ARCHIVE_DAYS)
         result = await self.topics_collection.update_many(
             {"status": "stale", "stale_since": {"$lt": archive_cutoff}},
@@ -280,7 +267,6 @@ class MaintenanceService:
         )
         stats["marked_archived"] = result.modified_count
         
-        # 3. Archived → Deleted
         delete_cutoff = now - timedelta(days=self.config.TOPIC_DELETE_DAYS)
         cursor = self.topics_collection.find({
             "status": "archived",
@@ -288,7 +274,6 @@ class MaintenanceService:
         })
         
         async for topic in cursor:
-            # Safely detach articles first!
             await self.articles_collection.update_many(
                 {"topic_id": topic["_id"]},
                 {
@@ -310,7 +295,6 @@ class MaintenanceService:
         
         deleted = 0
         async for topic in cursor:
-            # Revert articles back to pending so they might cluster elsewhere
             await self.articles_collection.update_many(
                 {"topic_id": topic["_id"]},
                 {
@@ -335,7 +319,6 @@ class MaintenanceService:
             "articles_trimmed": 0
         }
         
-        # 1. Trim oversized topics (Streaming Cursor to save RAM)
         logger.info("\n[1/5] Trimming oversized topics...")
         cursor = self.topics_collection.find({"status": "active"})
         async for topic in cursor:
@@ -344,19 +327,15 @@ class MaintenanceService:
                 stats["topics_trimmed"] += 1
                 stats["articles_trimmed"] += result["trimmed"]
         
-        # 2. Garbage Collection (Purge deleted articles)
         logger.info("\n[2/5] Purging permanently deleted articles...")
         stats["articles_purged"] = await self.purge_deleted_articles()
         
-        # 3. Clean up orphans
         logger.info("\n[3/5] Cleaning up orphan articles...")
         stats["orphans_cleaned"] = await self.cleanup_orphan_articles()
         
-        # 4. Update topic lifecycle
         logger.info("\n[4/5] Updating topic lifecycle...")
         stats["topics_lifecycle"] = await self.update_topic_lifecycle()
         
-        # 5. Clean up small topics
         logger.info("\n[5/5] Cleaning up small topics...")
         stats["small_topics_deleted"] = await self.cleanup_small_topics()
         

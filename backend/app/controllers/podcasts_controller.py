@@ -51,8 +51,8 @@ class PodcastVoice(str, Enum):
 VOICE_CONFIGS = {
     PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       # Stable, high-clarity anchor for technical reporting
     PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            # Grounded baritone with premium authoritative resonance
-    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Zephyr",    # Highly dynamic with natural breath and conversational arc
-    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Schedar",     # Versatile narrator with modern podcast-host pacing
+    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Leda",    # Highly dynamic with natural breath and conversational arc
+    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Puck",     # Versatile narrator with modern podcast-host pacing
     PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", # Sophisticated reporter with superior punctuation handling
     PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  # Clinical precision for data-heavy and technical analysis
 }

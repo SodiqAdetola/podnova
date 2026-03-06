@@ -361,6 +361,18 @@ async def get_user_podcasts(
     cursor = db["podcasts"].find(query).sort("created_at", -1).skip(skip).limit(limit)
     
     async for podcast in cursor:
+        # Check if topic is updated
+        has_update = False
+        if not podcast.get("is_custom") and podcast.get("topic_id"):
+            topic = await db["topics"].find_one(
+                {"_id": ObjectId(podcast["topic_id"])}, 
+                {"last_updated": 1} # Only fetch what we need for speed
+            )
+            if topic and "last_updated" in topic and "created_at" in podcast:
+                # If the topic was updated AFTER the podcast was created
+                if topic["last_updated"] > podcast["created_at"]:
+                    has_update = True
+
         podcasts.append({
             "id": str(podcast["_id"]),
             "topic_id": str(podcast["topic_id"]) if podcast.get("topic_id") else None,
@@ -378,7 +390,8 @@ async def get_user_podcasts(
             "credits_used": podcast.get("credits_used", 0),
             "created_at": podcast["created_at"].isoformat() if isinstance(podcast.get("created_at"), datetime) else podcast.get("created_at"),
             "completed_at": podcast.get("completed_at").isoformat() if isinstance(podcast.get("completed_at"), datetime) else podcast.get("completed_at"),
-            "error_message": podcast.get("error_message")
+            "error_message": podcast.get("error_message"),
+            "has_topic_update": has_update
         })
     
     return podcasts
@@ -433,6 +446,15 @@ async def regenerate_podcast(
     if not podcast:
         raise ValueError("Podcast not found")
     
+    # 🚨 CRITICAL FIX: Delete the old audio files from Cloud Storage
+    if podcast.get("audio_url"):
+        try:
+            from app.services.storage_service import storage_service
+            # Delete the old files so we don't pay for orphaned data
+            await storage_service.delete_podcast_files(podcast_id)
+        except Exception as e:
+            print(f"Warning: Failed to delete old storage files during regeneration: {e}")
+    
     # Update settings if provided
     update_fields = {"updated_at": datetime.utcnow(), "status": PodcastStatus.PENDING}
     
@@ -448,7 +470,7 @@ async def regenerate_podcast(
     if focus_areas is not None:
         update_fields["focus_areas"] = focus_areas
     
-    # Clear previous results
+    # Clear previous results so the UI knows it is empty
     update_fields.update({
         "script": None,
         "audio_url": None,
@@ -463,7 +485,7 @@ async def regenerate_podcast(
         {"$set": update_fields}
     )
     
-    # Only pass podcast_id
+    # Start the generation task in the background
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {

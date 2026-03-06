@@ -5,7 +5,7 @@ Handles podcast audio and transcript file uploads
 """
 from firebase_admin import storage
 from typing import Tuple
-
+import time
 
 class StorageService:
     """Service for managing file uploads to Firebase Storage"""
@@ -28,17 +28,13 @@ class StorageService:
     ) -> Tuple[str, str]:
         """
         Upload podcast audio and transcript to Firebase Storage
-        
-        Args:
-            podcast_id: The podcast ID (used for file paths)
-            audio_data: The audio file bytes
-            script: The podcast script text
-            
-        Returns:
-            Tuple of (audio_url, transcript_url)
+        Appends a timestamp to bypass frontend caching on regeneration.
         """
-        # Upload audio
-        audio_blob = self.bucket.blob(f"podcasts/{podcast_id}/audio.mp3")
+        # Create a unique timestamp for this generation
+        timestamp = int(time.time())
+        
+        # Upload audio with timestamped name
+        audio_blob = self.bucket.blob(f"podcasts/{podcast_id}/audio_{timestamp}.mp3")
         audio_blob.upload_from_string(
             audio_data,
             content_type="audio/mpeg"
@@ -46,8 +42,8 @@ class StorageService:
         audio_blob.make_public()
         audio_url = audio_blob.public_url
         
-        # Upload transcript
-        transcript_blob = self.bucket.blob(f"podcasts/{podcast_id}/transcript.txt")
+        # Upload transcript with timestamped name
+        transcript_blob = self.bucket.blob(f"podcasts/{podcast_id}/transcript_{timestamp}.txt")
         transcript_blob.upload_from_string(
             script,
             content_type="text/plain"
@@ -59,18 +55,23 @@ class StorageService:
     
     async def delete_podcast_files(self, podcast_id: str) -> bool:
         """
-        Delete podcast files from Firebase Storage
-        
-        Args:
-            podcast_id: The podcast ID
-            
-        Returns:
-            True if deletion was successful
+        Delete all podcast files from Firebase Storage for a specific ID.
+        Uses prefix deletion to catch files regardless of their timestamp.
         """
         try:
-            self.bucket.blob(f"podcasts/{podcast_id}/audio.mp3").delete()
-            self.bucket.blob(f"podcasts/{podcast_id}/transcript.txt").delete()
+            # List all files in this podcast's "folder" and delete them
+            blobs = self.bucket.list_blobs(prefix=f"podcasts/{podcast_id}/")
+            
+            deleted_count = 0
+            for blob in blobs:
+                blob.delete()
+                deleted_count += 1
+                
+            print(f"Deleted {deleted_count} files for podcast {podcast_id}")
             return True
         except Exception as e:
             print(f"Error deleting podcast files: {str(e)}")
             return False
+
+# Initialize a singleton instance to be imported by controllers
+storage_service = StorageService()

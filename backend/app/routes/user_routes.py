@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.middleware.firebase_auth import verify_firebase_token
 from app.controllers.user_controller import (
     create_user_profile,
+    delete_user_account,
     get_user_profile,
     update_user_preferences,
     save_push_token,
@@ -194,6 +195,29 @@ async def report_reply_endpoint(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    
+    
+@router.delete("/account")
+async def delete_account_endpoint(firebase_user=Depends(verify_firebase_token)):
+    """
+    Permanently delete the current user's account and all associated data.
+    """
+    try:
+        user_uid = firebase_user["uid"]
+        success = await delete_user_account(user_uid)
+        
+        if success:
+            return {"status": "success", "message": "Account successfully deleted."}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete account data."
+            )
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

@@ -4,6 +4,10 @@ from typing import Optional, Dict, List
 from bson import ObjectId
 from app.db import db
 from app.models.user import UserProfile, UserPreferences
+from backend.app.middleware import firebase_auth
+from backend.app.services.storage_service import StorageService
+
+storage_service = StorageService()
 
 
 async def create_user_profile(firebase_user: dict) -> UserProfile:
@@ -172,3 +176,59 @@ async def report_reply_content(reply_id: str, reporter_uid: str) -> bool:
             {"$inc": {"report_count": 1}}
         )
     return True
+
+
+async def delete_user_account(user_uid: str) -> bool:
+    """
+    Completely delete a user's account and all associated data.
+    This is a destructive, non-reversible operation.
+    """
+    try:
+        # 1. Delete Podcasts and Audio Files from Storage
+        podcasts_cursor = db["podcasts"].find({"user_id": user_uid})
+        async for podcast in podcasts_cursor:
+            podcast_id = str(podcast["_id"])
+            if podcast.get("audio_url"):
+                try:
+                    await storage_service.delete_podcast_files(podcast_id)
+                except Exception as e:
+                    print(f"Failed to delete storage files for {podcast_id}: {e}")
+        
+        # Delete podcast documents
+        await db["podcasts"].delete_many({"user_id": user_uid})
+
+        # 2. Delete Discussions
+        # First, find all discussions created by this user to clean up their replies
+        user_discussions = db["discussions"].find({"user_id": user_uid})
+        async for disc in user_discussions:
+            await db["replies"].delete_many({"discussion_id": str(disc["_id"])})
+            await db["discussion_views"].delete_many({"discussion_id": str(disc["_id"])})
+            await db["discussion_upvotes"].delete_many({"discussion_id": str(disc["_id"])})
+            
+        await db["discussions"].delete_many({"user_id": user_uid})
+
+        # 3. Delete Replies and Upvotes (if they replied to other people's discussions)
+        await db["replies"].delete_many({"user_id": user_uid})
+        await db["discussion_upvotes"].delete_many({"user_id": user_uid})
+        await db["reply_upvotes"].delete_many({"user_id": user_uid})
+        await db["discussion_views"].delete_many({"user_id": user_uid})
+
+        # 4. Delete Notifications
+        await db["notifications"].delete_many({"user_id": user_uid})
+
+        # 5. Delete User Profile from MongoDB
+        await db["users"].delete_one({"firebase_uid": user_uid})
+
+        # 6. Delete User from Firebase Auth
+        try:
+            firebase_auth.delete_user(user_uid)
+        except Exception as e:
+            print(f"Warning: Failed to delete user from Firebase Auth: {e}")
+            # If user doesn't exist in Firebase, we still want to return True 
+            # because the DB cleanup was successful.
+
+        return True
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise ValueError(f"Failed to delete account: {str(e)}")

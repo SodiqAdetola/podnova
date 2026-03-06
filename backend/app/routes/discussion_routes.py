@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import Optional, List
 from app.middleware.firebase_auth import verify_firebase_token, require_firebase_token
+from app.middleware.rate_limit import RateLimit
 from app.controllers.discussion_controller import (
     create_community_discussion,
     get_discussions,
@@ -15,6 +16,12 @@ from app.models.discussion import CreateDiscussionRequest
 import traceback
 
 router = APIRouter()
+
+# --- RATE LIMITERS ---
+# Prevent database flooding and spam
+create_discussion_limit = RateLimit(limit=4, window_minutes=60, action_name="create_discussion")
+create_reply_limit = RateLimit(limit=15, window_minutes=5, action_name="create_reply")
+
 
 @router.get("/")
 async def list_discussions(
@@ -100,7 +107,8 @@ async def get_discussion(
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_discussion_endpoint(
     request: CreateDiscussionRequest,
-    firebase_user: dict = Depends(require_firebase_token)
+    # Injecting the Rate Limit dependency here
+    firebase_user: dict = Depends(create_discussion_limit)
 ):
     """
     Create a new community discussion
@@ -134,7 +142,8 @@ async def create_reply_endpoint(
     discussion_id: str,
     content: str = Query(..., description="Reply content"),
     parent_reply_id: Optional[str] = Query(None, description="Parent reply ID for nested replies"),
-    firebase_user: dict = Depends(require_firebase_token)
+    # Injecting the Rate Limit dependency here
+    firebase_user: dict = Depends(create_reply_limit)
 ):
     """
     Create a reply to a discussion

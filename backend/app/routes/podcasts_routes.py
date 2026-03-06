@@ -17,8 +17,13 @@ from app.controllers.podcasts_controller import (
     PodcastStyle,
     PodcastVoice
 )
+from app.middleware.rate_limit import RateLimit
 
 router = APIRouter()
+
+
+
+generate_podcast_limit = RateLimit(limit=5, window_minutes=60, action_name="generate_podcast")
 
 
 # Pydantic models for request/response
@@ -42,7 +47,7 @@ class RegeneratePodcastRequest(BaseModel):
 @router.post("/generate")
 async def generate_podcast(
     request: CreatePodcastRequest,
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user=Depends(generate_podcast_limit)
 ):
     """
     Generate a new podcast from a topic
@@ -88,7 +93,7 @@ async def generate_custom_podcast_endpoint(
     voice: str = Form(PodcastVoice.CALM_FEMALE),
     style: str = Form(PodcastStyle.STANDARD),
     length_minutes: int = Form(5),
-    firebase_user=Depends(verify_firebase_token)
+    firebase_user=Depends(generate_podcast_limit)
 ):
     """
     Generate a custom podcast from uploaded files and prompts.

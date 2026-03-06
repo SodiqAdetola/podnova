@@ -8,6 +8,7 @@ import asyncio
 import concurrent.futures
 from functools import partial
 import re
+from datetime import datetime
 from google import genai
 from app.config import GEMINI_API_KEY
 from app.db import db
@@ -37,19 +38,19 @@ class ScriptService:
             "approach": "Balanced and professional",
             "depth": "Provide comprehensive coverage of the topic. Explain key concepts clearly while diving into important details.",
             "analysis": "Explore both 'what happened' and 'why it matters'. Include context, multiple perspectives, and immediate implications.",
-            "language": "Clear professional language. Explain technical terms when used. Well-structured narrative flow.",
+            "language": "Clear professional language. Use industry terms but keep the surrounding sentence structure accessible.",
             "audience": "Informed readers who follow news regularly"
         },
         "expert": {
             "approach": "In-depth and critical",
             "depth": "Go beyond surface-level reporting. Analyze underlying factors, systemic issues, and broader patterns. Connect to related developments and historical context.",
-            "analysis": "Critical examination of causes, effects, and stakeholder motivations. Question assumptions. Explore second and third-order consequences. Compare with similar past events.",
-            "language": "Industry terminology is fine but should serve analysis, not replace it. Focus on substance over vocabulary.",
+            "analysis": "Critical examination of causes, effects, and stakeholder motivations. Question assumptions. Explore second and third-order consequences.",
+            "language": "Industry terminology is expected, but it must serve the analysis, not replace it. Focus on substance over unnecessarily complex adjectives.",
             "audience": "Professionals and enthusiasts with domain knowledge"
         }
     }
 
-    # Narrative Lens Configuration: Anchors the story without restricting natural intersections
+    # Narrative Lens Configuration
     CATEGORY_INSTRUCTIONS = {
         "finance": "Anchor the narrative in a financial and economic perspective. Highlight market impact, business strategy, and economic consequences. You may discuss tech, politics, or social elements if they are relevant, but ensure they ultimately tie back to the money and markets.",
         "technology": "Anchor the narrative in a technology and innovation perspective. Highlight how the tech works, industry trends, and its impact on the digital landscape. You may discuss business or political factors if relevant, but ensure the spotlight remains on the technological developments.",
@@ -74,9 +75,17 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
 11. Use Contractions: For example instead of "It is a great day" use "It’s a great day."
 12. Hyphens for Emphasis: Use hyphens to break up technical terms. "The Q-3-report" will sound more natural than "The Q3 report,"
 """
+
+    # NEW: Rules to ensure high intellectual quality but accessible, inclusive vocabulary
+    ACCESSIBILITY_RULES = """
+CRITICAL INCLUSIVITY & VOCABULARY RULES:
+1. ACCESSIBLE INTELLIGENCE: Your analysis must be intellectually rigorous, but your vocabulary MUST remain plain and inclusive. Do not "dumb down" the ideas, but DO simplify the words used to explain them.
+2. BAN AI-SPEAK: Absolutely NO overly academic or cliché AI words. You are strictly forbidden from using words like: "delve", "multifaceted", "myriad", "tapestry", "overarching", "paradigm", "catalyst", "realm", "intricate", "navigate", "foster", or "testament".
+3. INLINE DEFINITIONS: If you must use a complex industry term, acronym, or jargon (e.g., "quantitative easing", "API", "filibuster"), you MUST immediately define it in half a sentence using plain English so all listeners can follow along.
+4. SHORT, PUNCHY SENTENCES: Avoid long, winding sentences with multiple clauses. Keep phrasing direct, conversational, and easy for the ear to process.
+"""
     
     def __init__(self):
-        """Initialize the script service with Gemini client"""
         self.client = genai.Client(api_key=GEMINI_API_KEY)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     
@@ -92,7 +101,11 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
                 raise Exception(f"Topic for podcast {podcast_id} not found")
             
             articles = await self._fetch_articles(topic.get("article_ids", []))
-            prompt = self._build_prompt(podcast, topic, articles)
+            
+            is_update_focus = podcast.get("focus_on_updates", False)
+            podcast_created_at = podcast.get("created_at")
+            
+            prompt = self._build_prompt(podcast, topic, articles, is_update_focus, podcast_created_at)
             
             loop = asyncio.get_running_loop()
             func = partial(
@@ -146,7 +159,7 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
         return text.strip()
     
     async def _fetch_articles(self, article_ids: List[ObjectId]) -> List[Dict]:
-        """Fetch articles from database"""
+        """Fetch articles from database, returning raw dates for sorting logic later"""
         articles = []
         cursor = db["articles"].find(
             {"_id": {"$in": article_ids}}
@@ -157,6 +170,7 @@ This text will be fed directly into a machine text-to-speech engine. ANY special
                 "title": article["title"],
                 "source": article["source"],
                 "content": article.get("content", article.get("description", "")),
+                "published_date_raw": article.get("published_date"), # Keep raw for comparison
                 "published": article["published_date"].strftime("%Y-%m-%d") if article.get("published_date") else "Unknown"
             })
         return articles
@@ -187,7 +201,7 @@ EXPAND by adding MORE DEPTH AND ANALYSIS, not just more words:
 
 CATEGORY LENS: {category_lens}
 
-REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary.
+REMEMBER: We need deeper INSIGHT, not longer sentences or fancier vocabulary. Maintain the strict vocabulary rules from the original prompt.
 
 {self.TTS_STRICT_RULES}
 
@@ -206,21 +220,12 @@ Generate an expanded version with significantly more analytical depth:"""
         response = await loop.run_in_executor(self.executor, func)
         return response.text.strip()
     
-    def _build_prompt(self, podcast: Dict, topic: Dict, articles: List[Dict]) -> str:
-        """Build the prompt for script generation"""
+    def _build_prompt(self, podcast: Dict, topic: Dict, articles: List[Dict], is_update_focus: bool = False, podcast_created_at: datetime = None) -> str:
+        """Build the prompt for script generation, adjusting structure if focusing on updates"""
         style_config = self.STYLE_INSTRUCTIONS[podcast['style']]
-        
-        # Determine the Category Lens
         category_key = topic.get('category', '').lower()
         category_lens = self.CATEGORY_INSTRUCTIONS.get(category_key, self.CATEGORY_INSTRUCTIONS["default"])
         
-        # Format articles
-        articles_text = "\n\n".join([
-            f"**{a['title']}** (Source: {a['source']}, Date: {a['published']})\n{a['content'][:1000]}..."
-            for a in articles[:15]
-        ])
-        
-        # Optional sections
         focus_text = ""
         if podcast.get("focus_areas"):
             focus_text = f"\n\nFOCUS AREAS: Pay special attention to: {', '.join(podcast['focus_areas'])}"
@@ -228,8 +233,88 @@ Generate an expanded version with significantly more analytical depth:"""
         custom_text = ""
         if podcast.get("custom_prompt"):
             custom_text = f"\n\nCUSTOM INSTRUCTIONS: {podcast['custom_prompt']}"
-        
-        prompt = f"""You are a seasoned news narrator creating a spoken monologue for a PodNova podcast. Your script will be read aloud by an AI text-to-speech engine, so it must sound natural, fluid, and engaging—like a thoughtful friend explaining a complex topic.
+
+        # =========================================================
+        # PATH A: UPDATE-FOCUSED REGENERATION
+        # =========================================================
+        if is_update_focus and podcast_created_at:
+            old_articles = []
+            new_articles = []
+            
+            if hasattr(podcast_created_at, 'tzinfo') and podcast_created_at.tzinfo:
+                podcast_created_at = podcast_created_at.replace(tzinfo=None)
+                
+            for a in articles:
+                art_date = a.get("published_date_raw")
+                if art_date:
+                    if hasattr(art_date, 'tzinfo') and art_date.tzinfo:
+                        art_date = art_date.replace(tzinfo=None)
+                    if art_date > podcast_created_at:
+                        new_articles.append(a)
+                    else:
+                        old_articles.append(a)
+                else:
+                    old_articles.append(a)
+            
+            old_text = "\n\n".join([f"**{a['title']}**\n{a['content'][:500]}..." for a in old_articles[:5]])
+            new_text = "\n\n".join([f"**{a['title']}**\n{a['content'][:1000]}..." for a in new_articles[:10]])
+            
+            prompt = f"""You are a seasoned news narrator creating a "Follow-Up / Breaking Update" podcast for PodNova. 
+Your audience already knows the basic background of this story. Your job is to focus heavily on the NEW DEVELOPMENTS while briefly contextualizing them.
+
+TOPIC: {topic['title']}
+CATEGORY: {topic['category'].upper()}
+TARGET LENGTH: {podcast['length_minutes']} minutes
+TARGET WORD COUNT: approximately {podcast['length_minutes'] * 150} words
+COMPREHENSION LEVEL: {podcast['style'].upper()}
+
+NARRATIVE LENS:
+{category_lens}
+
+STYLE PROFILE:
+- Audience: {style_config['audience']}
+- Approach: {style_config['approach']}
+- Depth Required: {style_config['depth']}
+- Analysis Style: {style_config['analysis']}
+
+{self.ACCESSIBILITY_RULES}
+
+{self.TTS_STRICT_RULES}
+
+SOURCE MATERIALS:
+[HISTORICAL CONTEXT (Summarize this very briefly - they already know this part)]:
+{old_text}
+
+[NEW DEVELOPMENTS (THIS IS THE STAR OF THE SHOW. Focus 80% of your time here)]:
+{new_text}
+
+{focus_text}{custom_text}
+
+CONSISTENT INTRO & OUTRO PATTERN:
+**Intro Pattern (10–15 seconds)** - Must mention "PodNova" and "I'm your host". 
+- Frame this as an UPDATE to an ongoing story (e.g., "Welcome back to PodNova... we have major updates regarding [Topic]...").
+**Outro Pattern (10–15 seconds)** - Summarize the key takeaway, thank the listener, mention "PodNova", and sign off.
+
+SCRIPT STRUCTURE:
+1. **The Update Hook** – What is the big new development?
+2. **Brief Refresher** – A 2-3 sentence reminder of how we got here.
+3. **Deep Dive into the New Facts** – What actually happened in the new articles?
+4. **New Implications** – How does this change the outcome of the story?
+
+Write ONLY the spoken words.
+"""
+            return prompt
+
+        # =========================================================
+        # PATH B: STANDARD GENERATION / FULL REGENERATION
+        # =========================================================
+        else:
+            articles_text = "\n\n".join([
+                f"**{a['title']}** (Source: {a['source']}, Date: {a['published']})\n{a['content'][:1000]}..."
+                for a in articles[:15]
+            ])
+            
+            prompt = f"""You are a seasoned news narrator creating a spoken monologue for a PodNova podcast. Your script will be read aloud by an AI text-to-speech engine, so it must sound natural, fluid, and engaging—like a thoughtful friend explaining a complex topic.
 
 TOPIC: {topic['title']}
 CATEGORY: {topic['category'].upper()}
@@ -245,38 +330,31 @@ STYLE PROFILE:
 - Approach: {style_config['approach']}
 - Depth Required: {style_config['depth']}
 - Analysis Style: {style_config['analysis']}
-- Language Guidelines: {style_config['language']}
+
+{self.ACCESSIBILITY_RULES}
 
 {self.TTS_STRICT_RULES}
 
 SOURCE MATERIALS:
-You have {len(articles)} articles covering this topic. Synthesize information from ALL sources, not just one. When sources differ, acknowledge the nuance naturally (e.g., "While some outlets report X, others point to Y...").
+You have {len(articles)} articles covering this topic. Synthesize information from ALL sources, not just one. When sources differ, acknowledge the nuance naturally.
 
 {articles_text}
 
 {focus_text}{custom_text}
 
 CONSISTENT INTRO & OUTRO PATTERN:
-
-**Intro Pattern (10–15 seconds)** - Must mention "PodNova" and "I'm your host".  
-- Include a brief teaser of today's topic.  
-- Transition naturally into the main content.  
-- Keep the tone warm, inviting, and consistent with your overall style.
-
-**Outro Pattern (10–15 seconds)** - Summarize the key takeaway in a concise, memorable way.  
-- Thank the listener.  
-- Mention "PodNova" and sign off.  
+**Intro Pattern (10–15 seconds)** - Must mention "PodNova" and "I'm your host". Include a brief teaser.
+**Outro Pattern (10–15 seconds)** - Summarize the key takeaway. Thank the listener. Mention "PodNova" and sign off.
 
 SCRIPT STRUCTURE:
+1. **Opening Hook** – Grab the listener.
+2. **Context & Background** – Set the stage.
+3. **Core Analysis** – Synthesize the main developments.
+4. **Implications & What's Next** – Broader consequences.
 
-1. **Opening Hook** – Grab the listener with the most compelling angle: a surprising fact, a provocative question, or a vivid scene.
-2. **Context & Background** – Set the stage: What's happening and why does it matter now? Provide essential background.
-3. **Core Analysis** – Synthesize the main developments. Go beyond surface facts. Use specific facts, figures, quotes, and attributions naturally.
-4. **Implications & What's Next** – Who is affected and how? What are the broader consequences?
-
-Now, generate the podcast script. Write ONLY the spoken words, beginning with an intro that follows the consistent pattern and ending with an outro that follows the consistent pattern.
+Write ONLY the spoken words.
 """
-        return prompt
+            return prompt
 
     def _build_custom_prompt(self, podcast: Dict) -> str:
         """Build the prompt specifically for custom file uploads"""
@@ -295,7 +373,8 @@ STYLE PROFILE:
 - Audience: {style_config['audience']}
 - Approach: {style_config['approach']}
 - Depth Required: {style_config['depth']}
-- Language Guidelines: {style_config['language']}
+
+{self.ACCESSIBILITY_RULES}
 
 {self.TTS_STRICT_RULES}
 

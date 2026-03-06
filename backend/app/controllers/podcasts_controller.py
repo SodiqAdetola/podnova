@@ -366,11 +366,21 @@ async def get_user_podcasts(
         if not podcast.get("is_custom") and podcast.get("topic_id"):
             topic = await db["topics"].find_one(
                 {"_id": ObjectId(podcast["topic_id"])}, 
-                {"last_updated": 1} # Only fetch what we need for speed
+                {"last_history_point": 1} # <--- CHANGED THIS TO CHECK HISTORY
             )
-            if topic and "last_updated" in topic and "created_at" in podcast:
-                # If the topic was updated AFTER the podcast was created
-                if topic["last_updated"] > podcast["created_at"]:
+            
+            if topic and topic.get("last_history_point"):
+                # Use completed_at so the tag clears out after regeneration finishes!
+                compare_time = podcast.get("completed_at") or podcast.get("created_at")
+                
+                # Compare timezone-naive datetimes safely
+                topic_time = topic["last_history_point"]
+                if hasattr(topic_time, 'tzinfo') and topic_time.tzinfo:
+                    topic_time = topic_time.replace(tzinfo=None)
+                if hasattr(compare_time, 'tzinfo') and compare_time.tzinfo:
+                    compare_time = compare_time.replace(tzinfo=None)
+
+                if topic_time > compare_time:
                     has_update = True
 
         podcasts.append({
@@ -439,7 +449,8 @@ async def regenerate_podcast(
     style: Optional[str] = None,
     length_minutes: Optional[int] = None,
     custom_prompt: Optional[str] = None,
-    focus_areas: Optional[List[str]] = None
+    focus_areas: Optional[List[str]] = None,
+    focus_on_updates: Optional[bool] = False
 ) -> Dict:
     """Regenerate an existing podcast with updated settings"""
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
@@ -478,7 +489,8 @@ async def regenerate_podcast(
         "duration_seconds": None,
         "error_message": None,
         "completed_at": None,
-        "is_regenerated": True
+        "is_regenerated": True,
+        "focus_on_updates": focus_on_updates
     })
     
     await db["podcasts"].update_one(

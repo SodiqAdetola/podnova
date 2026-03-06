@@ -42,6 +42,7 @@ class RegeneratePodcastRequest(BaseModel):
     length_minutes: Optional[int] = Field(None, ge=1, le=30)
     custom_prompt: Optional[str] = None
     focus_areas: Optional[List[str]] = None
+    focus_on_updates: Optional[bool] = False
 
 
 @router.post("/generate")
@@ -245,7 +246,8 @@ async def regenerate_podcast_endpoint(
             style=request.style,
             length_minutes=request.length_minutes,
             custom_prompt=request.custom_prompt,
-            focus_areas=request.focus_areas
+            focus_areas=request.focus_areas,
+            focus_on_updates=request.focus_on_updates
         )
         
         return result

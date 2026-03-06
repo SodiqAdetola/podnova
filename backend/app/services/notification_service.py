@@ -214,13 +214,13 @@ class NotificationService:
 
         # 2. Set dynamic titles and messages based on inferred type
         if podcast_type == "custom":
-            title = "Your Custom Podcast is Ready"
+            title = "Your Custom Podcast is Ready!"
             message = f"Your studio podcast '{topic_title[:50]}...' has been generated."
         elif podcast_type == "regenerated":
-            title = "Your Regenerated Podcast is Ready"
+            title = "Your Regenerated Podcast is Ready!"
             message = f"Your updated podcast on '{topic_title[:50]}...' is ready to play."
         else:
-            title = "Your Topic Podcast is Ready"
+            title = "Your Topic Podcast is Ready!"
             message = f"Your podcast on '{topic_title[:50]}...' has been generated."
 
         req = CreateNotificationRequest(

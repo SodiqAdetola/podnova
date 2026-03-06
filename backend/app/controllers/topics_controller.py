@@ -60,13 +60,13 @@ async def get_topics_by_category(
     }
     
     if sort_by == "latest":
-        sort = [("last_updated", -1)]
+        sort = [("last_updated", -1), ("_id", -1)]
     elif sort_by == "reliable":
-        sort = [("confidence", -1), ("article_count", -1)]
+        sort = [("confidence", -1), ("article_count", -1), ("_id", -1)]
     elif sort_by == "most_discussed":
-        sort = [("article_count", -1)]
+        sort = [("article_count", -1), ("_id", -1)]
     else:
-        sort = [("last_updated", -1)]
+        sort = [("last_updated", -1), ("_id", -1)]
     
     # APPLY THE PAGINATION HERE INSTEAD OF HARDCODING .limit(50)
     cursor = db["topics"].find(query).sort(sort).skip(skip).limit(limit)
@@ -317,8 +317,8 @@ async def search_topics(query: str, category: Optional[str] = None, limit: int =
         
         # 3. SCORE & PROJECTION STAGE
         # We sort by the search score (relevance)
-        pipeline.append({"$sort": {"score": {"$meta": "searchScore"}}})
-        
+        pipeline.append({"$sort": {"score": {"$meta": "searchScore"}, "_id": -1}})       
+         
         # 4. PAGINATION
         pipeline.append({"$skip": skip})
         pipeline.append({"$limit": limit})

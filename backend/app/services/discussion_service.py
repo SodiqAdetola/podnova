@@ -123,7 +123,7 @@ class DiscussionService:
                     match_query["discussion_type"] = discussion_type
                     
                 pipeline.append({"$match": match_query})
-                pipeline.append({"$sort": {"score": {"$meta": "searchScore"}}})
+                pipeline.append({"$sort": {"score": {"$meta": "searchScore"}, "_id": -1}})
                 pipeline.append({"$skip": skip})
                 pipeline.append({"$limit": limit})
                 
@@ -147,9 +147,11 @@ class DiscussionService:
                             {"discussion_type": "topic", "reply_count": {"$gt": 0}}
                         ]
                 
-                sort = [("last_activity", -1)]
-                if sort_by == "most_discussed": sort = [("reply_count", -1)]
-                elif sort_by == "most_viewed": sort = [("unique_view_count", -1)]
+                sort = [("last_activity", -1), ("_id", -1)]
+                if sort_by == "most_discussed": 
+                    sort = [("reply_count", -1), ("_id", -1)]
+                elif sort_by == "most_viewed": 
+                    sort = [("unique_view_count", -1), ("_id", -1)]
                 
                 cursor = db["discussions"].find(query).sort(sort).skip(skip).limit(limit)
                 return await self._process_cursor(cursor, user_id)

@@ -18,20 +18,15 @@ router = APIRouter()
 async def search_topics_endpoint(
     q: str = Query(..., min_length=1, description="Search query"),
     category: Optional[str] = Query(None, description="Filter by category"),
-    limit: int = Query(50, ge=1, le=100, description="Maximum results to return")
+    limit: int = Query(50, ge=1, le=100, description="Maximum results to return"),
+    skip: int = Query(0, ge=0, description="Pagination offset") # 👈 FIXED: ADDED SKIP
 ):
     """
     Search topics by query string
-    
-    Searches across:
-    - Topic titles
-    - Summaries  
-    - Categories
-    
-    Returns matching topics sorted by relevance.
     """
     try:
-        result = await search_topics(q, category, limit)
+        # 👈 FIXED: PASS SKIP TO CONTROLLER
+        result = await search_topics(q, category, limit, skip) 
         return result
         
     except Exception as e:

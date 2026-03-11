@@ -1,6 +1,18 @@
 // frontend/src/components/ProfileSettings.tsx
 import React, { useState } from "react";
-import { View, LayoutAnimation, Alert, ActivityIndicator, StyleSheet, Text } from "react-native";
+import { 
+  View, 
+  LayoutAnimation, 
+  Alert, 
+  ActivityIndicator, 
+  StyleSheet, 
+  Text,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform
+} from "react-native";
 import { getAuth, deleteUser } from "firebase/auth";
 import { useAudio } from "../contexts/AudioContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +21,7 @@ import VoiceSelector from "./modals/VoiceSelectorModal";
 import AIStyleSelector from "./modals/StyleSelectorModal";
 import PodcastLengthSelector from "./modals/LengthSelectorModal";
 import BlockedUsersModal from "./modals/BlockedUserModal";
+import { Ionicons } from "@expo/vector-icons";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -23,6 +36,10 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onProfil
   const [showAIStyleSelector, setShowAIStyleSelector] = useState(false);
   const [showLengthSelector, setShowLengthSelector] = useState(false);
   const [showBlockedUsers, setShowBlockedUsers] = useState(false);
+  
+  // --- Account Deletion State ---
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
 
   const { stopPlayback } = useAudio();
   const queryClient = useQueryClient();
@@ -50,7 +67,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onProfil
       });
 
       if (!response.ok) throw new Error("Failed to update");
-      onProfileUpdated(); // Tell parent to fetch new data so UI stays in sync
+      onProfileUpdated(); 
     } catch (error) {
       console.error("Error updating preference:", error);
       Alert.alert("Error", "Failed to update preferences.");
@@ -60,52 +77,47 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onProfil
   };
 
   // --- API LOGIC FOR ACCOUNT DELETION ---
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "Are you absolutely sure? This will permanently delete your profile, podcasts, discussions, and settings. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete My Account", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setUpdating(true);
-              const auth = getAuth();
-              const user = auth.currentUser;
-              if (!user) return;
+  const confirmDeleteIntent = () => {
+    setDeleteConfirmationText("");
+    setShowDeleteModal(true);
+  };
 
-              const token = await user.getIdToken(true);
-              
-              const response = await fetch(`${API_BASE_URL}/users/account`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
-              });
+  const executeAccountDeletion = async () => {
+    if (deleteConfirmationText !== "DELETE") return;
 
-              if (!response.ok) throw new Error("Failed to delete backend data");
+    try {
+      setUpdating(true);
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) return;
 
-              await stopPlayback();
-              queryClient.clear();
-              await deleteUser(user);
-              
-            } catch (error: any) {
-              console.error("Account deletion error:", error);
-              if (error.code === 'auth/requires-recent-login') {
-                Alert.alert(
-                  "Authentication Required", 
-                  "For security reasons, please log out and log back in before deleting your account."
-                );
-              } else {
-                Alert.alert("Error", "Could not delete account. Please try again later.");
-              }
-            } finally {
-              setUpdating(false);
-            }
-          }
-        }
-      ]
-    );
+      const token = await user.getIdToken(true);
+      
+      const response = await fetch(`${API_BASE_URL}/users/account`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Failed to delete backend data");
+
+      await stopPlayback();
+      queryClient.clear();
+      await deleteUser(user);
+      
+    } catch (error: any) {
+      console.error("Account deletion error:", error);
+      setShowDeleteModal(false);
+      if (error.code === 'auth/requires-recent-login') {
+        Alert.alert(
+          "Authentication Required", 
+          "For security reasons, please log out and log back in before deleting your account."
+        );
+      } else {
+        Alert.alert("Error", "Could not delete account. Please try again later.");
+      }
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const formatVoiceName = (voice: string) => voice.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -205,7 +217,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onProfil
           iconColor: "#EF4444",
           destructive: true,
           showChevron: false,
-          onPress: handleDeleteAccount, 
+          onPress: confirmDeleteIntent, // Triggers the modal instead of an alert
         },
       ],
     },
@@ -238,7 +250,65 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onProfil
         onClose={() => setShowBlockedUsers(false)} 
       />
 
-      {updating && (
+      {/* --- ACCOUNT DELETION MODAL --- */}
+      <Modal visible={showDeleteModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalKeyboardWrapper}
+          >
+            <View style={styles.modalContainer}>
+              <View style={styles.modalIconContainer}>
+                <Ionicons name="warning" style={styles.modalIcon} color="#EF4444" />
+              </View>
+              <Text style={styles.modalTitle}>Delete Account?</Text>
+              <Text style={styles.modalWarningText}>
+                This action is irreversible. All your podcasts, discussions, saved items, and settings will be permanently erased.
+              </Text>
+              
+              <Text style={styles.modalInstructionText}>
+                To confirm, type <Text style={styles.boldText}>DELETE</Text> below:
+              </Text>
+              
+              <TextInput
+                style={styles.deleteInput}
+                value={deleteConfirmationText}
+                onChangeText={setDeleteConfirmationText}
+                placeholder="Type DELETE"
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity 
+                  style={styles.cancelButton} 
+                  onPress={() => setShowDeleteModal(false)}
+                  disabled={updating}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.deleteButton, 
+                    deleteConfirmationText !== "DELETE" && styles.deleteButtonDisabled
+                  ]} 
+                  onPress={executeAccountDeletion}
+                  disabled={deleteConfirmationText !== "DELETE" || updating}
+                >
+                  {updating ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {updating && !showDeleteModal && (
         <View style={styles.updateOverlay}>
           <ActivityIndicator size="small" color="#6366F1" />
           <Text style={styles.updateText}>Updating...</Text>
@@ -260,10 +330,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8, 
     borderRadius: 20, 
     shadowColor: "#000", 
-    shadowOffset: { 
-      width: 0, 
-      height: 2, 
-    }, 
+    shadowOffset: { width: 0, height: 2 }, 
     shadowOpacity: 0.1, 
     shadowRadius: 4, 
     elevation: 3, 
@@ -273,6 +340,105 @@ const styles = StyleSheet.create({
     fontSize: 13, 
     color: "#6B7280", 
     fontWeight: "500",
+  },
+  
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalKeyboardWrapper: {
+    width: "100%",
+  },
+  modalContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+  },
+  modalIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalIcon: {
+    fontSize: 28,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 12,
+  },
+  modalWarningText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalInstructionText: {
+    fontSize: 14,
+    color: "#374151",
+    marginBottom: 8,
+    alignSelf: "flex-start",
+  },
+  boldText: {
+    fontWeight: "700",
+    color: "#111827",
+  },
+  deleteInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: "#111827",
+    backgroundColor: "#F9FAFB",
+    marginBottom: 24,
+    textAlign: "center",
+    fontWeight: "600",
+    letterSpacing: 2,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4B5563",
+  },
+  deleteButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonDisabled: {
+    backgroundColor: "#FCA5A5", // Faded red when disabled
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });
 

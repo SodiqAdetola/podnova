@@ -287,3 +287,49 @@ async def get_topic_follow_status(topic_id: str, firebase_user=Depends(verify_fi
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+    
+
+@router.get("/followed-topics")
+async def get_all_followed_topics(firebase_user=Depends(verify_firebase_token)):
+    """Fetch all topics the user is currently following"""
+    try:
+        user_uid = firebase_user["uid"]
+        
+        # 1. Get the mapping documents sorted by newest follows first
+        cursor = db["topic_followers"].find({"user_uid": user_uid}).sort("created_at", -1)
+        followed_docs = await cursor.to_list(length=50)
+        
+        if not followed_docs:
+            return {"topics": []}
+            
+        # 2. Extract valid ObjectIds
+        topic_ids = [ObjectId(doc["topic_id"]) for doc in followed_docs if ObjectId.is_valid(doc["topic_id"])]
+        
+        # 3. Fetch the actual topic data
+        topics_cursor = db["topics"].find({"_id": {"$in": topic_ids}})
+        topics_data = await topics_cursor.to_list(length=50)
+        
+        # 4. Format for the frontend
+        from app.controllers.topics_controller import _format_time_ago
+        
+        results = []
+        for topic in topics_data:
+            last_updated = topic.get("last_updated") or datetime.utcnow()
+            results.append({
+                "id": str(topic["_id"]),
+                "title": topic.get("title") or "Untitled",
+                "category": topic.get("category", "general"),
+                "image_url": topic.get("image_url"),
+                "article_count": topic.get("article_count", 0),
+                "time_ago": _format_time_ago(last_updated)
+            })
+            
+        return {"topics": results}
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

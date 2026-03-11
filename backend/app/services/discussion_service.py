@@ -18,7 +18,6 @@ class DiscussionService:
     async def create_or_get_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str, category: str) -> str:
         """Get or create discussion for a topic"""
         try:
-            print(f"Creating/getting topic discussion for topic: {topic_id}")
             existing = await db["discussions"].find_one({
                 "topic_id": topic_id,
                 "discussion_type": "topic"
@@ -92,21 +91,18 @@ class DiscussionService:
         sort_by: str = "latest",
         limit: int = 10,
         skip: int = 0,
-        user_id: Optional[str] = None,
-        search_query: Optional[str] = None
+        user_id: Optional[str] = None,  # For checking upvote status
+        search_query: Optional[str] = None,
+        author_id: Optional[str] = None # NEW: To fetch specific user's discussions
     ) -> List[Dict]:
         """Search vs Feed Logic"""
         try:
-            print(f"🔍 Getting discussions with filters: type={discussion_type}, topic={topic_id}, category={category}, search={search_query}")
-            
             # --- SCENARIO A: SEARCH MODE ---
             if search_query and search_query.strip():
-                print(f"SMART SEARCH MODE: '{search_query}'")
-                
                 pipeline = [
                     {
                         "$search": {
-                            "index": "default", # Requires Atlas Search Index named 'default' on 'discussions' collection
+                            "index": "default", 
                             "text": {
                                 "query": search_query,
                                 "path": ["title", "description", "category", "tags"],
@@ -121,6 +117,8 @@ class DiscussionService:
                     match_query["category"] = category
                 if discussion_type and discussion_type != "all": 
                     match_query["discussion_type"] = discussion_type
+                if author_id:
+                    match_query["user_id"] = author_id
                     
                 pipeline.append({"$match": match_query})
                 pipeline.append({"$sort": {"score": {"$meta": "searchScore"}, "_id": -1}})
@@ -133,6 +131,10 @@ class DiscussionService:
             # --- SCENARIO B: FEED MODE ---
             else:
                 query = {"is_active": True}
+                
+                if author_id:
+                    query["user_id"] = author_id
+                
                 if topic_id:
                     query["topic_id"] = topic_id
                 else:
@@ -166,7 +168,6 @@ class DiscussionService:
         discussions = []
         async for disc in cursor:
             try:
-                # Handle edge case where aggregate returns doc differently than find
                 d_id = str(disc["_id"])
                 user_has_upvoted = False
                 if user_id:
@@ -202,7 +203,7 @@ class DiscussionService:
         try:
             if not ObjectId.is_valid(discussion_id): return None
             
-            disc = await db["discussions"].find_one({"_id": ObjectId(discussion_id)})
+            disc = await db["discussions"].find_one({"_id": ObjectId(discussion_id), "is_active": True})
             if not disc: return None
             
             if user_id:
@@ -244,6 +245,51 @@ class DiscussionService:
         except Exception:
             traceback.print_exc()
             return None
+
+    # --- NEW EDIT AND DELETE FOR DISCUSSIONS ---
+    async def update_discussion(self, discussion_id: str, user_id: str, title: str, description: str) -> Optional[Dict]:
+        """Update a discussion (Requires ownership)"""
+        try:
+            if not ObjectId.is_valid(discussion_id): return None
+            
+            disc = await db["discussions"].find_one({"_id": ObjectId(discussion_id)})
+            if not disc or disc.get("user_id") != user_id: 
+                return None # Unauthorized or not found
+                
+            update_data = {
+                "title": title,
+                "description": description,
+                "last_activity": datetime.utcnow(), # Bump activity on edit
+                "is_edited": True
+            }
+            
+            await db["discussions"].update_one(
+                {"_id": ObjectId(discussion_id)}, 
+                {"$set": update_data}
+            )
+            
+            return await self.get_discussion_by_id(discussion_id, user_id)
+        except Exception as e:
+            traceback.print_exc()
+            return None
+
+    async def delete_discussion(self, discussion_id: str, user_id: str) -> bool:
+        """Soft delete a discussion (Requires ownership)"""
+        try:
+            if not ObjectId.is_valid(discussion_id): return False
+            
+            disc = await db["discussions"].find_one({"_id": ObjectId(discussion_id)})
+            if not disc or disc.get("user_id") != user_id: 
+                return False
+                
+            # Soft delete to preserve DB integrity for child replies
+            result = await db["discussions"].update_one(
+                {"_id": ObjectId(discussion_id)},
+                {"$set": {"is_active": False}}
+            )
+            return result.modified_count > 0
+        except Exception:
+            return False
 
     async def create_reply(self, discussion_id: str, content: str, user_id: str, username: str, parent_reply_id: Optional[str] = None) -> Reply:
         """Create a reply to a discussion"""
@@ -325,7 +371,7 @@ class DiscussionService:
         except Exception: return False
 
     async def get_replies(self, discussion_id: str, user_id: Optional[str] = None) -> List[Dict]:
-        """Get all replies for a discussion, filtering out blocked users and heavily reported content"""
+        """Get all replies for a discussion"""
         try:
             blocked_users = []
             
@@ -389,6 +435,24 @@ class DiscussionService:
             else:
                 await db["reply_upvotes"].insert_one({"reply_id": reply_id, "user_id": user_id, "created_at": datetime.utcnow()})
                 await db["replies"].update_one({"_id": ObjectId(reply_id)}, {"$inc": {"upvote_count": 1}})
+                return {"upvoted": True, "action": "added"}
+        except Exception as e:
+            traceback.print_exc()
+            raise
+            
+    async def upvote_discussion(self, discussion_id: str, user_id: str) -> Dict:
+        """Toggle upvote on discussion"""
+        try:
+            if not ObjectId.is_valid(discussion_id): raise ValueError("Invalid ID")
+            existing = await db["discussion_upvotes"].find_one({"discussion_id": discussion_id, "user_id": user_id})
+            
+            if existing:
+                await db["discussion_upvotes"].delete_one({"_id": existing["_id"]})
+                await db["discussions"].update_one({"_id": ObjectId(discussion_id)}, {"$inc": {"upvote_count": -1}})
+                return {"upvoted": False, "action": "removed"}
+            else:
+                await db["discussion_upvotes"].insert_one({"discussion_id": discussion_id, "user_id": user_id, "created_at": datetime.utcnow()})
+                await db["discussions"].update_one({"_id": ObjectId(discussion_id)}, {"$inc": {"upvote_count": 1}})
                 return {"upvoted": True, "action": "added"}
         except Exception as e:
             traceback.print_exc()

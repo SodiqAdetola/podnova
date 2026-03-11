@@ -9,10 +9,7 @@ async def create_or_get_topic_discussion(
     topic_summary: str,
     category: str
 ) -> str:
-    """
-    Auto-create or get existing discussion for a topic
-    Called when topic is created/viewed
-    """
+    """Auto-create or get existing discussion for a topic"""
     return await discussion_service.create_or_get_topic_discussion(
         topic_id=topic_id,
         topic_title=topic_title,
@@ -46,7 +43,8 @@ async def get_discussions(
     limit: int = 10,
     skip: int = 0,
     user_id: Optional[str] = None,
-    q: Optional[str] = None
+    q: Optional[str] = None,
+    author_id: Optional[str] = None
 ) -> List[Dict]:
     """Get discussions with filters and search query support"""
     return await discussion_service.get_discussions(
@@ -57,7 +55,8 @@ async def get_discussions(
         limit=limit,
         skip=skip,
         user_id=user_id,
-        search_query=q
+        search_query=q,
+        author_id=author_id
     )
 
 async def get_discussion_by_id(
@@ -69,6 +68,28 @@ async def get_discussion_by_id(
         discussion_id=discussion_id,
         user_id=user_id
     )
+
+async def update_discussion(
+    discussion_id: str,
+    user_id: str,
+    title: str,
+    description: str
+) -> Dict:
+    """Update a discussion title and body"""
+    updated = await discussion_service.update_discussion(discussion_id, user_id, title, description)
+    if not updated:
+        return {"success": False, "message": "Failed to update or unauthorized"}
+    return {"success": True, "discussion": updated}
+
+async def delete_discussion(
+    discussion_id: str,
+    user_id: str
+) -> Dict:
+    """Delete a discussion completely"""
+    success = await discussion_service.delete_discussion(discussion_id, user_id)
+    if success:
+        return {"success": True, "message": "Discussion deleted successfully"}
+    return {"success": False, "message": "Failed to delete or unauthorized"}
 
 async def create_reply(
     discussion_id: str,

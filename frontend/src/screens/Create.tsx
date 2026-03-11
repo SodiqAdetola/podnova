@@ -55,7 +55,10 @@ const CreateScreen: React.FC = () => {
   const navigation = useNavigation();
 
   const [title, setTitle] = useState("");
+  const [inputType, setInputType] = useState<"upload" | "paste">("upload");
   const [files, setFiles] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
+  const [pastedText, setPastedText] = useState(""); // 👈 NEW STATE
+  
   const [customPrompt, setCustomPrompt] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("calm_female");
   const [selectedStyle, setSelectedStyle] = useState("standard");
@@ -66,7 +69,6 @@ const CreateScreen: React.FC = () => {
   const [generationStarted, setGenerationStarted] = useState(false);
   const [estimatedTime, setEstimatedTime] = useState(60);
 
-  // --- INITIALIZE PREFERENCES ---
   useEffect(() => {
     loadUserPreferences();
   }, []);
@@ -98,7 +100,6 @@ const CreateScreen: React.FC = () => {
     }
   };
 
-  // --- FILE HANDLING ---
   const handlePickDocument = async () => {
     try {
       if (files.length >= 5) {
@@ -131,10 +132,14 @@ const CreateScreen: React.FC = () => {
     setFiles(files.filter(f => f.uri !== uri));
   };
 
-  // --- SUBMISSION ---
   const handleGenerate = async () => {
-    if (files.length === 0 && !customPrompt.trim()) {
-      Alert.alert("Missing Content", "Please upload at least one file or enter a prompt to generate a podcast.");
+    // 👈 UPDATED VALIDATION
+    if (inputType === "upload" && files.length === 0) {
+      Alert.alert("Missing Content", "Please upload at least one file.");
+      return;
+    }
+    if (inputType === "paste" && pastedText.trim().length < 50) {
+      Alert.alert("Content Too Short", "Please paste at least 50 characters of text to generate a podcast.");
       return;
     }
 
@@ -146,13 +151,19 @@ const CreateScreen: React.FC = () => {
       
       const formData = new FormData();
       
-      files.forEach((file, index) => {
-        formData.append('files', {
-          uri: file.uri,
-          name: file.name,
-          type: file.mimeType || 'application/octet-stream'
-        } as any);
-      });
+      // 👈 APPEND BASED ON SELECTED MODE
+      if (inputType === "upload") {
+          files.forEach((file, index) => {
+            formData.append('files', {
+              uri: file.uri,
+              name: file.name,
+              type: file.mimeType || 'application/octet-stream'
+            } as any);
+          });
+      } else {
+          formData.append('text_content', pastedText);
+      }
+      
       formData.append('podcast_title', title.trim() || "Custom Studio Podcast");
       formData.append('custom_prompt', customPrompt);
       formData.append('voice', selectedVoice);
@@ -173,7 +184,6 @@ const CreateScreen: React.FC = () => {
         setGenerationStarted(true);
       } else {
         const error = await response.json();
-        // SAFE ERROR PARSING TO PREVENT CRASH
         let errorMessage = "Unknown error occurred.";
         if (typeof error.detail === 'string') {
           errorMessage = error.detail;
@@ -192,6 +202,7 @@ const CreateScreen: React.FC = () => {
 
   const resetForm = () => {
     setFiles([]);
+    setPastedText("");
     setCustomPrompt("");
     setGenerationStarted(false);
   };
@@ -201,7 +212,6 @@ const CreateScreen: React.FC = () => {
     (navigation as any).navigate("Library");
   };
 
-  // --- UI RENDERERS ---
   if (generationStarted) {
     return (
       <View style={styles.successContainer}>
@@ -225,7 +235,6 @@ const CreateScreen: React.FC = () => {
   }
 
   return (
-    // Wrap the entire screen to prevent the keyboard from blocking text inputs
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -240,7 +249,6 @@ const CreateScreen: React.FC = () => {
       ) : (
         <ScrollView 
           style={styles.content} 
-          // Extra padding at the bottom ensures you can scroll past the bottom tabs safely
           contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }} 
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -259,28 +267,63 @@ const CreateScreen: React.FC = () => {
             />
           </View>
 
-          {/* FILE UPLOAD SECTION */}
+          {/* SOURCE MATERIAL SECTION WITH TOGGLE */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Source Material</Text>
-            <Text style={styles.sectionSubtitle}>Upload PDFs or Text files for the AI to discuss.</Text>
+            <Text style={styles.sectionSubtitle}>Provide content for PodNova AI to discuss.</Text>
             
-            <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument}>
-              <Ionicons name="cloud-upload-outline" size={24} color="#6366F1" />
-              <Text style={styles.uploadButtonText}>Tap to Upload Files (Max 5)</Text>
-            </TouchableOpacity>
+            <View style={styles.toggleContainer}>
+                <TouchableOpacity 
+                    style={[styles.toggleButton, inputType === "upload" && styles.toggleActive]}
+                    onPress={() => setInputType("upload")}
+                >
+                    <Ionicons name="document-outline" size={16} color={inputType === "upload" ? "#6366F1" : "#6B7280"} />
+                    <Text style={[styles.toggleText, inputType === "upload" && styles.toggleTextActive]}>Upload File</Text>
+                </TouchableOpacity>
 
-            {files.length > 0 && (
-              <View style={styles.fileList}>
-                {files.map((file, idx) => (
-                  <View key={idx} style={styles.fileItem}>
-                    <Ionicons name="document-text" size={20} color="#9CA3AF" />
-                    <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
-                    <TouchableOpacity onPress={() => removeFile(file.uri)}>
-                      <Ionicons name="close-circle" size={20} color="#EF4444" />
+                <TouchableOpacity 
+                    style={[styles.toggleButton, inputType === "paste" && styles.toggleActive]}
+                    onPress={() => setInputType("paste")}
+                >
+                    <Ionicons name="clipboard-outline" size={16} color={inputType === "paste" ? "#6366F1" : "#6B7280"} />
+                    <Text style={[styles.toggleText, inputType === "paste" && styles.toggleTextActive]}>Paste Text</Text>
+                </TouchableOpacity>
+            </View>
+
+            {inputType === "upload" ? (
+                <>
+                    <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument}>
+                    <Ionicons name="cloud-upload-outline" size={24} color="#6366F1" />
+                    <Text style={styles.uploadButtonText}>Tap to Upload Files (Max 5)</Text>
                     </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
+
+                    {files.length > 0 && (
+                    <View style={styles.fileList}>
+                        {files.map((file, idx) => (
+                        <View key={idx} style={styles.fileItem}>
+                            <Ionicons name="document-text" size={20} color="#9CA3AF" />
+                            <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+                            <TouchableOpacity onPress={() => removeFile(file.uri)}>
+                            <Ionicons name="close-circle" size={20} color="#EF4444" />
+                            </TouchableOpacity>
+                        </View>
+                        ))}
+                    </View>
+                    )}
+                </>
+            ) : (
+                <View style={styles.textInputContainer}>
+                    <TextInput
+                        style={styles.textArea}
+                        placeholder="Paste your articles, notes, or essays here..."
+                        placeholderTextColor="#9CA3AF"
+                        multiline={true}
+                        numberOfLines={8}
+                        value={pastedText}
+                        onChangeText={setPastedText}
+                        textAlignVertical="top"
+                    />
+                </View>
             )}
           </View>
 
@@ -340,7 +383,7 @@ const CreateScreen: React.FC = () => {
           {/* LENGTH SECTION */}
           <View style={[styles.section, { borderBottomWidth: 0, paddingBottom: 20 }]}>
             <View style={styles.lengthHeader}>
-              <Text style={styles.sectionTitle}>Length</Text>
+              <Text style={styles.sectionTitle}>Target Length</Text>
               <Text style={styles.lengthValue}>{lengthMinutes} min</Text>
             </View>
             <Slider
@@ -356,7 +399,7 @@ const CreateScreen: React.FC = () => {
             />
           </View>
 
-          {/* INLINE GENERATE BUTTON (Moved away from navbar) */}
+          {/* INLINE GENERATE BUTTON */}
           <View style={styles.footer}>
             <TouchableOpacity
               style={[styles.generateButton, generating && styles.generateButtonDisabled]}
@@ -393,7 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   header: {
-    paddingTop: 60,
+    paddingTop: 80,
     paddingBottom: 20,
     paddingHorizontal: 20,
     backgroundColor: "#FFFFFF",
@@ -408,7 +451,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "700",
     color: "#41439e",
     letterSpacing: 1,
@@ -422,11 +465,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6B7280",
-  },
   content: {
     flex: 1,
     paddingHorizontal: 20,
@@ -437,7 +475,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E5E7EB",
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 8,
@@ -446,6 +484,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     marginBottom: 16,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16,
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 6,
+    gap: 6,
+  },
+  toggleActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  toggleTextActive: {
+    color: '#6366F1',
   },
   uploadButton: {
     flexDirection: "row",
@@ -480,6 +550,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#374151",
     marginHorizontal: 8,
+  },
+  textInputContainer: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+  },
+  textArea: {
+    height: 150,
+    padding: 16,
+    fontSize: 15,
+    color: '#111827',
+    lineHeight: 22,
   },
   textInput: {
     borderWidth: 1,
@@ -559,16 +642,14 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 40,
   },
-  
-  // UPDATED FOOTER AND BUTTON STYLES
   footer: {
     alignItems: "center",
     paddingTop: 24,
     paddingBottom: 20,
   },
   generateButton: {
-    borderRadius: 24, // Pill shape
-    width: "65%", // Smaller, centered button instead of full-width
+    borderRadius: 24,
+    width: "65%", 
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -591,7 +672,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-
   successContainer: {
     flex: 1,
     justifyContent: "center",

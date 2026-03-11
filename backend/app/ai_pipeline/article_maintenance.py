@@ -25,25 +25,25 @@ UK_TZ = ZoneInfo("Europe/London")
 class MaintenanceConfig:
     """All maintenance-related settings"""
     
-    # Universal flat cap to prevent token bloat without deleting history
-    MAX_ARTICLES_PER_TOPIC = 20
+    # Hard cap set to 30 to prevent token bloat while retaining rich context
+    MAX_ARTICLES_PER_TOPIC = 30
     
     # Topic lifecycle thresholds (days)
-    TOPIC_STALE_DAYS = 14          # Topics become stale after 14 days of no activity
-    TOPIC_ARCHIVE_DAYS = 60        # Stale topics are archived after 60 days
-    TOPIC_DELETE_DAYS = 180        # Archived topics are deleted after 180 days
+    TOPIC_STALE_DAYS = 14          
+    TOPIC_ARCHIVE_DAYS = 60        
+    TOPIC_DELETE_DAYS = 180        
     
     # Cleanup settings
-    ORPHAN_ARTICLE_GRACE_DAYS = 3   # Days before orphan articles are cleaned up
-    MIN_TOPIC_ARTICLES = 2          # Minimum articles needed to keep a topic
-    ARCHIVED_ARTICLE_PURGE_DAYS = 30 # Days before permanently deleting archived articles
+    ORPHAN_ARTICLE_GRACE_DAYS = 3   
+    MIN_TOPIC_ARTICLES = 2          
+    ARCHIVED_ARTICLE_PURGE_DAYS = 30 
     
-    # Article ranking weights (must sum to 1.0)
+    # Shifted weights: Recency is prioritized. Similarity is lowered so breaking news is not punished.
     RANKING_WEIGHTS = {
-        "recency": 0.4,
-        "source_priority": 0.3,
-        "similarity_to_centroid": 0.2,
-        "content_quality": 0.1
+        "recency": 0.50,
+        "source_priority": 0.30,
+        "content_quality": 0.15,
+        "similarity_to_centroid": 0.05 
     }
     
     # Source priority mapping
@@ -113,19 +113,26 @@ class MaintenanceService:
         source_score = self.config.PRIORITY_MAP.get(priority, 0.6)
         score += source_score * weights["source_priority"]
         
-        # 3. Similarity to centroid score (0-1)
-        # Added safety check for missing embeddings
-        if article.get("embedding") and topic.get("centroid_embedding"):
-            article_emb = np.array(article["embedding"])
-            centroid_emb = np.array(topic["centroid_embedding"])
-            score += self.cosine_similarity(article_emb, centroid_emb) * weights["similarity_to_centroid"]
-        else:
-            score += 0.5 * weights["similarity_to_centroid"]
-        
-        # 4. Content quality score
+        # 3. Content quality score
         word_count = article.get("word_count", 0)
         quality_score = min(1.0, word_count / 1000)
         score += quality_score * weights["content_quality"]
+
+        # 4. Similarity to centroid score (0-1)
+        if article.get("embedding") and topic.get("centroid_embedding"):
+            article_emb = np.array(article["embedding"])
+            centroid_emb = np.array(topic["centroid_embedding"])
+            similarity = self.cosine_similarity(article_emb, centroid_emb)
+            
+            # BREAKING NEWS PROTECTION: 
+            # If the article is less than 24 hours old, artificially boost its similarity score 
+            # so it isn't deleted just because it's reporting a sudden plot twist in the story.
+            if article_age_hours < 24:
+                similarity = max(similarity, 0.85)
+                
+            score += similarity * weights["similarity_to_centroid"]
+        else:
+            score += 0.5 * weights["similarity_to_centroid"]
         
         return score
     

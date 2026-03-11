@@ -32,14 +32,12 @@ TEXT_MODEL = "gemini-2.5-flash"
 
 class HistoryConfig:
     """Configuration for topic history snapshots"""
-    # 1. Lowered thresholds to catch breaking developments faster
     MIN_NEW_ARTICLES = 3          
     MIN_NEW_SOURCES = 1           
     CONFIDENCE_CHANGE = 0.15      
     EMBEDDING_DRIFT = 0.15        
     TIME_ELAPSED_HOURS = 24       
     
-    # 2. Shifted weights to favor AI semantics (drift) over raw volume
     SIGNIFICANCE_WEIGHTS = {
         "embedding_drift": 0.35,  
         "article_growth": 0.20,
@@ -48,7 +46,6 @@ class HistoryConfig:
         "time_factor": 0.10
     }
     
-    # 3. Slightly lower threshold for faster updates
     SIGNIFICANCE_THRESHOLD = 0.55  
     
     HISTORY_TYPES = {
@@ -77,6 +74,7 @@ class TopicHistoryService:
         self.topics_collection = self.db["topics"]
         self.articles_collection = self.db["articles"]
         self.history_collection = self.db["topic_history"]
+        self.followers_collection = self.db["topic_followers"]
         self.config = HistoryConfig()
         
         api_key = os.getenv("GEMINI_API_KEY")
@@ -92,6 +90,11 @@ class TopicHistoryService:
             await self.history_collection.create_index("created_at")
             await self.topics_collection.create_index("last_history_check")
             await self.topics_collection.create_index([("status", 1), ("has_title", 1)])
+            
+            # Index for the new mapping collection
+            await self.followers_collection.create_index([("topic_id", 1), ("user_uid", 1)], unique=True)
+            await self.followers_collection.create_index("user_uid")
+            
             logger.info("Database indexes verified")
         except Exception as e:
             logger.error(f"Error creating indexes: {e}")
@@ -145,21 +148,20 @@ class TopicHistoryService:
         if not last_history:
             return 1.0, {"type": "initial", "reason": "First snapshot"}
         
-        # 1. ARTICLE GROWTH
-        prev_count = last_history.get("article_count", 0)
-        current_count = current_stats["article_count"]
-        new_articles = current_count - prev_count
+        # 1. ARTICLE TURNOVER
+        prev_ids = set(last_history.get("article_ids", []))
+        curr_ids = set(topic.get("article_ids", []))
+        new_articles_count = len(curr_ids - prev_ids)
         
-        if new_articles >= self.config.MIN_NEW_ARTICLES:
-            growth_ratio = new_articles / max(prev_count, 1)
-            absolute_score = min(1.0, new_articles / 10) # Made this scale faster
-            article_score = min(1.0, (growth_ratio * 0.5 + absolute_score * 0.5))
+        if new_articles_count >= self.config.MIN_NEW_ARTICLES:
+            article_score = min(1.0, new_articles_count / 10) 
         else:
-            article_score = min(1.0, new_articles / self.config.MIN_NEW_ARTICLES)
+            article_score = min(1.0, new_articles_count / self.config.MIN_NEW_ARTICLES)
             
         breakdown["article_growth"] = {
             "score": article_score,
-            "new_articles": new_articles
+            "new_articles": new_articles_count,
+            "note": "Based on turnover rate"
         }
         total_score += article_score * weights["article_growth"]
         
@@ -202,7 +204,7 @@ class TopicHistoryService:
         total_score += time_score * weights["time_factor"]
         
         # 6. PERIODIC TRIGGER
-        if (time_elapsed / 24) >= self.config.PERIODIC_SNAPSHOT_DAYS and current_count >= 10:
+        if (time_elapsed / 24) >= self.config.PERIODIC_SNAPSHOT_DAYS and current_stats["article_count"] >= 10:
             breakdown["periodic_trigger"] = True
             total_score = max(total_score, self.config.SIGNIFICANCE_THRESHOLD + 0.05)
         
@@ -257,10 +259,45 @@ class TopicHistoryService:
 {context_note}
 Category: {topic.get('category', 'GENERAL').upper()}
 Update Type: {history_type}
-Articles:
+
+OLD SUMMARY (DO NOT REPEAT THIS):
+{topic.get('summary', 'No previous summary.')}
+
+NEW ARTICLES:
 {"".join(article_texts)}
 
-RULES: MAX 10 WORDS FOR TITLE. Be specific."""
+RULES FOR THE UPDATE:
+1. Write a completely NEW summary focusing heavily on the NEW developments found in the articles.
+2. Generate completely NEW key insights that reflect the latest data, not the old data.
+
+RULES FOR THE HEADLINE:
+- MAX 10 WORDS
+- Say WHAT happened in plain English
+- Use everyday words, no jargon or slang
+- Be specific - include names, numbers, key details
+- Make it easy to understand in 2 seconds and INCLUSIVE FOR ALL COMPREHENSION LEVELS
+
+✅ GOOD EXAMPLES (clear, specific):
+• "Google fined €2.4 billion by EU regulators"
+• "Tesla delays Cybertruck production to 2025"
+• "AI software creates fake videos of UK streets"
+• "US Supreme Court blocks Trump trade tariffs"
+• "Microsoft bug exposes confidential emails"
+
+❌ BAD EXAMPLES (confusing, vague, jargon):
+• "AI slop costs threaten global economic reckoning" (uses slang, vague)
+• "Tech giant faces regulatory scrutiny" (too vague)
+• "The future of AI in question" (vague, says nothing)
+• "Paradigm shift in tech landscape" (jargon, meaningless)
+
+Generate a JSON object with:
+- **title** (string, MAX 10 WORDS): Clear, straightforward headline.
+- **summary** (string, 2-3 sentences): Clear overview of the NEW developments.
+- **key_insights** (array, 3-5 strings): Specific, concrete takeaways reflecting the latest updates.
+- **confidence_score** (integer, 0-100): How reliable is this information.
+- **development_note** (string, optional): A brief 1-sentence note on how the story changed.
+
+JSON only, no markdown:"""
 
             response = await self.gemini_client.aio.models.generate_content(
                 model=TEXT_MODEL,
@@ -270,7 +307,17 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
                 )
             )
             
-            result = json.loads(response.text)
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text.replace("```json", "", 1)
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+            elif raw_text.startswith("```"):
+                raw_text = raw_text.replace("```", "", 1)
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+            
+            result = json.loads(raw_text.strip())
             
             update_data = {
                 "title": result["title"],
@@ -302,6 +349,7 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
                 "summary": topic.get("summary"),
                 "key_insights": topic.get("key_insights", []),
                 "article_count": len(topic.get("article_ids", [])),
+                "article_ids": topic.get("article_ids", []), 
                 "sources": topic.get("sources", []),
                 "confidence": topic.get("confidence", 0.5),
                 "centroid_embedding": topic.get("centroid_embedding"),
@@ -356,6 +404,24 @@ RULES: MAX 10 WORDS FOR TITLE. Be specific."""
                 history_id = await self.create_history_point(topic_id, history_type, breakdown, regenerated)
                 
                 if history_id:
+                    # Trigger Push Notifications to all followers via mapping collection
+                    from app.services.notification_service import notification_service
+                    
+                    followers_cursor = self.followers_collection.find({"topic_id": str(topic_id)})
+                    async for follower in followers_cursor:
+                        user_uid = follower.get("user_uid")
+                        if user_uid:
+                            try:
+                                await notification_service.create_topic_update_notification(
+                                    user_id=user_uid,
+                                    topic_id=topic_id,
+                                    topic_title=regenerated["title"] if regenerated else topic.get("title", "Topic"),
+                                    update_type=history_type,
+                                    update_count=1
+                                )
+                            except Exception as ne:
+                                logger.error(f"Failed to notify user {user_uid}: {ne}")
+
                     return {
                         "action": "created_history",
                         "history_id": history_id,

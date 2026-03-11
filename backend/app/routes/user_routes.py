@@ -15,6 +15,9 @@ from app.controllers.user_controller import (
 )
 from app.models.user import UserProfile, PushTokenRequest
 from pydantic import BaseModel
+from app.db import db
+from bson import ObjectId
+from datetime import datetime
 
 router = APIRouter()
 
@@ -217,6 +220,68 @@ async def delete_account_endpoint(firebase_user=Depends(verify_firebase_token)):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to delete account data."
             )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/topics/{topic_id}/follow")
+async def toggle_topic_follow(topic_id: str, firebase_user=Depends(verify_firebase_token)):
+    """Toggle following a topic using the mapping collection pattern"""
+    try:
+        if not ObjectId.is_valid(topic_id):
+            raise HTTPException(status_code=400, detail="Invalid topic ID format")
+            
+        user_uid = firebase_user["uid"]
+        topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
+        
+        if not topic:
+            raise HTTPException(status_code=404, detail="Topic not found")
+            
+        existing_follow = await db["topic_followers"].find_one({
+            "user_uid": user_uid,
+            "topic_id": topic_id
+        })
+        
+        if existing_follow:
+            await db["topic_followers"].delete_one({"_id": existing_follow["_id"]})
+            return {"status": "unfollowed"}
+        else:
+            await db["topic_followers"].insert_one({
+                "user_uid": user_uid,
+                "topic_id": topic_id,
+                "created_at": datetime.utcnow()
+            })
+            return {"status": "followed"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/topics/{topic_id}/follow-status")
+async def get_topic_follow_status(topic_id: str, firebase_user=Depends(verify_firebase_token)):
+    """Check if the current user is following a specific topic"""
+    try:
+        if not ObjectId.is_valid(topic_id):
+            raise HTTPException(status_code=400, detail="Invalid topic ID format")
+            
+        user_uid = firebase_user["uid"]
+        existing_follow = await db["topic_followers"].find_one({
+            "user_uid": user_uid,
+            "topic_id": topic_id
+        })
+        
+        return {"is_following": bool(existing_follow)}
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

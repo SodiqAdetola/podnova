@@ -173,7 +173,8 @@ class ClusteringService:
             "image_url": article_doc.get("image_url"),
             "history_point_count": 0,
             "last_history_point": None,
-            "discussion_id": None
+            "discussion_id": None,
+            "followers": []
         }
         
         result = await self.topics_collection.insert_one(topic_doc)
@@ -236,10 +237,8 @@ class ClusteringService:
             if history_result and history_result.get("action") == "created_history":
                 logger.info(f"  ✨ Created {history_result['history_type']} history point")
         
-        age_category = self.maintenance_service.get_topic_age_category(topic)
-        max_articles = self.maintenance_service.config.TOPIC_LIMITS[age_category]["max_articles"]
-        
-        if len(article_ids) > max_articles:
+        # Enforce the new flat limit and trigger a trim if necessary
+        if len(article_ids) > self.maintenance_service.config.MAX_ARTICLES_PER_TOPIC:
             await self.maintenance_service.trim_topic_articles(str(topic_id))
     
     async def create_topic_discussion(self, topic_id: str, topic_title: str, topic_summary: str, category: str) -> Optional[str]:
@@ -356,7 +355,6 @@ JSON only, no markdown:"""
                 }
             )
             
-            # ✅ THIS WILL NOW WORK BECAUSE TIMEZONES ARE FIXED
             await self.history_service.create_history_point(
                 str(topic_id), "initial", {"total_score": 1.0, "type": "initial_title"}, result
             )

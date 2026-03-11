@@ -271,16 +271,35 @@ class NotificationService:
     async def create_topic_update_notification(
         self, user_id: str, topic_id: str, topic_title: str, update_type: str, update_count: int
     ) -> Optional[str]:
-        """Triggered when a watched topic receives significant updates"""
+        """Triggered when a watched topic receives significant updates, tailored to the update type."""
+        
+        # 1. Translate the technical history_type into a user-friendly alert
+        if update_type == "major_update":
+            title = "Major Story Update"
+            preview = "The narrative of this story has shifted significantly based on new reporting."
+        elif update_type == "source_expansion":
+            title = "Story Gaining Traction"
+            preview = "Multiple new sources are now reporting on this topic."
+        elif update_type == "confidence_shift":
+            title = "Reliability Update"
+            preview = "There has been a shift in the reporting consensus for this story."
+        elif update_type == "periodic":
+            title = "Weekly Story Recap"
+            preview = "The summary for this ongoing story has been refreshed."
+        else:
+            # Fallback for initial or manual
+            title = "Topic Update"
+            preview = f"{update_count} new {'update' if update_count == 1 else 'updates'} available."
+
         req = CreateNotificationRequest(
             user_id=user_id,
             type=NotificationType.TOPIC_UPDATE,
             priority=NotificationPriority.NORMAL,
             source_type="topic",
             source_id=topic_id,
-            title="Topic Update",
-            message=f"Your watched topic '{topic_title[:50]}' has {update_count} new {'update' if update_count == 1 else 'updates'}",
-            preview=f"{update_count} new {'update' if update_count == 1 else 'updates'} available",
+            title=title,
+            message=f"Update available for: {topic_title[:50]}...",
+            preview=preview,
             action_path=f"/topic/{topic_id}"
         )
         return await self.create_notification(req)

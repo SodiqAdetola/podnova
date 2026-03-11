@@ -1,4 +1,4 @@
-# app/controllers/podcast_controller.py
+# app/controllers/podcasts_controller.py
 """
 PodNova Podcast Generation Controller
 Orchestrates podcast generation workflow using service layer
@@ -47,17 +47,15 @@ class PodcastVoice(str, Enum):
     PROFESSIONAL_MALE = "professional_male"
 
 
-# Voice configuration mapping
 VOICE_CONFIGS = {
-    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       # Stable, high-clarity anchor for technical reporting
-    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            # Grounded baritone with premium authoritative resonance
-    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Leda",    # Highly dynamic with natural breath and conversational arc
-    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Puck",     # Versatile narrator with modern podcast-host pacing
-    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", # Sophisticated reporter with superior punctuation handling
-    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  # Clinical precision for data-heavy and technical analysis
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       
+    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            
+    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Leda",    
+    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Puck",     
+    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", 
+    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  
 }
 
-# Map user preferences to podcast settings
 PODCAST_LENGTH_MAP = {
     "short": 5,
     "medium": 10,
@@ -71,7 +69,6 @@ TONE_TO_STYLE_MAP = {
     "expert": PodcastStyle.EXPERT
 }
 
-# Initialize services
 script_service = ScriptService()
 audio_service = AudioService()
 storage_service = StorageService()
@@ -136,7 +133,6 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
     
-    # Only pass the podcast_id to match the updated background task signature
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {
@@ -150,31 +146,39 @@ async def create_podcast(
     }
 
 
-
 async def create_custom_podcast(
     user_id: str,
     files: List[UploadFile],
+    text_content: str, # 👈 NEW PARAMETER
     title: str,
     custom_prompt: str,
     voice: str,
     style: str,
     length_minutes: int
 ) -> Dict:
-    """Extract text from files and create a custom podcast job"""
+    """Extract text from files and/or use pasted text to create a custom podcast job"""
     
-    # 1. Extract text from all uploaded files
     extracted_text = ""
+    
+    # 1. Extract from files if provided
     if files:
         for file in files:
             extracted_text += await file_service.extract_text(file)
             
-    # 2. Create the Database Record
+    # 2. Append pasted text if provided
+    if text_content:
+        extracted_text += "\n\n" + text_content
+        
+    if not extracted_text.strip():
+         raise ValueError("No valid text could be extracted from files or input.")
+            
+    # 3. Create the Database Record
     podcast_doc = {
         "user_id": user_id,
-        "topic_id": None, # No associated news topic
+        "topic_id": None, 
         "topic_title": title,
         "category": "custom",
-        "is_custom": True, # Crucial flag
+        "is_custom": True, 
         "custom_source_text": extracted_text,
         "custom_prompt": custom_prompt,
         "status": PodcastStatus.PENDING,
@@ -195,7 +199,6 @@ async def create_custom_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
     
-    # 3. Trigger background generation
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {
@@ -206,12 +209,10 @@ async def create_custom_podcast(
     }
 
 
-
 async def _generate_podcast_async(podcast_id: str):
     """Async task to generate podcast script and audio"""
     thread_monitor.start_task()
     try:
-        # Fetch the initial podcast document
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
         if not podcast:
             print(f"❌ Podcast {podcast_id} not found in DB. Aborting.")
@@ -257,11 +258,8 @@ async def _generate_podcast_async(podcast_id: str):
             }
         )
         
-        # PROTECTED NOTIFICATION BLOCK
         try:
             print(f"🔔 Attempting to trigger podcast notification for {podcast_id}")
-            
-            # Fetch fresh podcast document to ensure we have the absolute latest data
             final_podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
             if final_podcast:
                 topic_title = str(final_podcast.get("topic_title", "Recent News"))
@@ -286,7 +284,6 @@ async def _generate_podcast_async(podcast_id: str):
         )
     finally:
         thread_monitor.end_task()
-
 
 
 async def _update_podcast_status(
@@ -332,14 +329,12 @@ async def get_user_podcasts(
     if status:
         query["status"] = status
     
-    # ZOMBIE CLEANUP: If a podcast has been "generating" for more than 15 minutes, fail it.
     fifteen_mins_ago = datetime.utcnow().timestamp() - 900
     zombie_query = {
         "user_id": user_id,
         "status": {"$in": [PodcastStatus.PENDING, PodcastStatus.GENERATING_SCRIPT, PodcastStatus.GENERATING_AUDIO, PodcastStatus.UPLOADING]},
     }
     
-    # We find zombies and mark them failed so the UI doesn't spin forever
     zombies = db["podcasts"].find(zombie_query)
     async for zombie in zombies:
         zombie_time = zombie.get("updated_at")
@@ -360,7 +355,6 @@ async def get_user_podcasts(
     podcasts = []
     cursor = db["podcasts"].find(query).sort([("updated_at", -1)]).skip(skip).limit(limit)
     async for podcast in cursor:
-        # Check if topic is updated
         has_update = False
         if not podcast.get("is_custom") and podcast.get("topic_id"):
             topic = await db["topics"].find_one(
@@ -369,11 +363,9 @@ async def get_user_podcasts(
             )
             
             if topic and topic.get("last_history_point"):
-                # Use completed_at so the tag clears out after regeneration finishes!
                 compare_time = podcast.get("completed_at") or podcast.get("created_at")
-                
-                # Compare timezone-naive datetimes safely
                 topic_time = topic["last_history_point"]
+                
                 if hasattr(topic_time, 'tzinfo') and topic_time.tzinfo:
                     topic_time = topic_time.replace(tzinfo=None)
                 if hasattr(compare_time, 'tzinfo') and compare_time.tzinfo:
@@ -456,16 +448,13 @@ async def regenerate_podcast(
     if not podcast:
         raise ValueError("Podcast not found")
     
-    # 🚨 CRITICAL FIX: Delete the old audio files from Cloud Storage
     if podcast.get("audio_url"):
         try:
             from app.services.storage_service import storage_service
-            # Delete the old files so we don't pay for orphaned data
             await storage_service.delete_podcast_files(podcast_id)
         except Exception as e:
             print(f"Warning: Failed to delete old storage files during regeneration: {e}")
     
-    # Update settings if provided
     update_fields = {"updated_at": datetime.utcnow(), "status": PodcastStatus.PENDING}
     
     if voice:
@@ -480,7 +469,6 @@ async def regenerate_podcast(
     if focus_areas is not None:
         update_fields["focus_areas"] = focus_areas
     
-    # Clear previous results so the UI knows it is empty
     update_fields.update({
         "script": None,
         "audio_url": None,
@@ -497,7 +485,6 @@ async def regenerate_podcast(
         {"$set": update_fields}
     )
     
-    # Start the generation task in the background
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {
@@ -508,7 +495,7 @@ async def regenerate_podcast(
 
 
 async def delete_podcast(podcast_id: str, user_id: str) -> bool:
-    """Delete a podcast (user must own it)"""
+    """Delete a podcast"""
     podcast = await db["podcasts"].find_one({
         "_id": ObjectId(podcast_id),
         "user_id": user_id
@@ -517,11 +504,9 @@ async def delete_podcast(podcast_id: str, user_id: str) -> bool:
     if not podcast:
         return False
     
-    # Delete from Firebase Storage if exists
     if podcast.get("audio_url"):
         await storage_service.delete_podcast_files(podcast_id)
     
-    # Delete from MongoDB
     await db["podcasts"].delete_one({"_id": ObjectId(podcast_id)})
     
     return True

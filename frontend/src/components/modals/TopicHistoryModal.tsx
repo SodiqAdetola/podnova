@@ -45,27 +45,27 @@ const HISTORY_TYPE_CONFIG = {
   initial: { 
     icon: "flag", 
     label: "Initial",
-    color: "#A78BFA" // Pastel purple
+    color: "#9c7bff" 
   },
   major_update: { 
     icon: "git-branch", 
     label: "Major Update",
-    color: "#FCA5A5" // Pastel red
+    color: "#ff6464" 
   },
   source_expansion: { 
     icon: "newspaper", 
     label: "New Sources",
-    color: "#93C5FD" // Pastel blue
+    color: "#8bc1ff" 
   },
   confidence_shift: { 
     icon: "shield-checkmark", 
     label: "Confidence Update",
-    color: "#FDBA74" // Pastel orange
+    color: "#FDBA74" 
   },
   periodic: { 
     icon: "calendar", 
     label: "Periodic Update",
-    color: "#6EE7B7" // Pastel green
+    color: "#6EE7B7" 
   },
 };
 
@@ -82,14 +82,27 @@ const TopicHistoryModal: React.FC<Props> = ({
   const slideAnim = useRef(new Animated.Value(SLIDE_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Track if we are actively swiping the modal so we can disable the scrollview
+  const [isSwiping, setIsSwiping] = useState(false);
+
+  // Define the PanResponder
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
+      // Only capture the pan if the user swipes down significantly.
+      // Do NOT capture taps (dy is 0) so child elements remain clickable.
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+          return gestureState.dy > 5;
+      },
+      onPanResponderGrant: () => {
+          setIsSwiping(true);
+      },
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) slideAnim.setValue(gestureState.dy);
+        if (gestureState.dy > 0) {
+            slideAnim.setValue(gestureState.dy);
+        }
       },
       onPanResponderRelease: (_, gestureState) => {
+        setIsSwiping(false);
         if (gestureState.dy > SWIPE_THRESHOLD) {
           handleClose();
         } else {
@@ -173,7 +186,6 @@ const TopicHistoryModal: React.FC<Props> = ({
 
     return (
       <View key={point.id} style={styles.timelineItem}>
-        {/* Timeline line */}
         {index > 0 && <View style={styles.timelineLine} />}
         
         <View style={styles.timelineNode}>
@@ -208,7 +220,6 @@ const TopicHistoryModal: React.FC<Props> = ({
                 {point.title}
               </Text>
 
-              {/* Development note - outside dropdown, under title */}
               {point.development_note && (
                 <View style={styles.developmentNote}>
                   <Text style={styles.developmentNoteText}>{point.development_note}</Text>
@@ -283,30 +294,33 @@ const TopicHistoryModal: React.FC<Props> = ({
 
       <Animated.View
         style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
-        {...panResponder.panHandlers}
       >
-        <View style={styles.handleContainer}>
-          <View style={styles.handle} />
-        </View>
+        {/* We only attach the PanResponder to the header area, not the whole modal! */}
+        <View {...panResponder.panHandlers} style={styles.dragZone}>
+            <View style={styles.handleContainer}>
+            <View style={styles.handle} />
+            </View>
 
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.headerIcon}>
-              <Ionicons name="git-network" size={18} color="#6B7280" />
+            <View style={styles.header}>
+            <View style={styles.headerLeft}>
+                <View style={styles.headerIcon}>
+                <Ionicons name="git-network" size={18} color="#6B7280" />
+                </View>
+                <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>Timeline</Text>
+                <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
+                    {topicTitle}
+                </Text>
+                </View>
             </View>
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Timeline</Text>
-              <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
-                {topicTitle}
-              </Text>
             </View>
-          </View>
         </View>
 
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={true}
+          scrollEnabled={!isSwiping} // Disable native scroll if user is dragging the header
         >
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -364,6 +378,13 @@ const styles = StyleSheet.create({
     right: 0,
     height: SLIDE_HEIGHT,
     backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  dragZone: {
+    // This wrapper ensures the pan responder only acts on the top section
+    width: '100%',
+    backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },

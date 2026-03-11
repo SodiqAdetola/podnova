@@ -89,7 +89,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="name@company.com"
+                  placeholder="name@mail.com"
                   placeholderTextColor="#9CA3AF"
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -191,11 +191,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#111827",
-    letterSpacing: -0.5,
+    color: "#6366F1",
     marginBottom: 6,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   subtitle: {
     fontSize: 15,

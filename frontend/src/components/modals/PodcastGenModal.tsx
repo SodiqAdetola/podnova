@@ -270,7 +270,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   const renderLengthSlider = () => (
     <View style={styles.section}>
       <View style={styles.lengthHeader}>
-        <Text style={styles.sectionTitle}>Length</Text>
+        <Text style={styles.sectionTitle}>Target Length</Text>
         <Text style={styles.lengthValue}>{lengthMinutes} min</Text>
       </View>
       <Slider
@@ -395,7 +395,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Create Podcast</Text>
+            <Text style={styles.headerTitle}>Create Topic Podcast</Text>
             <View style={styles.placeholder} />
           </View>
 
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
   topicTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#111827",
+    color: "#41439e",
     marginBottom: 4,
   },
   topicMeta: {
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E5E7EB",
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 12,

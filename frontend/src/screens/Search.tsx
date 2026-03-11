@@ -67,7 +67,8 @@ const CATEGORIES = [
 type SearchScope = "news" | "discussions";
 type DiscussionFilter = "all" | "topic" | "community";
 
-const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
+// FIX 1: pageParam defaults to 0
+const fetchSearchResults = async ({ pageParam = 0, queryKey }: any) => {
   const [_, query, scope, category, discFilter] = queryKey;
   
   if (!query) return [];
@@ -83,11 +84,15 @@ const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
     params.append("category", category);
   }
 
+  // FIX 2: Safely map MongoDB _id to React Native id for both APIs
   if (scope === "news") {
     const response = await fetch(`${API_BASE_URL}/topics/search?${params.toString()}`);
     if (!response.ok) throw new Error("Network error");
     const data = await response.json();
-    return data.topics || [];
+    return (data.topics || []).map((t: any) => ({
+      ...t,
+      id: t.id || t._id || Math.random().toString()
+    }));
   } else {
     params.append("sort_by", "latest");
     if (discFilter !== "all") {
@@ -96,7 +101,10 @@ const fetchSearchResults = async ({ pageParam, queryKey }: any) => {
     const response = await fetch(`${API_BASE_URL}/discussions?${params.toString()}`);
     if (!response.ok) throw new Error("Network error");
     const data = await response.json();
-    return data.discussions || [];
+    return (data.discussions || []).map((d: any) => ({
+      ...d,
+      id: d.id || d._id || Math.random().toString()
+    }));
   }
 };
 
@@ -138,13 +146,24 @@ const SearchScreen: React.FC = () => {
     queryFn: fetchSearchResults,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
-      return lastPage.length === PAGE_LIMIT ? allPages.length : undefined;
+      if (lastPage.length < PAGE_LIMIT) return undefined;
+      
+      // FIX 3: Defensive Check to break infinite loops
+      if (allPages.length > 1) {
+        const prevPage = allPages[allPages.length - 2];
+        if (prevPage.length > 0 && lastPage.length > 0 && prevPage[0].id === lastPage[0].id) {
+          return undefined; // Backend returned identical data
+        }
+      }
+      return allPages.length;
     },
     enabled: !!submittedQuery,
     staleTime: 1000 * 60 * 5,
   });
 
-  const searchResults = data?.pages.flat() || [];
+  // FIX 4: Deduplicate items to prevent FlatList crashes
+  const rawResults = data?.pages.flat() || [];
+  const searchResults = Array.from(new Map(rawResults.map((item: any) => [item.id, item])).values());
 
   useEffect(() => {
     const auth = getAuth();
@@ -230,7 +249,6 @@ const SearchScreen: React.FC = () => {
     return cat?.color || "#6366F1";
   };
 
-  // --- Premium Gradient Fallback Logic ---
   const getCategoryFallback = (category?: string) => {
     const cat = CATEGORIES.find(c => c.id === category?.toLowerCase());
     return cat ? { colors: cat.gradient, icon: cat.icon } : { colors: ['#818CF8', '#4F46E5'], icon: 'newspaper' };
@@ -464,7 +482,7 @@ const SearchScreen: React.FC = () => {
               onPress={() => setDiscussionFilter("topic")}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={14} color={discussionFilter === "topic" ? "#6366F1" : "#6B7280"} />
-              <Text style={[styles.discussionFilterText, discussionFilter === "topic" && styles.discussionFilterTextActive]}>Auto</Text>
+              <Text style={[styles.discussionFilterText, discussionFilter === "topic" && styles.discussionFilterTextActive]}>Podnova Topic</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -548,7 +566,7 @@ const SearchScreen: React.FC = () => {
               fetchNextPage();
             }
           }}
-          onEndReachedThreshold={0.5}
+          onEndReachedThreshold={0.2}
           ListHeaderComponent={
             <View style={styles.resultsHeader}>
               <Text style={[styles.resultsCount, { color: getActiveCategoryColor() }]}>

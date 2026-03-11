@@ -215,7 +215,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.form}>
             {/* Username */}
             <View style={styles.field}>
-              <Text style={styles.label}>Display name</Text>
+              <Text style={styles.label}>Username</Text>
               <View
                 style={[
                   styles.inputWrapper,
@@ -231,9 +231,9 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 <TextInput
                   ref={usernameRef}
                   style={styles.input}
-                  placeholder="Alex Johnson"
+                  placeholder="AlexJohnson"
                   placeholderTextColor="#9CA3AF"
-                  autoCapitalize="words"
+                  autoCapitalize="none"
                   value={username}
                   onChangeText={setUsername}
                   onFocus={() => setFocusedField('username')}
@@ -263,7 +263,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 <TextInput
                   ref={emailRef}
                   style={styles.input}
-                  placeholder="name@company.com"
+                  placeholder="name@mail.com"
                   placeholderTextColor="#9CA3AF"
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -470,11 +470,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#111827",
-    letterSpacing: -0.5,
+    color: "#6366F1",
     marginBottom: 6,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   subtitle: {
     fontSize: 15,
@@ -524,7 +525,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   strengthBar: {
-    width: 80, // Fixed width instead of flex: 1
+    width: 80,
     flexDirection: "row",
     height: 4,
     gap: 4,
@@ -569,9 +570,9 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   createButton: {
-    height: 48, // Reduced from 52
+    height: 48, 
     backgroundColor: "#6366F1",
-    borderRadius: 10, // Slightly smaller radius
+    borderRadius: 10, 
     justifyContent: "center",
     alignItems: "center",
     marginTop: 16,
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   createButtonText: {
-    fontSize: 15, // Reduced from 16
+    fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
   },

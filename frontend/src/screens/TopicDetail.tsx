@@ -17,6 +17,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Dimensions,
+  Modal,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -31,7 +32,7 @@ import DiscussionThread from "../components/DiscussionThread";
 import { getAuth } from "firebase/auth";
 import { useAudio } from "../contexts/AudioContext";
 import TopicDetailSkeleton from "../components/skeletons/TopicDetailSkeleton";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -42,7 +43,6 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 type TopicDetailNavigationProp = NativeStackNavigationProp<MainStackParamList>;
 
-// Helper for Auth
 const getAuthToken = async (): Promise<string | null> => {
   const auth = getAuth();
   const user = auth.currentUser;
@@ -63,17 +63,20 @@ const TopicDetailScreen: React.FC = () => {
   const { topicId } = route.params as { topicId: string };
   const { showPlayer } = useAudio();
   
+  const queryClient = useQueryClient();
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // UI States (NO MORE FETCHING STATES)
   const [heroImageError, setHeroImageError] = useState(false);
   const [showPodcastModal, setShowPodcastModal] = useState(false);
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(false);
   const [isArticlesExpanded, setIsArticlesExpanded] = useState(false);
+  
+  const [optimisticFollow, setOptimisticFollow] = useState<boolean | null>(null);
+  
+  // 👈 NEW STATE for the confirmation modal
+  const [showFollowModal, setShowFollowModal] = useState(false);
 
-  // ==========================================
-  // 1. REACT QUERY: FETCH TOPIC (CACHED)
-  // ==========================================
+  // 1. FETCH TOPIC
   const {
     data: topic,
     isLoading: loadingTopic,
@@ -91,13 +94,11 @@ const TopicDetailScreen: React.FC = () => {
       if (data && data._id && !data.id) data.id = data._id;
       return data;
     },
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes. 0ms load on re-click!
+    staleTime: 1000 * 60 * 5, 
     retry: 1,
   });
 
-  // ==========================================
-  // 2. REACT QUERY: FETCH DISCUSSION (CACHED)
-  // ==========================================
+  // 2. FETCH DISCUSSION
   const {
     data: discussion,
     isLoading: loadingDiscussion,
@@ -118,14 +119,38 @@ const TopicDetailScreen: React.FC = () => {
       const data = await response.json();
       return data.discussions && data.discussions.length > 0 ? data.discussions[0] : null;
     },
-    enabled: !!topic?.id, // Only runs AFTER the topic is loaded
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    enabled: !!topic?.id,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // 3. FETCH FOLLOW STATUS
+  const { 
+    data: followData, 
+    refetch: refetchFollowStatus 
+  } = useQuery({
+    queryKey: ['followStatus', topicId],
+    queryFn: async () => {
+        const token = await getAuthToken();
+        if (!token || !topicId) return { is_following: false };
+        
+        const res = await fetch(`${API_BASE_URL}/users/topics/${topicId}/follow-status`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (!res.ok) return { is_following: false };
+        return res.json();
+    },
+    enabled: !!topicId,
   });
 
   const discussionId = discussion?.id || discussion?._id || null;
   const replyCount = discussion?.reply_count || 0;
 
-  // --- ERROR HANDLING ---
+  const isFollowing = optimisticFollow !== null 
+    ? optimisticFollow 
+    : (followData?.is_following || false);
+
+
   useEffect(() => {
     if (isTopicError) {
       Alert.alert("Topic Unavailable", "This topic could not be found or has been removed.");
@@ -134,9 +159,8 @@ const TopicDetailScreen: React.FC = () => {
     }
   }, [isTopicError]);
 
-  // --- HANDLERS ---
   const onRefresh = async () => {
-    await Promise.all([refetchTopic(), refetchDiscussion()]);
+    await Promise.all([refetchTopic(), refetchDiscussion(), refetchFollowStatus()]);
   };
 
   const openArticle = (url: string) => Linking.openURL(url);
@@ -152,6 +176,39 @@ const TopicDetailScreen: React.FC = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 400); 
+  };
+
+  // 👈 MODIFIED TOGGLE LOGIC TO TRIGGER MODAL
+  const handleToggleFollow = async () => {
+    if (!topic?.id) return;
+    
+    const newStatus = !isFollowing;
+    setOptimisticFollow(newStatus);
+
+    // Only show the premium modal when they FOLLOW, not unfollow
+    if (newStatus === true) {
+      setShowFollowModal(true);
+    }
+    
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/users/topics/${topic.id}/follow`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to update follow status");
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['followStatus', topic.id] });
+      queryClient.invalidateQueries({ queryKey: ['followedTopics'] }); 
+      
+    } catch (error) {
+      setOptimisticFollow(isFollowing);
+      if (newStatus === true) setShowFollowModal(false); // Hide if it failed
+      Alert.alert("Error", "Could not update tracking preferences. Please try again.");
+    }
   };
 
   const handleShare = async () => {
@@ -180,7 +237,6 @@ const TopicDetailScreen: React.FC = () => {
     return { colors: ['#818CF8', '#4F46E5'], icon: 'newspaper-outline' as const }; 
   };
 
-  // --- RENDERERS ---
   const renderHeroImage = () => {
     if (!topic?.image_url || heroImageError) {
       const fallback = getCategoryFallback(topic?.category);
@@ -350,10 +406,17 @@ const TopicDetailScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
+        
         <Text style={styles.headerTitle} numberOfLines={1}>{topic.category} PODNOVA TOPIC</Text>
-        <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
-          <Ionicons name="share-outline" size={22} color="#6B7280" />
-        </TouchableOpacity>
+        
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerButton} onPress={handleToggleFollow}>
+            <Ionicons name={isFollowing ? "notifications" : "notifications-outline"} size={22} color={isFollowing ? "#F59E0B" : "#6B7280"} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
+            <Ionicons name="share-outline" size={22} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView 
@@ -427,6 +490,33 @@ const TopicDetailScreen: React.FC = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Premium Notification Confirmation Modal */}
+      <Modal
+        visible={showFollowModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFollowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="notifications" size={32} color="#F59E0B" />
+            </View>
+            <Text style={styles.modalTitle}>Topic Tracked</Text>
+            <Text style={styles.modalMessage}>
+              You will now receive push notifications when this story develops. We'll alert you of major narrative shifts, new sources, and reliability updates.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowFollowModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {topic && (
         <>
           <PodcastGeneratorModal
@@ -480,6 +570,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     textAlign: "center",
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   headerButton: {
     width: 40,
@@ -839,6 +935,64 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: "#6B7280",
+  },
+
+  // 👈 NEW STYLES FOR THE CONFIRMATION MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 340,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FEF3C7", // Amber-50
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 15,
+    color: "#4B5563",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: "#111827",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    width: "100%",
+    alignItems: "center",
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });
 

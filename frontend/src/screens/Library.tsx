@@ -13,6 +13,7 @@ import {
   Modal,
   Alert,
   ScrollView,
+  DeviceEventEmitter,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { auth } from "../firebase/config";
@@ -21,8 +22,8 @@ import { File, Paths } from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAudio } from "../contexts/AudioContext";
 import PodcastPlayer from "../components/PodcastPlayer";
-import RegeneratePodcastModal from "../components/modals/RegeneratePodcastModal"; // <-- IMPORT NEW MODAL
-import { Podcast, TabType, PodcastLibraryResponse } from "../types/podcasts";
+import RegeneratePodcastModal from "../components/modals/RegeneratePodcastModal"; 
+import { Podcast, TabType } from "../types/podcasts";
 import { LinearGradient } from 'expo-linear-gradient';
 import PodcastListSkeleton from "../components/skeletons/PodcastListSkeleton";
 
@@ -49,7 +50,6 @@ const LibraryScreen: React.FC = () => {
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   
-  // NEW REGENERATE MODAL STATE
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [selectedPodcast, setSelectedPodcast] = useState<Podcast | null>(null);
 
@@ -57,7 +57,18 @@ const LibraryScreen: React.FC = () => {
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const previousPodcastCount = useRef<number>(0);
 
-  useEffect(() => { loadLocalData(); }, []);
+  // NEW: Listen for global save events
+  useEffect(() => { 
+    loadLocalData(); 
+    
+    const subscription = DeviceEventEmitter.addListener("LIBRARY_UPDATED", () => {
+      loadLocalData();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const loadLocalData = async () => {
     try {
@@ -211,6 +222,10 @@ const LibraryScreen: React.FC = () => {
       else newSaved.add(podcastId);
       setSavedPodcasts(newSaved);
       await AsyncStorage.setItem(STORAGE_KEYS.SAVED, JSON.stringify([...newSaved]));
+      
+      // NEW: Broadcast update
+      DeviceEventEmitter.emit("LIBRARY_UPDATED");
+      
     } catch (error) {
       console.error("Error toggling saved:", error);
     }
@@ -253,7 +268,8 @@ const LibraryScreen: React.FC = () => {
     return "Unknown";
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return "Just now";
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -335,6 +351,14 @@ const LibraryScreen: React.FC = () => {
     return (
       <>
         <TouchableOpacity style={styles.podcastCard} activeOpacity={0.7} onPress={() => handlePlayPodcast(item)}>
+          
+          {item.has_topic_update && (
+            <View style={styles.absoluteUpdateBadge}>
+              <Ionicons name="flash" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.absoluteUpdateText}>Update</Text>
+            </View>
+          )}
+
           <View style={styles.cardContent}>
             {isCustom ? (
               <LinearGradient colors={['#34D399', '#059669']} style={styles.thumbnail} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -347,25 +371,19 @@ const LibraryScreen: React.FC = () => {
             )}
 
             <View style={styles.podcastInfo}>
-              <Text style={styles.podcastTitle} numberOfLines={2}>{item.topic_title}</Text>
+              <Text style={styles.podcastTitle} numberOfLines={2}>
+                {item.topic_title}
+              </Text>
               <View style={styles.metaRow}>
                 <Text style={styles.duration}>Length: {formatDuration(item.duration_seconds, item.length_minutes)}</Text>
                 <Text style={styles.metaDivider}>•</Text>
-                <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
+                <Text style={styles.dateText}>{formatDate(item.completed_at || item.created_at)}</Text>
               </View>
 
               <View style={styles.tagsRow}>
                 <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(item.category) + "20" }]}>
                   <Text style={[styles.categoryText, { color: getCategoryColor(item.category) }]}>{isCustom ? "Studio Custom" : item.category}</Text>
                 </View>
-                
-                {/* NEW: Topic Update Badge */}
-                {item.has_topic_update && (
-                  <View style={[styles.categoryTag, { backgroundColor: "#FEF3C7" }]}>
-                    <Ionicons name="flash" size={10} color="#D97706" style={{ marginRight: 2 }} />
-                    <Text style={[styles.categoryText, { color: "#D97706" }]}>Update Available</Text>
-                  </View>
-                )}
 
                 {isDownloaded && (
                   <View style={styles.downloadBadge}><Ionicons name="download-outline" size={12} color="#0e9b6c" /></View>
@@ -499,7 +517,9 @@ const LibraryScreen: React.FC = () => {
         onToggleSave={() => { if (currentPodcast) toggleSaved(currentPodcast.id); }}
         onRegenerateRequest={(podcast: Podcast) => {
           setSelectedPodcast(podcast);
-          setShowRegenerateModal(true);
+          setTimeout(() => {
+            setShowRegenerateModal(true);
+          }, 300);
         }}
       />
 
@@ -511,7 +531,7 @@ const LibraryScreen: React.FC = () => {
           setSelectedPodcast(null);
         }}
         onSuccess={() => {
-          fetchPodcasts(true); // Refresh list to show 'generating' state
+          fetchPodcasts(true); 
         }}
       />
     </View>
@@ -640,6 +660,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    position: "relative",
+  },
+  absoluteUpdateBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    zIndex: 10,
+    shadowColor: "#F59E0B",
+    shadowOffset: { width: -1, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  absoluteUpdateText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   cardContent: {
     flexDirection: "row",

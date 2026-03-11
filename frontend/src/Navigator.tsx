@@ -28,6 +28,8 @@ import DiscussionDetailScreen from "./screens/DiscussionDetail";
 // Components
 import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
+import RegeneratePodcastModal from "./components/modals/RegeneratePodcastModal"; // <-- ADDED IMPORT
+import { Podcast } from "./types/podcasts";
 
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
@@ -189,6 +191,10 @@ const RootAppOverlay: React.FC = () => {
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [currentRouteName, setCurrentRouteName] = useState<string>("Home");
   
+  // NEW: State for the universal Regenerate Modal
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [selectedPodcastToRegen, setSelectedPodcastToRegen] = useState<Podcast | null>(null);
+
   const navigationRef = useNavigationContainerRef<MainStackParamList>();
 
   const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
@@ -250,8 +256,29 @@ const RootAppOverlay: React.FC = () => {
             onClose={() => setShowFullPlayer(false)}
             isSaved={false} 
             onToggleSave={() => {}} 
+            // NEW: Feed the regenerate request to the universal modal state
+            onRegenerateRequest={(podcast: Podcast) => {
+              setSelectedPodcastToRegen(podcast);
+              setTimeout(() => {
+                setShowRegenerateModal(true);
+              }, 400); // Wait for the player to drop down
+            }}
           />
         )}
+
+        {/* NEW: Universal Regenerate Modal so it can be accessed anywhere */}
+        <RegeneratePodcastModal
+          visible={showRegenerateModal}
+          podcast={selectedPodcastToRegen}
+          onClose={() => {
+            setShowRegenerateModal(false);
+            setSelectedPodcastToRegen(null);
+          }}
+          onSuccess={() => {
+            // The LibraryScreen's useFocusEffect will auto-refresh when the user goes back to the library tab!
+          }}
+        />
+
       </NavigationContainer>
     </View>
   );

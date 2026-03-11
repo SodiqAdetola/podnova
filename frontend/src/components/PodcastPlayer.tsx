@@ -12,6 +12,7 @@ import {
   Dimensions,
   PanResponder,
   StatusBar,
+  DeviceEventEmitter,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
@@ -181,6 +182,10 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
         setInternalIsSaved(true);
       }
       await AsyncStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...savedSet]));
+      
+      // NEW: Broadcast update globally
+      DeviceEventEmitter.emit("LIBRARY_UPDATED");
+      
       if (externalOnToggleSave) externalOnToggleSave();
     } catch (error) {
       console.error("Error toggling save:", error);
@@ -278,34 +283,34 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           
+          {/* Main Album Art Container */}
           <View style={[styles.albumArt, { backgroundColor: getCategoryColor(podcast.category) }]}>
+            
+            {/* The "Notch" Banner explicitly inside the Album Art */}
+            {podcast.has_topic_update && (
+              <TouchableOpacity 
+                style={styles.playerUpdateNotch}
+                activeOpacity={0.8}
+                onPress={() => {
+                  onClose(); 
+                  if (onRegenerateRequest) onRegenerateRequest(podcast);
+                }}
+              >
+                <Ionicons name="flash" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <View style={{ flexShrink: 1, marginRight: 8 }}>
+                  <Text style={styles.playerUpdateTitle} numberOfLines={1}>New Updates Available!</Text>
+                  <Text style={styles.playerUpdateSubtitle} numberOfLines={1}>Tap to regenerate timeline</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+
             <Ionicons name={isCustom ? "document-text" : "mic"} size={60} color="#FFFFFF" opacity={0.9} />
             <Text style={styles.podcastTitle} numberOfLines={2}>{podcast.topic_title}</Text>
             <Text style={styles.podcastCategory}>{isCustom ? "STUDIO CUSTOM" : podcast.category.toUpperCase()}</Text>
             <Text style={styles.podcastVoice}>Style: {podcast.style}</Text>
             <Text style={styles.podcastVoice}>Voice: {podcast.voice.replace(/_/g, " ")}</Text>
           </View>
-
-          {/* Topic Update Banner */}
-          {podcast.has_topic_update && (
-            <TouchableOpacity 
-              style={styles.playerUpdateBanner}
-              activeOpacity={0.8}
-              onPress={() => {
-                onClose(); 
-                if (onRegenerateRequest) onRegenerateRequest(podcast);
-              }}
-            >
-              <View style={styles.playerUpdateBannerIcon}>
-                <Ionicons name="flash" size={18} color="#FFFFFF" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.playerUpdateTitle}>New Updates Available!</Text>
-                <Text style={styles.playerUpdateSubtitle}>Tap to regenerate this podcast with the latest news timeline.</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#F59E0B" />
-            </TouchableOpacity>
-          )}
 
           {/* TELEPROMPTER TRANSCRIPT */}
           {sentences.length > 0 && (
@@ -383,7 +388,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
               <Text style={styles.actionButtonText}>Speed</Text>
             </TouchableOpacity>
             
-            {/* NEW: Generic Redo/Regenerate Button */}
+            {/* Generic Redo/Regenerate Button */}
             <TouchableOpacity style={styles.actionButton} onPress={() => {
                 onClose();
                 if (onRegenerateRequest) onRegenerateRequest(podcast);
@@ -502,6 +507,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 15,
+    position: "relative",
+  },
+  playerUpdateNotch: {
+    position: 'absolute',
+    top: 0,
+    alignSelf: 'center',
+    backgroundColor: "#F59E0B",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomLeftRadius: 14, 
+    borderBottomRightRadius: 14,
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  playerUpdateTitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 1,
+  },
+  playerUpdateSubtitle: {
+    color: "rgba(255, 255, 255, 0.9)",
+    fontSize: 10,
+    lineHeight: 12,
   },
   podcastTitle: {
     fontSize: 18,
@@ -528,39 +563,6 @@ const styles = StyleSheet.create({
     top: 40,
     textTransform: 'capitalize',
   },
-  
-  playerUpdateBanner: {
-    flexDirection: "row",
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
-    borderRadius: 12,
-    padding: 12,
-    alignItems: "center",
-    marginBottom: 20,
-    marginTop: 5,
-  },
-  playerUpdateBannerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F59E0B",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  playerUpdateTitle: {
-    color: "#FCD34D",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  playerUpdateSubtitle: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  
   transcriptContainer: {
     width: '100%',
     backgroundColor: "transparent",
@@ -598,7 +600,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     lineHeight: 20,
     textAlign: "center",
-    marginTop: 30,
+    marginTop: 10,
   },
   transcriptTextActive: {
     color: "#f5f5f5",
@@ -614,7 +616,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  
   progressContainer: {
     marginBottom: 24,
     marginTop: 16,

@@ -12,12 +12,14 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Podcast } from "../../types/podcasts";
 import { auth } from "../../firebase/config";
 import { LinearGradient } from "expo-linear-gradient";
 import Slider from "@react-native-community/slider";
+import { useAudio } from "../../contexts/AudioContext";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -50,6 +52,12 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
   const [voice, setVoice] = useState("calm_female");
   const [style, setStyle] = useState("standard");
   const [customPrompt, setCustomPrompt] = useState("");
+  
+  // State for the update focus toggle
+  const [focusOnUpdates, setFocusOnUpdates] = useState(true);
+
+  // Bring in the audio context to handle the "Ghost Player" bug
+  const { currentPodcast, stopPlayback } = useAudio();
 
   // Pre-fill existing data when the modal opens
   useEffect(() => {
@@ -58,6 +66,8 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
       setVoice(podcast.voice || "calm_female");
       setStyle(podcast.style || "standard");
       setCustomPrompt(podcast.custom_prompt || "");
+      // Default to true if an update is available
+      setFocusOnUpdates(!!podcast.has_topic_update); 
     }
   }, [podcast, visible]);
 
@@ -80,10 +90,16 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
           voice: voice,
           style: style,
           custom_prompt: customPrompt.trim() !== "" ? customPrompt.trim() : null,
+          focus_on_updates: podcast.has_topic_update ? focusOnUpdates : false,
         }),
       });
 
       if (response.ok) {
+        // If the user is currently listening to this exact podcast, stop it and clear the player
+        if (currentPodcast && currentPodcast.id === podcast.id) {
+          await stopPlayback();
+        }
+        
         onSuccess();
         onClose();
       } else {
@@ -112,11 +128,29 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {podcast.has_topic_update && (
-              <View style={styles.updateBanner}>
-                <Ionicons name="flash" size={20} color="#F59E0B" />
-                <Text style={styles.updateBannerText}>
-                  This topic has new developments! Regenerating will include the latest news.
-                </Text>
+              <View style={styles.updateContainer}>
+                <View style={styles.updateBanner}>
+                  <Ionicons name="flash" size={20} color="#F59E0B" />
+                  <Text style={styles.updateBannerText}>
+                    Major developments have occurred in this story!
+                  </Text>
+                </View>
+                
+                {/* Focus Toggle */}
+                <View style={styles.focusToggleRow}>
+                  <View style={styles.focusTextContainer}>
+                    <Text style={styles.focusTitle}>Focus on New Updates Only</Text>
+                    <Text style={styles.focusSubtitle}>
+                      Creates a follow-up episode detailing what changed, rather than starting from the beginning.
+                    </Text>
+                  </View>
+                  <Switch 
+                    value={focusOnUpdates} 
+                    onValueChange={setFocusOnUpdates}
+                    trackColor={{ false: "#D1D5DB", true: "#A78BFA" }}
+                    thumbColor={focusOnUpdates ? "#6366F1" : "#F9FAFB"}
+                  />
+                </View>
               </View>
             )}
 
@@ -125,7 +159,7 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
                 {podcast.topic_title}
               </Text>
               <Text style={styles.infoSubtitle}>
-                Generating will overwrite the current audio.
+                Generating will overwrite your currently saved audio.
               </Text>
             </View>
 
@@ -134,7 +168,7 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
               <Text style={styles.sectionTitle}>Instructions (Optional)</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="E.g., Focus specifically on the financial impact..."
+                placeholder="E.g., Explain this like I am 5 years old..."
                 placeholderTextColor="#9CA3AF"
                 value={customPrompt}
                 onChangeText={setCustomPrompt}
@@ -182,7 +216,7 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
             </View>
 
             {/* Length Slider */}
-            <View style={[styles.section, { marginBottom: 40 }]}>
+            <View style={[styles.section, styles.lastSection]}>
               <View style={styles.lengthHeader}>
                 <Text style={styles.sectionTitle}>Target Length</Text>
                 <Text style={styles.lengthValue}>{length} min</Text>
@@ -234,7 +268,7 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     justifyContent: "center",
     padding: 20,
   },
@@ -255,26 +289,56 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: "#41439e",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    textAlign: "center",
+    marginTop: 8,
   },
   content: {
     padding: 20,
   },
+  updateContainer: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
   updateBanner: {
     flexDirection: "row",
-    backgroundColor: "#FEF3C7",
-    padding: 12,
-    borderRadius: 12,
     alignItems: "center",
-    gap: 10,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 12,
   },
   updateBannerText: {
-    flex: 1,
     color: "#92400E",
-    fontSize: 13,
-    fontWeight: "500",
-    lineHeight: 18,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  focusToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: "#FDE68A",
+    paddingTop: 12,
+  },
+  focusTextContainer: {
+    flex: 1,
+    paddingRight: 15,
+  },
+  focusTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#92400E",
+    marginBottom: 2,
+  },
+  focusSubtitle: {
+    fontSize: 12,
+    color: "#B45309",
+    lineHeight: 16,
   },
   infoCard: {
     backgroundColor: "#F9FAFB",
@@ -298,8 +362,11 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  lastSection: {
+    marginBottom: 40,
+  },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 12,

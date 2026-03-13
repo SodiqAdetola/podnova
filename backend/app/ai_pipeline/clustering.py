@@ -52,6 +52,10 @@ class ClusteringService:
         self.maintenance_service = MaintenanceService(mongo_uri, db_name)
         self.history_service = TopicHistoryService(mongo_uri, db_name)
         
+        # 👈 NEW: STRICT SEMAPHORE TO PREVENT OOM CRASHES
+        # Limits concurrent LLM calls and embedding generations
+        self.process_semaphore = asyncio.Semaphore(2)
+        
         asyncio.create_task(self._ensure_indexes())
     
     async def _ensure_indexes(self):
@@ -66,10 +70,12 @@ class ClusteringService:
     
     async def compute_embedding(self, text: str) -> Optional[np.ndarray]:
         try:
-            response = await client.aio.models.embed_content(
-                model=EMBEDDING_MODEL,
-                contents=text
-            )
+            # 👈 FIX: Wrap API call in semaphore
+            async with self.process_semaphore:
+                response = await client.aio.models.embed_content(
+                    model=EMBEDDING_MODEL,
+                    contents=text
+                )
             
             if hasattr(response, 'embeddings') and len(response.embeddings) > 0:
                 return np.array(response.embeddings[0].values)
@@ -316,13 +322,15 @@ Generate a JSON object with:
 
 JSON only, no markdown:"""
 
-            response = await client.aio.models.generate_content(
-                model=TEXT_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
+            # 👈 FIX: Wrap API call in semaphore
+            async with self.process_semaphore:
+                response = await client.aio.models.generate_content(
+                    model=TEXT_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                    )
                 )
-            )
             
             raw_text = response.text.strip()
             if raw_text.startswith("```json"):
@@ -417,7 +425,8 @@ JSON only, no markdown:"""
         async for topic in ready_cursor:
             success = await self.generate_topic_title(topic["_id"])
             if success:
-                await asyncio.sleep(4) 
+                # Sleep briefly between successful titles just to be extra safe with API limits
+                await asyncio.sleep(1) 
         
         return stats
     

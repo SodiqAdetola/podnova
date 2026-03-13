@@ -44,6 +44,11 @@ class ArticleIngestionService:
         self.categories_collection = self.db["categories"]
 
         self.http_semaphore = asyncio.Semaphore(5)
+        
+        # 👈 NEW: STRICT SEMAPHORE TO PREVENT OOM CRASHES
+        # This forces the BeautifulSoup parser to only process 2 articles at a time
+        self.process_semaphore = asyncio.Semaphore(2) 
+        
         self.session: Optional[aiohttp.ClientSession] = None
 
         # Create indexes on initialization
@@ -131,7 +136,7 @@ class ArticleIngestionService:
             return None
 
     # =========================================================================
-    # IMAGE EXTRACTION LOGIC
+    # IMAGE EXTRACTION LOGIC (Restored to original robust version)
     # =========================================================================
     def extract_image_from_entry(self, entry: Dict, url: str) -> Optional[str]:
         """
@@ -400,6 +405,11 @@ class ArticleIngestionService:
             logger.error(f"Error parsing article: {str(e)}")
             return None
 
+    # 👈 NEW: Wrapper to apply the semaphore strictly to the heavy processing phase
+    async def _safe_process_article(self, article_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        async with self.process_semaphore:
+            return await self.process_article(article_data)
+
     async def process_article(self, article_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Process pipeline: Deduplicate -> Scrape -> Fallback -> Filter -> Hash Check
@@ -446,7 +456,8 @@ class ArticleIngestionService:
         for entry in entries:
             article_data = self.parse_article(entry, feed_info, category)
             if article_data:
-                tasks.append(self.process_article(article_data))
+                # 👈 NEW: Use the safe wrapper to prevent RAM spikes
+                tasks.append(self._safe_process_article(article_data))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

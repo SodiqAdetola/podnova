@@ -8,6 +8,7 @@ from app.config import MONGODB_URI, MONGODB_DB_NAME
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import List, Dict, Optional, Any
+from bson import ObjectId  
 import motor.motor_asyncio
 import certifi
 import numpy as np
@@ -125,8 +126,6 @@ class MaintenanceService:
             similarity = self.cosine_similarity(article_emb, centroid_emb)
             
             # BREAKING NEWS PROTECTION: 
-            # If the article is less than 24 hours old, artificially boost its similarity score 
-            # so it isn't deleted just because it's reporting a sudden plot twist in the story.
             if article_age_hours < 24:
                 similarity = max(similarity, 0.85)
                 
@@ -139,11 +138,14 @@ class MaintenanceService:
     async def trim_topic_articles(self, topic_id: str) -> Dict[str, Any]:
         """
         Trim articles from a topic if it exceeds the flat MAX_ARTICLES_PER_TOPIC limit.
-        Safely handles missing embeddings to prevent crashes.
         """
         try:
-            topic = await self.topics_collection.find_one({"_id": topic_id})
+            # 👈 FIX: Convert string to ObjectId
+            query_id = ObjectId(topic_id) if isinstance(topic_id, str) else topic_id
+
+            topic = await self.topics_collection.find_one({"_id": query_id})
             if not topic:
+                logger.warning(f"Trim aborted: Topic {topic_id} not found")
                 return {"error": "Topic not found"}
             
             max_articles = self.config.MAX_ARTICLES_PER_TOPIC
@@ -160,7 +162,6 @@ class MaintenanceService:
             now = datetime.now(UK_TZ)
             ranked_articles = []
             
-            # The first article in the list is usually the seed that started the topic
             seed_id = str(topic["article_ids"][0]) if topic.get("article_ids") else None
             
             for article in articles:
@@ -171,7 +172,7 @@ class MaintenanceService:
                     "is_seed": str(article["_id"]) == seed_id
                 })
             
-            # Sort by score (keep seed article absolutely safe at the top)
+            # Sort by score
             ranked_articles.sort(key=lambda x: (x["is_seed"], x["score"]), reverse=True)
             
             to_keep = ranked_articles[:max_articles]
@@ -180,7 +181,7 @@ class MaintenanceService:
             kept_ids = [item["article"]["_id"] for item in to_keep]
             removed_ids = [item["article"]["_id"] for item in to_remove]
             
-            # 1. Safely detach and archive removed articles
+            # Detach
             if removed_ids:
                 await self.articles_collection.update_many(
                     {"_id": {"$in": removed_ids}},
@@ -188,20 +189,19 @@ class MaintenanceService:
                         "$set": {
                             "status": "archived_from_topic",
                             "archived_at": now,
-                            "former_topic_id": topic_id
+                            "former_topic_id": str(query_id)
                         },
                         "$unset": {"topic_id": ""}
                     }
                 )
             
-            # 2. Recalculate centroid instantly in memory securely
             kept_embeddings = [
                 np.array(item["article"]["embedding"]) 
                 for item in to_keep if item["article"].get("embedding") is not None
             ]
             new_centroid = np.mean(kept_embeddings, axis=0) if kept_embeddings else None
 
-            # 3. Update the topic
+            # Update the topic
             update_doc = {
                 "article_ids": kept_ids,
                 "article_count": len(kept_ids),
@@ -210,7 +210,10 @@ class MaintenanceService:
             if new_centroid is not None:
                 update_doc["centroid_embedding"] = new_centroid.tolist()
 
-            await self.topics_collection.update_one({"_id": topic_id}, {"$set": update_doc})
+            # 👈 FIX: Use query_id here as well
+            await self.topics_collection.update_one({"_id": query_id}, {"$set": update_doc})
+            
+            logger.info(f"🔪 Trimmed topic {topic_id}: Removed {len(removed_ids)}, Kept {len(kept_ids)}")
             
             return {
                 "trimmed": len(removed_ids),
@@ -224,9 +227,7 @@ class MaintenanceService:
             return {"error": str(e)}
     
     async def purge_deleted_articles(self) -> int:
-        """Permanently deletes completely detached articles past grace period."""
         delete_cutoff = datetime.now(UK_TZ) - timedelta(days=self.config.ARCHIVED_ARTICLE_PURGE_DAYS)
-        
         result = await self.articles_collection.delete_many({
             "status": {"$in": [
                 "archived_from_topic", 
@@ -238,9 +239,7 @@ class MaintenanceService:
         return result.deleted_count
     
     async def cleanup_orphan_articles(self) -> int:
-        """Archive articles that failed clustering and are past grace period"""
         cutoff_date = datetime.now(UK_TZ) - timedelta(days=self.config.ORPHAN_ARTICLE_GRACE_DAYS)
-        
         result = await self.articles_collection.update_many(
             {
                 "status": "pending_clustering",
@@ -256,7 +255,6 @@ class MaintenanceService:
         return result.modified_count
     
     async def update_topic_lifecycle(self) -> Dict[str, Any]:
-        """Update topic statuses based on activity"""
         now = datetime.now(UK_TZ)
         stats = {"marked_stale": 0, "marked_archived": 0, "deleted": 0}
         
@@ -294,7 +292,6 @@ class MaintenanceService:
         return stats
     
     async def cleanup_small_topics(self) -> int:
-        """Remove old topics with too few articles"""
         cursor = self.topics_collection.find({
             "article_count": {"$lt": self.config.MIN_TOPIC_ARTICLES},
             "status": {"$in": ["stale", "archived"]}
@@ -315,7 +312,6 @@ class MaintenanceService:
         return deleted
     
     async def run_full_maintenance(self) -> Dict[str, Any]:
-        """Execute complete maintenance cycle safely"""
         logger.info("=" * 80)
         logger.info(f"Starting PodNova Maintenance at {datetime.now(UK_TZ).strftime('%H:%M:%S %Z')}")
         logger.info("=" * 80)
@@ -364,7 +360,6 @@ class MaintenanceService:
     async def close(self):
         self.client.close()
         logger.info("MongoDB connection closed")
-
 
 async def main():
     service = None

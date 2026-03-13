@@ -21,7 +21,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('podnova_scheduler.log'),
         logging.StreamHandler()
     ]
 )
@@ -128,7 +127,7 @@ class PodNovaScheduler:
             logger.info("SCHEDULED JOB: Light Maintenance")
             logger.info("=" * 80)
             
-            # FIXED: Stream cursor to save RAM
+            # Use streaming cursor to prevent RAM exhaustion when iterating topics
             trimmed = 0
             cursor = self.maintenance_service.topics_collection.find({"status": "active"})
             async for topic in cursor:
@@ -146,21 +145,18 @@ class PodNovaScheduler:
         """Check if it's time to run scheduled jobs based on UK time"""
         now = datetime.now(UK_TZ)
         
-        # Check Pipeline (Ingestion -> Clustering -> History)
         if (now - self.last_pipeline).total_seconds() >= (self.PIPELINE_INTERVAL_HOURS * 3600):
             task = asyncio.create_task(self.run_core_pipeline())
             self.active_tasks.add(task)
             task.add_done_callback(self.active_tasks.discard)
         
-        # Check light maintenance
         if (now - self.last_light_maintenance).total_seconds() >= (self.LIGHT_MAINTENANCE_INTERVAL_HOURS * 3600):
             task = asyncio.create_task(self.run_light_maintenance())
             self.active_tasks.add(task)
             task.add_done_callback(self.active_tasks.discard)
         
-        # Check for full maintenance (daily at 3 AM UK Time)
         if now.hour == 3 and now.minute == 0:
-            if (now - self.last_full_maintenance).total_seconds() > 3600:  # Only trigger once
+            if (now - self.last_full_maintenance).total_seconds() > 3600:
                 task = asyncio.create_task(self.run_full_maintenance())
                 self.active_tasks.add(task)
                 task.add_done_callback(self.active_tasks.discard)
@@ -170,12 +166,10 @@ class PodNovaScheduler:
         logger.info(f"Received signal {sig}. Shutting down scheduler gracefully...")
         self.running = False
         
-        # Wait for active tasks to finish (or cancel them if they take too long)
         if self.active_tasks:
             logger.info(f"Waiting for {len(self.active_tasks)} active jobs to complete...")
             await asyncio.gather(*self.active_tasks, return_exceptions=True)
         
-        # Close all database connections and HTTP sessions
         await self.ingestion_service.close()
         await self.clustering_service.close()
         await self.maintenance_service.close()
@@ -194,25 +188,17 @@ class PodNovaScheduler:
         logger.info(f"Time: {datetime.now(UK_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
         logger.info("=" * 80)
         
-        logger.info("\nScheduled Jobs:")
-        logger.info(f"  • Core Pipeline (Ingest->Cluster->History): Every {self.PIPELINE_INTERVAL_HOURS} hours")
-        logger.info(f"  • Light Maintenance: Every {self.LIGHT_MAINTENANCE_INTERVAL_HOURS} hours")
-        logger.info(f"  • Full Maintenance: Daily at 3:00 AM (UK Time)")
-        logger.info("\nScheduler running. Press Ctrl+C to stop.")
-        logger.info("=" * 80)
-        
         try:
             while self.running:
                 await self.check_and_run_jobs()
-                await asyncio.sleep(60)  # Check the clock every 60 seconds
+                await asyncio.sleep(60) 
         except asyncio.CancelledError:
             pass
         finally:
-            if self.running:  # Only call shutdown if not already called by signal
+            if self.running: 
                 await self.shutdown()
 
 async def main():
-    """Entry point"""
     scheduler = PodNovaScheduler()
     await scheduler.start()
 

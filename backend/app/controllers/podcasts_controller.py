@@ -1,4 +1,3 @@
-# app/controllers/podcasts_controller.py
 """
 PodNova Podcast Generation Controller
 Orchestrates podcast generation workflow using service layer
@@ -23,6 +22,7 @@ from app.services.file_service import file_service
 
 
 class PodcastStyle(str, Enum):
+    """Supported comprehension levels for podcast generation."""
     CASUAL = "casual"
     STANDARD = "standard"
     ADVANCED = "advanced"
@@ -30,6 +30,7 @@ class PodcastStyle(str, Enum):
 
 
 class PodcastStatus(str, Enum):
+    """Lifecycle states for a podcast generation job."""
     PENDING = "pending"
     GENERATING_SCRIPT = "generating_script"
     GENERATING_AUDIO = "generating_audio"
@@ -39,6 +40,7 @@ class PodcastStatus(str, Enum):
 
 
 class PodcastVoice(str, Enum):
+    """Available voice presets mapped to Google TTS voice names."""
     NORMAL_FEMALE = "normal_female"
     NORMAL_MALE = "normal_male"
     CALM_FEMALE = "calm_female"
@@ -47,21 +49,24 @@ class PodcastVoice(str, Enum):
     PROFESSIONAL_MALE = "professional_male"
 
 
+# Mapping from internal voice identifiers to Google Cloud TTS voice names.
 VOICE_CONFIGS = {
-    PodcastVoice.NORMAL_FEMALE: "en-US-Chirp3-HD-Autonoe",       
-    PodcastVoice.NORMAL_MALE: "en-US-Chirp3-HD-Orus",            
-    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Leda",    
-    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Puck",     
-    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", 
-    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  
+    PodcastVoice.NORMAL_FEMALE: "en-US-Chirp3-HD-Autonoe",
+    PodcastVoice.NORMAL_MALE: "en-US-Chirp3-HD-Orus",
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Leda",
+    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Puck",
+    PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede",
+    PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",
 }
 
+# Mapping from frontend length preferences to minutes.
 PODCAST_LENGTH_MAP = {
     "short": 5,
     "medium": 10,
     "long": 20
 }
 
+# Mapping from user tone preference to podcast style.
 TONE_TO_STYLE_MAP = {
     "factual": PodcastStyle.STANDARD,
     "casual": PodcastStyle.CASUAL,
@@ -69,6 +74,7 @@ TONE_TO_STYLE_MAP = {
     "expert": PodcastStyle.EXPERT
 }
 
+# Singleton service instances.
 script_service = ScriptService()
 audio_service = AudioService()
 storage_service = StorageService()
@@ -84,7 +90,13 @@ async def create_podcast(
     custom_prompt: Optional[str] = None,
     focus_areas: Optional[List[str]] = None
 ) -> Dict:
-    """Create a new podcast generation job"""
+    """
+    Create a new podcast generation job for a topic.
+
+    Loads user preferences to populate defaults for voice, style and length.
+    Inserts a podcast document with status PENDING and launches an async
+    generation task.
+    """
     user_profile = await user_service.get_user_profile(user_id)
     
     if user_profile:
@@ -100,6 +112,7 @@ async def create_podcast(
         style = style or PodcastStyle.STANDARD
         length_minutes = length_minutes or 5
     
+    # Validate the topic exists.
     try:
         topic = await db["topics"].find_one({"_id": ObjectId(topic_id)})
     except:
@@ -108,6 +121,7 @@ async def create_podcast(
     if not topic:
         raise ValueError("Topic not found")
     
+    # Build the podcast document.
     podcast_doc = {
         "user_id": user_id,
         "topic_id": ObjectId(topic_id),
@@ -133,6 +147,7 @@ async def create_podcast(
     result = await db["podcasts"].insert_one(podcast_doc)
     podcast_id = str(result.inserted_id)
     
+    # Start background generation without blocking the HTTP response.
     asyncio.create_task(_generate_podcast_async(podcast_id))
     
     return {
@@ -156,23 +171,28 @@ async def create_custom_podcast(
     style: str,
     length_minutes: int
 ) -> Dict:
-    """Extract text from files and/or use pasted text to create a custom podcast job"""
-    
+    """
+    Create a custom podcast from uploaded files and/or pasted text.
+
+    Extracts text from provided files, appends any pasted text, then creates
+    a podcast record with is_custom=True. The source text is stored in
+    custom_source_text for later script generation.
+    """
     extracted_text = ""
     
-    # 1. Extract from files if provided
+    # Extract from files if provided.
     if files:
         for file in files:
             extracted_text += await file_service.extract_text(file)
             
-    # 2. Append pasted text if provided
+    # Append pasted text if provided.
     if text_content:
         extracted_text += "\n\n" + text_content
         
     if not extracted_text.strip():
          raise ValueError("No valid text could be extracted from files or input.")
             
-    # 3. Create the Database Record
+    # Create the database record for the custom podcast.
     podcast_doc = {
         "user_id": user_id,
         "topic_id": None, 
@@ -210,7 +230,10 @@ async def create_custom_podcast(
 
 
 async def _generate_podcast_async(podcast_id: str):
-    """Async task to generate podcast script and audio"""
+    """
+    Asynchronous background task that generates the podcast script, synthesises
+    audio, uploads the result, and sends a push notification.
+    """
     thread_monitor.start_task()
     try:
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
@@ -220,6 +243,7 @@ async def _generate_podcast_async(podcast_id: str):
 
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
         
+        # Generate script either from a topic or from custom source text.
         if podcast.get("is_custom"):
             script = await script_service.generate_custom_script(podcast_id)
         else:
@@ -258,8 +282,9 @@ async def _generate_podcast_async(podcast_id: str):
             }
         )
         
+        # Send push notification; notification failures are non‑fatal.
         try:
-            print(f"🔔 Attempting to trigger podcast notification for {podcast_id}")
+            print(f"Attempting to trigger podcast notification for {podcast_id}")
             final_podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
             if final_podcast:
                 topic_title = str(final_podcast.get("topic_title", "Recent News"))
@@ -291,6 +316,7 @@ async def _update_podcast_status(
     status: PodcastStatus,
     additional_fields: Optional[Dict] = None
 ):
+    """Update the status and optionally additional fields of a podcast."""
     update_fields = {
         "status": status,
         "updated_at": datetime.utcnow()
@@ -305,6 +331,7 @@ async def _update_podcast_status(
 
 
 async def _generate_audio_for_podcast(podcast_id: str, script: str) -> tuple[bytes, int]:
+    """Retrieve the podcast record, map voice, and call the audio service."""
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     voice_name = VOICE_CONFIGS[podcast["voice"]]
     
@@ -324,7 +351,13 @@ async def get_user_podcasts(
     limit: int = 50,
     skip: int = 0
 ) -> List[Dict]:
-    """Get all podcasts for a user, automatically failing zombie jobs"""
+    """
+    Get all podcasts for a user, automatically failing zombie jobs.
+
+    Any podcast stuck in an in‑progress state for more than 15 minutes is
+    marked as FAILED. Returns formatted podcast objects with a flag indicating
+    whether the topic has newer history points (for regeneration hint).
+    """
     query = {"user_id": user_id}
     if status:
         query["status"] = status
@@ -340,6 +373,7 @@ async def get_user_podcasts(
                 },
     }
     
+    # Identify and fail zombie jobs.
     zombies = db["podcasts"].find(zombie_query)
     async for zombie in zombies:
         zombie_time = zombie.get("updated_at")
@@ -361,6 +395,7 @@ async def get_user_podcasts(
     cursor = db["podcasts"].find(query).sort([("updated_at", -1)]).skip(skip).limit(limit)
     async for podcast in cursor:
         has_update = False
+        # For non‑custom podcasts, check if the topic has a newer history point.
         if not podcast.get("is_custom") and podcast.get("topic_id"):
             topic = await db["topics"].find_one(
                 {"_id": ObjectId(podcast["topic_id"])}, 
@@ -371,6 +406,7 @@ async def get_user_podcasts(
                 compare_time = podcast.get("completed_at") or podcast.get("created_at")
                 topic_time = topic["last_history_point"]
                 
+                # Normalise timezones for comparison.
                 if hasattr(topic_time, 'tzinfo') and topic_time.tzinfo:
                     topic_time = topic_time.replace(tzinfo=None)
                 if hasattr(compare_time, 'tzinfo') and compare_time.tzinfo:
@@ -404,7 +440,7 @@ async def get_user_podcasts(
 
 
 async def get_podcast_by_id(podcast_id: str) -> Optional[Dict]:
-    """Get podcast details by ID"""
+    """Get full details of a single podcast, including script and URLs."""
     try:
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     except:
@@ -448,11 +484,17 @@ async def regenerate_podcast(
     focus_areas: Optional[List[str]] = None,
     focus_on_updates: Optional[bool] = False
 ) -> Dict:
-    """Regenerate an existing podcast with updated settings"""
+    """
+    Regenerate an existing podcast with updated settings.
+
+    Clears previous audio and transcript files, resets generation state,
+    and launches a new background generation task.
+    """
     podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
     if not podcast:
         raise ValueError("Podcast not found")
     
+    # Delete old storage files if they exist.
     if podcast.get("audio_url"):
         try:
             from app.services.storage_service import storage_service
@@ -474,6 +516,7 @@ async def regenerate_podcast(
     if focus_areas is not None:
         update_fields["focus_areas"] = focus_areas
     
+    # Clear previous generation data.
     update_fields.update({
         "script": None,
         "audio_url": None,
@@ -500,7 +543,11 @@ async def regenerate_podcast(
 
 
 async def delete_podcast(podcast_id: str, user_id: str) -> bool:
-    """Delete a podcast"""
+    """
+    Delete a podcast after verifying ownership.
+
+    Also removes associated audio and transcript files from storage.
+    """
     podcast = await db["podcasts"].find_one({
         "_id": ObjectId(podcast_id),
         "user_id": user_id

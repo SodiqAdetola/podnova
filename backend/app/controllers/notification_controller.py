@@ -1,8 +1,11 @@
-# backend/app/controllers/notification_controller.py
+"""
+Notification Controller – fetches, marks read, and deletes user notifications.
+"""
 from typing import List, Dict
 import asyncio
 from app.services.notification_service import notification_service
 from app.models.notification import NotificationListResponse
+
 
 async def get_user_notifications(
     user_id: str, 
@@ -10,14 +13,18 @@ async def get_user_notifications(
     limit: int = 50, 
     skip: int = 0
 ) -> NotificationListResponse:
-    """Parallel fetch for notifications, total count, and unread count"""
-    
-    # Create the concurrent tasks
+    """
+    Fetch notifications for a user with pagination.
+
+    Performs three concurrent database queries to obtain:
+    - the list of notifications,
+    - the count of unread notifications,
+    - the total count of notifications.
+    """
     list_task = notification_service.get_user_notifications(user_id, unread_only, limit, skip)
     unread_task = notification_service.get_notification_count(user_id, unread_only=True)
     total_task = notification_service.get_notification_count(user_id, unread_only=False)
 
-    # Run all 3 DB queries at the exact same time
     notifications, unread_count, total = await asyncio.gather(list_task, unread_task, total_task)
     
     return NotificationListResponse(
@@ -28,37 +35,43 @@ async def get_user_notifications(
         limit=limit
     )
 
+
 async def mark_notification_read(notification_id: str, user_id: str) -> Dict:
-    """Atomic update and count refresh"""
+    """Mark a single notification as read and return the updated unread count."""
     success = await notification_service.mark_as_read(notification_id, user_id)
     new_count = await notification_service.get_notification_count(user_id, unread_only=True) if success else 0
     return {"success": success, "unread_count": new_count}
 
+
 async def mark_all_notifications_read(user_id: str) -> Dict:
-    """Atomic bulk update"""
+    """Mark all notifications as read for a user."""
     count = await notification_service.mark_all_as_read(user_id)
     return {"success": True, "marked_read": count, "unread_count": 0}
 
+
 async def get_unread_count(user_id: str) -> Dict:
-    """Standalone count check"""
+    """Quickly retrieve the number of unread notifications."""
     count = await notification_service.get_notification_count(user_id, unread_only=True)
     return {"unread_count": count}
 
-# --- DELETION CONTROLLERS ---
+
+# --- Deletion Endpoints ---
 
 async def delete_notification(notification_id: str, user_id: str) -> Dict:
-    """Delete a single notification"""
+    """Delete a single notification (permanent)."""
     success = await notification_service.delete_notification(notification_id, user_id)
     if not success:
         return {"success": False, "message": "Notification not found or access denied"}
     return {"success": True, "message": "Notification deleted successfully"}
 
+
 async def bulk_delete_notifications(notification_ids: list, user_id: str) -> Dict:
-    """Pass bulk delete request to the service layer"""
+    """Delete multiple notifications by their IDs."""
     deleted_count = await notification_service.bulk_delete(notification_ids, user_id)
     return {"success": True, "deleted_count": deleted_count}
 
+
 async def delete_all_notifications(user_id: str) -> Dict:
-    """Pass wipe request to the service layer"""
+    """Delete all notifications for the user."""
     deleted_count = await notification_service.delete_all(user_id)
     return {"success": True, "deleted_count": deleted_count}

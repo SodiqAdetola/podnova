@@ -1,4 +1,8 @@
 // frontend/src/components/modals/RegeneratePodcastModal.tsx
+/**
+ * Modal for regenerating an existing podcast with new settings.
+ * If the topic has new updates, user can choose to focus only on the new developments.
+ */
 
 import React, { useState, useEffect } from "react";
 import {
@@ -52,22 +56,19 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
   const [voice, setVoice] = useState("calm_female");
   const [style, setStyle] = useState("standard");
   const [customPrompt, setCustomPrompt] = useState("");
-  
-  // State for the update focus toggle
   const [focusOnUpdates, setFocusOnUpdates] = useState(true);
 
-  // Bring in the audio context to handle the "Ghost Player" bug
   const { currentPodcast, stopPlayback } = useAudio();
 
-  // Pre-fill existing data when the modal opens
+  // Pre‑fill the form with the podcast's existing settings when the modal opens.
   useEffect(() => {
     if (podcast && visible) {
       setLength(podcast.length_minutes || 5);
       setVoice(podcast.voice || "calm_female");
       setStyle(podcast.style || "standard");
       setCustomPrompt(podcast.custom_prompt || "");
-      // Default to true if an update is available
-      setFocusOnUpdates(!!podcast.has_topic_update); 
+      // Default to true if there are new updates available.
+      setFocusOnUpdates(!!podcast.has_topic_update);
     }
   }, [podcast, visible]);
 
@@ -95,11 +96,10 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
       });
 
       if (response.ok) {
-        // If the user is currently listening to this exact podcast, stop it and clear the player
+        // If the user is currently listening to this exact podcast, stop playback to avoid stale content.
         if (currentPodcast && currentPodcast.id === podcast.id) {
           await stopPlayback();
         }
-        
         onSuccess();
         onClose();
       } else {
@@ -136,12 +136,11 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
                   </Text>
                 </View>
                 
-                {/* Focus Toggle */}
                 <View style={styles.focusToggleRow}>
                   <View style={styles.focusTextContainer}>
                     <Text style={styles.focusTitle}>Focus on New Updates Only</Text>
                     <Text style={styles.focusSubtitle}>
-                      Creates a follow-up episode detailing what changed, rather than starting from the beginning.
+                      Creates a follow‑up episode detailing what changed, rather than starting from the beginning.
                     </Text>
                   </View>
                   <Switch 
@@ -163,7 +162,6 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
               </Text>
             </View>
 
-            {/* Custom Instructions */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Instructions (Optional)</Text>
               <TextInput
@@ -178,7 +176,6 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
               />
             </View>
 
-            {/* Voice Selection */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Voice</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.voiceScroll}>
@@ -197,7 +194,6 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
               </ScrollView>
             </View>
 
-            {/* Comprehension Style Selection */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Comprehension Level</Text>
               <View style={styles.styleGrid}>
@@ -215,7 +211,6 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
               </View>
             </View>
 
-            {/* Length Slider */}
             <View style={[styles.section, styles.lastSection]}>
               <View style={styles.lengthHeader}>
                 <Text style={styles.sectionTitle}>Target Length</Text>
@@ -233,7 +228,6 @@ const RegeneratePodcastModal: React.FC<Props> = ({ visible, podcast, onClose, on
                 thumbTintColor="#6366F1"
               />
             </View>
-
           </ScrollView>
 
           <View style={styles.footer}>

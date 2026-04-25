@@ -1,4 +1,6 @@
-# app/controllers/topics_controller.py
+"""
+Topics Controller – provides topic listing, detail, history, and search.
+"""
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from bson import ObjectId
@@ -7,12 +9,15 @@ from app.ai_pipeline.topic_history import TopicHistoryService
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import traceback
 
-# Initialise history service
+# Shared history service instance.
 history_service = TopicHistoryService(MONGODB_URI, MONGODB_DB_NAME)
 
 
 async def get_all_categories() -> List[Dict]:
-    """Get all categories with their active topic counts and trending info"""
+    """
+    Return all configured categories with their active topic counts
+    and a trending topic (the most recently updated active topic).
+    """
     categories = ["technology", "finance", "politics"]
     result = []
     
@@ -52,7 +57,14 @@ async def get_topics_by_category(
     limit: int = 10, 
     skip: int = 0  
 ) -> List[Dict]:
-    """Get topics for a specific category with sorting and pagination"""
+    """
+    Get active topics for a specific category with sorting and pagination.
+
+    Sorting options:
+    - latest: by last_updated descending
+    - reliable: by confidence descending
+    - most_discussed: by article count descending
+    """
     query = {
         "category": category,
         "status": "active",
@@ -68,7 +80,6 @@ async def get_topics_by_category(
     else:
         sort = [("last_updated", -1), ("_id", -1)]
     
-    # APPLY THE PAGINATION HERE INSTEAD OF HARDCODING .limit(50)
     cursor = db["topics"].find(query).sort(sort).skip(skip).limit(limit)
     topics = []
     
@@ -78,7 +89,6 @@ async def get_topics_by_category(
             time_ago = _format_time_ago(last_updated)
             last_updated_str = last_updated.isoformat() if hasattr(last_updated, 'isoformat') else str(last_updated)
             
-            # SAFELY handle lists
             sources = topic.get("sources") or []
             
             topics.append({
@@ -103,9 +113,11 @@ async def get_topics_by_category(
 
 
 async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
-    """Get full topic details including articles and history"""
+    """
+    Get full topic details including associated articles, tags,
+    and history timeline.
+    """
     try:
-        # Stop invalid IDs gracefully
         if not ObjectId.is_valid(topic_id):
             print(f"Invalid Topic ID passed to backend: {topic_id}")
             return None
@@ -119,12 +131,11 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
         return None
     
     try:
-        # SAFELY handle null lists so len() and iterations don't crash
         article_ids = topic.get("article_ids") or []
         sources = topic.get("sources") or []
         key_insights = topic.get("key_insights") or []
         
-        # Get all articles for this topic safely
+        # Fetch all articles belonging to this topic.
         articles = []
         if article_ids:
             try:
@@ -150,7 +161,7 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
                 print(f"Error fetching articles: {e}")
                 traceback.print_exc()
         
-        # Safely extract dates
+        # Prepare date strings.
         last_updated = topic.get("last_updated") or datetime.utcnow()
         time_ago = _format_time_ago(last_updated)
         last_updated_str = last_updated.isoformat() if hasattr(last_updated, 'isoformat') else str(last_updated)
@@ -160,7 +171,7 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
         
         tags = _extract_tags(topic)
         
-        # Get history timeline safely
+        # Fetch history timeline (up to 10 latest points).
         history_timeline = []
         try:
             history_timeline = await history_service.get_topic_timeline(topic_id)
@@ -195,7 +206,7 @@ async def get_topic_by_id(topic_id: str) -> Optional[Dict]:
 
 
 async def get_topic_history(topic_id: str, limit: int = 20) -> List[Dict]:
-    """Get full history timeline for a topic"""
+    """Get the history timeline for a topic (up to the specified limit)."""
     try:
         if not ObjectId.is_valid(topic_id):
             return []
@@ -206,7 +217,11 @@ async def get_topic_history(topic_id: str, limit: int = 20) -> List[Dict]:
 
 
 async def force_history_check(topic_id: str) -> Dict:
-    """Manually trigger history check for a topic (admin function)"""
+    """
+    Manually trigger a history check for a topic (admin utility).
+
+    Useful for debugging or forcing a snapshot.
+    """
     try:
         if not ObjectId.is_valid(topic_id):
             return {"error": "Invalid topic ID"}
@@ -220,7 +235,10 @@ async def force_history_check(topic_id: str) -> Dict:
 
 
 def _format_time_ago(dt) -> str:
-    """Format datetime as relative time string safely"""
+    """
+    Convert a datetime into a human‑readable relative string
+    (e.g., '2 hours ago', 'Just now').
+    """
     try:
         if isinstance(dt, str):
             dt = datetime.fromisoformat(dt.replace('Z', '+00:00')).replace(tzinfo=None)
@@ -254,7 +272,10 @@ def _format_time_ago(dt) -> str:
 
 
 def _extract_tags(topic: Dict) -> List[str]:
-    """Extract relevant tags from topic safely"""
+    """
+    Derive tags from a topic based on its category, source diversity,
+    and history point count.
+    """
     tags = []
     try:
         category = topic.get("category") or ""
@@ -265,12 +286,10 @@ def _extract_tags(topic: Dict) -> List[str]:
         elif category == "politics":
             tags.append("politics")
         
-        # Safely get sources length
         sources = topic.get("sources") or []
         if len(sources) >= 3:
             tags.append("multi-source")
         
-        # Safe integer evaluation 
         history_count = topic.get("history_point_count") or 0
         if history_count >= 3:
             tags.append("developing-story")
@@ -283,29 +302,30 @@ def _extract_tags(topic: Dict) -> List[str]:
 
 async def search_topics(query: str, category: Optional[str] = None, limit: int = 50, skip: int = 0) -> Dict:
     """
-    Search topics by query string using MongoDB Atlas Full-Text Search.
-    Provides typo tolerance and relevance scoring.
+    Perform a full‑text search on topics using MongoDB Atlas Search.
+
+    Supports fuzzy matching (maxEdits=1) and returns results ordered by
+    relevance score.
     """
     try:
-        print(f"🔍 Smart searching topics for: '{query}', category: {category}")
+        print(f"Smart searching topics for: '{query}', category: {category}")
         
         pipeline = []
         
-        # 1. ATLAS SEARCH STAGE
-        # This must be the first stage in the pipeline
+        # Atlas Search stage – must be first.
         search_stage = {
             "$search": {
-                "index": "default",  # Ensure you created this index on the 'topics' collection
+                "index": "default",
                 "text": {
                     "query": query,
                     "path": ["title", "summary", "category"],
-                    "fuzzy": {"maxEdits": 1} # 👈 Adds typo tolerance
+                    "fuzzy": {"maxEdits": 1}
                 }
             }
         }
         pipeline.append(search_stage)
         
-        # 2. MATCH STAGE (Filters)
+        # Filter for active topics with titles.
         match_query = {
             "status": "active",
             "has_title": True
@@ -315,15 +335,14 @@ async def search_topics(query: str, category: Optional[str] = None, limit: int =
             
         pipeline.append({"$match": match_query})
         
-        # 3. SCORE & PROJECTION STAGE
-        # We sort by the search score (relevance)
+        # Sort by search score (relevance) then by newest.
         pipeline.append({"$sort": {"score": {"$meta": "searchScore"}, "_id": -1}})       
          
-        # 4. PAGINATION
+        # Pagination.
         pipeline.append({"$skip": skip})
         pipeline.append({"$limit": limit})
         
-        # Project the results and the score
+        # Project both the score and the full document.
         pipeline.append({
             "$project": {
                 "score": {"$meta": "searchScore"},
@@ -368,12 +387,5 @@ async def search_topics(query: str, category: Optional[str] = None, limit: int =
     except Exception as e:
         print(f"Error in search_topics: {e}")
         traceback.print_exc()
-        # Fallback to empty results instead of crashing the frontend
+        # Return empty result on error.
         return {"query": query, "topics": [], "count": 0, "error": str(e)}
-            
-    return {
-        "query": query,
-        "category": category or "all",
-        "topics": topics,
-        "count": len(topics)
-    }

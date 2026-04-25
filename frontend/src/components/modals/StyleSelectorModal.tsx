@@ -1,4 +1,4 @@
-// frontend/src/components/AIStyleSelector.tsx
+// frontend/src/components/modals/StyleSelectorModal.tsx
 import React, { useState } from "react";
 import {
   View,

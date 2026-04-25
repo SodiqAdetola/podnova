@@ -1,4 +1,8 @@
-// frontend/src/components/VoiceSelector.tsx -
+// frontend/src/components/modals/VoiceSelector.tsx
+/**
+ * Modal for selecting the default voice preference.
+ */
+
 import React, { useState } from "react";
 import {
   View,

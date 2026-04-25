@@ -1,4 +1,10 @@
 // frontend/src/components/PodcastGenModal.tsx
+/**
+ * Modal for generating a new podcast from a topic.
+ * Allows users to select voice, comprehension level, length, and optional custom instructions.
+ * Loads user preferences as defaults and displays a success screen after generation starts.
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -21,12 +27,12 @@ import { useNavigation, CompositeNavigationProp } from '@react-navigation/native
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MainTabParamList, MainStackParamList } from "../../Navigator";
-import { LinearGradient } from 'expo-linear-gradient'; // Added Import
+import { LinearGradient } from 'expo-linear-gradient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-
 const { height } = Dimensions.get("window");
 
+// Maps user tone preferences from the profile to style IDs used by the generation API.
 const TONE_TO_STYLE: Record<string, string> = {
   casual: "casual",
   factual: "standard",
@@ -34,6 +40,7 @@ const TONE_TO_STYLE: Record<string, string> = {
   expert: "expert",
 };
 
+// Maps frontend length preference strings to minutes.
 const LENGTH_TO_MINUTES: Record<string, number> = {
   short: 5,
   medium: 10,
@@ -50,6 +57,7 @@ interface PodcastGenModalProps {
   };
 }
 
+// Available voice options with display names and icon mappings.
 const VOICES = [
   { id: "calm_female", name: "Calm (Female)", icon: "woman" },
   { id: "calm_male", name: "Calm (Male)", icon: "man" },
@@ -59,6 +67,7 @@ const VOICES = [
   { id: "professional_male", name: "Professional (Male)", icon: "briefcase" },
 ];
 
+// Comprehension style options with friendly descriptions.
 const STYLES = [
   { id: "casual", name: "Casual", description: "Simple & conversational" },
   { id: "standard", name: "Standard", description: "Balanced & clear" },
@@ -88,6 +97,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
   const [podcastId, setPodcastId] = useState<string | null>(null);
   const [estimatedTime, setEstimatedTime] = useState(60);
 
+  // Reset modal state when it becomes visible and load fresh user preferences.
   useEffect(() => {
     if (visible) {
       setGenerationStarted(false);
@@ -99,6 +109,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   }, [visible]);
 
+  // Fetch the user's profile to pre‑fill voice, style, and length defaults.
   const loadUserPreferences = async () => {
     try {
       setLoadingPreferences(true);
@@ -124,6 +135,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
+  // Submit the generation request to the backend.
   const handleGenerate = async () => {
     setGenerating(true);
     try {
@@ -162,6 +174,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
+  // Clean up state and close the modal completely.
   const resetAndClose = () => {
     setCustomPrompt("");
     setShowAdvanced(false);
@@ -171,6 +184,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     onClose();
   };
 
+  // If generation is in progress, warn the user that closing won't cancel it.
   const handleClose = () => {
     if (generating) {
       Alert.alert(
@@ -186,6 +200,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     }
   };
 
+  // Navigate to the Library tab after successfully starting generation.
   const handleGoToLibrary = () => {
     resetAndClose();
     (navigation as any).navigate("MainTabs", { screen: "Library" });
@@ -330,6 +345,7 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
     );
   };
 
+  // Success screen shown after the generation request is accepted.
   if (generationStarted) {
     return (
       <Modal
@@ -670,8 +686,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
   },
-
-  // --- UPDATED BUTTON & FOOTER STYLES ---
   footer: {
     alignItems: "center",
     paddingTop: 16,
@@ -680,8 +694,8 @@ const styles = StyleSheet.create({
     borderTopColor: "#E5E7EB",
   },
   generateButton: {
-    borderRadius: 24, // Pill shape
-    width: "65%", // Smaller, centered button instead of full-width
+    borderRadius: 24,
+    width: "65%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -697,14 +711,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     gap: 8,
-    borderRadius: 24, 
+    borderRadius: 24,
   },
   generateButtonText: {
     fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
   },
-
   successContainer: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 20,

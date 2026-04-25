@@ -1,4 +1,6 @@
 // frontend/src/screens/Category.tsx
+// Shows either topics or discussions for a chosen category (technology, finance, politics).
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -27,24 +29,30 @@ const CategoryScreen: React.FC = () => {
   const navigation = useNavigation<CategoryNavigationProp>();
   const route = useRoute();
   
+  // category = "technology", "finance", or "politics"
+  // initialTab = which tab to show first (topics or discussions)
   const { category, initialTab } = route.params as { category: string, initialTab?: TabType };
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || "topics");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Changing this key forces DiscussionsList to remount, which refreshes the data
   const [discussionsKey, setDiscussionsKey] = useState(0);
 
+  // If a link opened directly to discussions tab, switch to it
   useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab);
     }
-  }, [route.params]); 
+  }, [route.params]);
 
   const handleCreateSuccess = () => {
+    // Increment key to refresh the discussions list after creating a new one
     setDiscussionsKey(prev => prev + 1);
   };
 
   return (
     <View style={styles.container}>
+      {/* Header with back button and category name */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
@@ -54,6 +62,7 @@ const CategoryScreen: React.FC = () => {
         </Text>
       </View>
 
+      {/* Tab switcher */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === "topics" && styles.tabActive]}
@@ -73,7 +82,7 @@ const CategoryScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* MODULAR COMPONENT RENDERING */}
+      {/* Show the correct component based on active tab */}
       {activeTab === "topics" ? (
         <TopicsList category={category} />
       ) : (
@@ -86,6 +95,7 @@ const CategoryScreen: React.FC = () => {
         </View>
       )}
 
+      {/* Modal for creating a new community discussion */}
       <CreateDiscussionModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}

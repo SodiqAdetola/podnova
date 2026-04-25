@@ -1,4 +1,7 @@
-# app/controllers/user_controller.py
+"""
+User Controller – manages user profiles, preferences, push tokens,
+blocked users, and account deletion.
+"""
 from datetime import datetime
 from typing import Optional, Dict, List
 from bson import ObjectId
@@ -11,19 +14,21 @@ storage_service = StorageService()
 
 
 async def create_user_profile(firebase_user: dict) -> UserProfile:
-    """Create a new user profile in MongoDB"""
+    """
+    Create a new user profile in MongoDB after Firebase authentication.
+
+    If a profile already exists, it returns the existing one.
+    """
     firebase_uid = firebase_user["uid"]
     email = firebase_user.get("email")
     username = firebase_user.get("name", email.split("@")[0] if email else "User")
 
-    # Check if user exists
     existing = await db["users"].find_one({"firebase_uid": firebase_uid})
     if existing:
-        # Return existing profile instead of error
         existing["id"] = str(existing["_id"])
         return UserProfile(**existing)
 
-    # Create default preferences
+    # Default preferences.
     default_prefs = UserPreferences(
         default_categories=[],
         default_podcast_length="short",
@@ -34,7 +39,6 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
         default_ai_style="standard"
     )
 
-    # Create user document
     profile_data = {
         "firebase_uid": firebase_uid,
         "email": email,
@@ -52,7 +56,7 @@ async def create_user_profile(firebase_user: dict) -> UserProfile:
 
 
 async def get_user_profile(firebase_uid: str) -> Optional[UserProfile]:
-    """Get user profile from MongoDB"""
+    """Retrieve a user profile from MongoDB by Firebase UID."""
     data = await db["users"].find_one({"firebase_uid": firebase_uid})
     if not data:
         return None
@@ -65,27 +69,27 @@ async def update_user_preferences(
     firebase_uid: str,
     preference_updates: Dict
 ) -> UserProfile:
-    """Update user preferences"""
-    # Get current profile
+    """
+    Update user preferences (e.g., default voice, length, push settings).
+
+    Merges the provided updates into the existing preferences document.
+    """
     user = await db["users"].find_one({"firebase_uid": firebase_uid})
     if not user:
         raise ValueError("User profile not found")
     
-    # Update preferences fields
     current_prefs = user.get("preferences", {})
     
-    # Merge updates into current preferences
+    # Merge only the keys that are provided.
     for key, value in preference_updates.items():
-        if value is not None:  # Only update if value is provided
+        if value is not None:
             current_prefs[key] = value
     
-    # Update in database
     await db["users"].update_one(
         {"firebase_uid": firebase_uid},
         {"$set": {"preferences": current_prefs}}
     )
     
-    # Fetch and return updated profile
     updated_user = await db["users"].find_one({"firebase_uid": firebase_uid})
     updated_user["id"] = str(updated_user["_id"])
     
@@ -93,7 +97,7 @@ async def update_user_preferences(
 
 
 async def save_push_token(firebase_uid: str, token: str) -> bool:
-    """Save the Expo push token to the user's profile."""
+    """Save the Expo push notification token for the user."""
     result = await db["users"].update_one(
         {"firebase_uid": firebase_uid},
         {"$set": {"expo_push_token": token}}
@@ -102,7 +106,10 @@ async def save_push_token(firebase_uid: str, token: str) -> bool:
 
 
 async def get_user_stats_data(user_uid: str) -> dict:
-    """Calculate and return user statistics from the database"""
+    """
+    Calculate user statistics: number of completed podcasts,
+    total listening duration, and credits used.
+    """
     podcasts_cursor = db["podcasts"].find({"user_id": user_uid})
     podcasts = []
     async for p in podcasts_cursor:
@@ -113,15 +120,15 @@ async def get_user_stats_data(user_uid: str) -> dict:
     
     return {
         "podcasts": completed,
-        "discussions": 0,  # TODO: Implement when discussions feature is ready
-        "followers": 0,    # TODO: Implement when social features are ready
+        "discussions": 0,          # To be implemented in a future iteration.
+        "followers": 0,            # To be implemented in a future iteration.
         "total_duration_minutes": round(total_duration / 60, 1) if total_duration else 0,
         "credits_used": sum(p.get("credits_used", 0) for p in podcasts)
     }
 
 
 async def block_target_user(user_uid: str, target_uid: str) -> bool:
-    """Add a target user's UID to the current user's blocked list"""
+    """Add a target user to the current user's blocked list."""
     result = await db["users"].update_one(
         {"firebase_uid": user_uid},
         {"$addToSet": {"blocked_users": target_uid}}
@@ -130,7 +137,11 @@ async def block_target_user(user_uid: str, target_uid: str) -> bool:
 
 
 async def get_blocked_users_list(user_uid: str) -> List[Dict]:
-    """Fetch the list of blocked users with their usernames"""
+    """
+    Fetch the list of blocked users with their usernames.
+
+    Returns a list of objects containing firebase_uid and username.
+    """
     user_doc = await db["users"].find_one({"firebase_uid": user_uid})
     if not user_doc:
         return []
@@ -152,7 +163,7 @@ async def get_blocked_users_list(user_uid: str) -> List[Dict]:
 
 
 async def unblock_target_user(user_uid: str, target_uid: str) -> bool:
-    """Remove a target user's UID from the current user's blocked list"""
+    """Remove a target user from the current user's blocked list."""
     result = await db["users"].update_one(
         {"firebase_uid": user_uid},
         {"$pull": {"blocked_users": target_uid}}
@@ -161,7 +172,11 @@ async def unblock_target_user(user_uid: str, target_uid: str) -> bool:
 
 
 async def report_reply_content(reply_id: str, reporter_uid: str) -> bool:
-    """Log a report and flag the reply in the database"""
+    """
+    Report a reply for moderation.
+
+    Inserts a report document and increments the reply's report count.
+    """
     report_data = {
         "reply_id": reply_id,
         "reporter_uid": reporter_uid,
@@ -180,11 +195,17 @@ async def report_reply_content(reply_id: str, reporter_uid: str) -> bool:
 
 async def delete_user_account(user_uid: str) -> bool:
     """
-    Completely delete a user's account and all associated data.
-    This is a destructive, non-reversible operation.
+    Permanently delete a user's entire account and all associated data.
+
+    This includes:
+    - Podcasts, audio files, transcripts
+    - Discussions, replies, upvotes, views
+    - Notifications
+    - The user profile in MongoDB
+    - The user in Firebase Authentication
     """
     try:
-        # 1. Delete Podcasts and Audio Files from Storage
+        # Delete podcasts and their storage files.
         podcasts_cursor = db["podcasts"].find({"user_id": user_uid})
         async for podcast in podcasts_cursor:
             podcast_id = str(podcast["_id"])
@@ -194,11 +215,9 @@ async def delete_user_account(user_uid: str) -> bool:
                 except Exception as e:
                     print(f"Failed to delete storage files for {podcast_id}: {e}")
         
-        # Delete podcast documents
         await db["podcasts"].delete_many({"user_id": user_uid})
 
-        # 2. Delete Discussions
-        # First, find all discussions created by this user to clean up their replies
+        # Delete discussions and related replies/views/upvotes.
         user_discussions = db["discussions"].find({"user_id": user_uid})
         async for disc in user_discussions:
             await db["replies"].delete_many({"discussion_id": str(disc["_id"])})
@@ -207,25 +226,24 @@ async def delete_user_account(user_uid: str) -> bool:
             
         await db["discussions"].delete_many({"user_id": user_uid})
 
-        # 3. Delete Replies and Upvotes (if they replied to other people's discussions)
+        # Delete all replies, upvotes, and views authored by the user.
         await db["replies"].delete_many({"user_id": user_uid})
         await db["discussion_upvotes"].delete_many({"user_id": user_uid})
         await db["reply_upvotes"].delete_many({"user_id": user_uid})
         await db["discussion_views"].delete_many({"user_id": user_uid})
 
-        # 4. Delete Notifications
+        # Delete notifications.
         await db["notifications"].delete_many({"user_id": user_uid})
 
-        # 5. Delete User Profile from MongoDB
+        # Delete the user profile from MongoDB.
         await db["users"].delete_one({"firebase_uid": user_uid})
 
-        # 6. Delete User from Firebase Auth
+        # Delete the user from Firebase Authentication.
         try:
             firebase_auth.delete_user(user_uid)
         except Exception as e:
             print(f"Warning: Failed to delete user from Firebase Auth: {e}")
-            # If user doesn't exist in Firebase, we still want to return True 
-            # because the DB cleanup was successful.
+            # Continue – the database cleanup was successful.
 
         return True
     except Exception as e:

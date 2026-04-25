@@ -1,4 +1,9 @@
 // frontend/src/components/BlockedUsersModal.tsx
+/**
+ * Modal component that displays the list of users the current user has blocked.
+ * Allows unblocking users directly from the list.
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -28,8 +33,10 @@ interface Props {
 const BlockedUsersModal: React.FC<Props> = ({ visible, onClose }) => {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [loading, setLoading] = useState(true);
+  // Track which user is currently being unblocked to show a loading indicator.
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
+  // Fetch the blocked list whenever the modal becomes visible.
   useEffect(() => {
     if (visible) {
       fetchBlockedUsers();
@@ -69,6 +76,7 @@ const BlockedUsersModal: React.FC<Props> = ({ visible, onClose }) => {
       });
 
       if (response.ok) {
+        // Remove the user from the local state immediately to update the UI.
         setBlockedUsers((prev) => prev.filter((u) => u.firebase_uid !== userToUnblock.firebase_uid));
       } else {
         Alert.alert("Error", "Failed to unblock user");

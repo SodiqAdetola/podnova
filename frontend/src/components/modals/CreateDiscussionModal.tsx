@@ -1,4 +1,9 @@
 // frontend/src/components/CreateDiscussionModal.tsx
+/**
+ * Modal for creating a new community discussion (not tied to a specific topic).
+ * Handles title, description, tags, and category selection.
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -39,6 +44,7 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
+  // Listen for authentication state changes to get fresh tokens.
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -54,7 +60,7 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
     return unsubscribe;
   }, []);
 
-  // Reset form when modal opens/closes
+  // Reset form fields when the modal is closed or reopened.
   useEffect(() => {
     if (!visible) {
       setTitle("");
@@ -77,6 +83,7 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
   };
 
   const handleCreate = async () => {
+    // Validate required fields before sending the request.
     if (!title.trim()) {
       Alert.alert("Error", "Please enter a title");
       return;
@@ -96,15 +103,12 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
     try {
       setCreating(true);
 
-      // Log the request payload for debugging
       const requestBody = {
         title: title.trim(),
         description: description.trim(),
         tags: tags,
-        category: category || null, // Ensure category is sent, even if null
+        category: category || null,
       };
-      
-      console.log("Creating discussion with payload:", requestBody);
 
       const response = await fetch(`${API_BASE_URL}/discussions/`, {
         method: "POST",
@@ -118,14 +122,12 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
       const responseData = await response.json();
       
       if (response.ok) {
-        console.log("Discussion created successfully:", responseData);
         onClose();
         if (onSuccess) {
           onSuccess();
         }
         Alert.alert("Success", "Discussion created successfully!");
       } else {
-        console.error("Failed to create discussion:", responseData);
         Alert.alert("Error", responseData.detail || "Failed to create discussion");
       }
     } catch (error) {
@@ -147,7 +149,6 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={24} color="#111827" />
@@ -156,13 +157,11 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
           <View style={styles.placeholder} />
         </View>
 
-        {/* Form */}
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Category Display (read-only) */}
           {category && (
             <View style={styles.categoryContainer}>
               <Text style={styles.categoryLabel}>Category</Text>
@@ -172,7 +171,6 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
             </View>
           )}
 
-          {/* Title */}
           <View style={styles.section}>
             <Text style={styles.label}>Discussion Title</Text>
             <TextInput
@@ -183,12 +181,9 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
               onChangeText={setTitle}
               maxLength={200}
             />
-            <Text style={styles.charCount}>
-              {title.length}/200 characters
-            </Text>
+            <Text style={styles.charCount}>{title.length}/200 characters</Text>
           </View>
 
-          {/* Description */}
           <View style={styles.section}>
             <Text style={styles.label}>Description</Text>
             <TextInput
@@ -202,21 +197,14 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
               numberOfLines={6}
               textAlignVertical="top"
             />
-            <Text style={styles.charCount}>
-              {description.length}/2000 characters
-            </Text>
+            <Text style={styles.charCount}>{description.length}/2000 characters</Text>
           </View>
 
-          {/* Tags */}
           <View style={styles.section}>
             <Text style={styles.label}>
-              Tags{" "}
-              <Text style={styles.labelHint}>
-                (Help others find your discussion - max 5)
-              </Text>
+              Tags <Text style={styles.labelHint}>(Help others find your discussion - max 5)</Text>
             </Text>
 
-            {/* Tag input */}
             <View style={styles.tagInputRow}>
               <TextInput
                 style={styles.tagInput}
@@ -240,7 +228,6 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Tags list */}
             {tags.length > 0 && (
               <View style={styles.tagsContainer}>
                 {tags.map((tag, index) => (
@@ -258,31 +245,20 @@ const CreateDiscussionModal: React.FC<CreateDiscussionModalProps> = ({
             )}
           </View>
 
-          {/* Guidelines */}
           <View style={styles.guidelines}>
             <Text style={styles.guidelinesTitle}>Discussion Guidelines:</Text>
-            <Text style={styles.guidelineItem}>
-              • Stay on topic and be respectful
-            </Text>
-            <Text style={styles.guidelineItem}>
-              • Back up claims with sources when possible
-            </Text>
-            <Text style={styles.guidelineItem}>
-              • Be open to different perspectives
-            </Text>
-            <Text style={styles.guidelineItem}>
-              • Use tags to help others discover your discussion
-            </Text>
+            <Text style={styles.guidelineItem}>• Stay on topic and be respectful</Text>
+            <Text style={styles.guidelineItem}>• Back up claims with sources when possible</Text>
+            <Text style={styles.guidelineItem}>• Be open to different perspectives</Text>
+            <Text style={styles.guidelineItem}>• Use tags to help others discover your discussion</Text>
           </View>
         </ScrollView>
 
-        {/* Create Button */}
         <View style={styles.footer}>
           <TouchableOpacity
             style={[
               styles.createButton,
-              (!title.trim() || !description.trim() || creating) &&
-                styles.createButtonDisabled,
+              (!title.trim() || !description.trim() || creating) && styles.createButtonDisabled,
             ]}
             onPress={handleCreate}
             disabled={!title.trim() || !description.trim() || creating}
@@ -329,7 +305,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#6366F1",
     textTransform: "uppercase",
-    
   },
   placeholder: {
     width: 40,

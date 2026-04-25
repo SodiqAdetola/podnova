@@ -183,7 +183,7 @@ const PodcastPlayer: React.FC<PodcastPlayerProps> = ({
       }
       await AsyncStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...savedSet]));
       
-      // NEW: Broadcast update globally
+      // Broadcast update globally
       DeviceEventEmitter.emit("LIBRARY_UPDATED");
       
       if (externalOnToggleSave) externalOnToggleSave();

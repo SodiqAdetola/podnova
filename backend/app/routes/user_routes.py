@@ -1,4 +1,8 @@
-# app/routes/user_routes.py
+"""
+User Routes – endpoints for profile management, preferences, push tokens,
+blocked users, followed topics, and account deletion.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.middleware.firebase_auth import verify_firebase_token
 from app.controllers.user_controller import (
@@ -23,6 +27,7 @@ router = APIRouter()
 
 
 class UpdatePreferencesRequest(BaseModel):
+    """Request body for updating user preferences."""
     push_notifications: bool | None = None
     push_podcast_ready: bool | None = None  
     push_reply: bool | None = None          
@@ -37,7 +42,7 @@ class UpdatePreferencesRequest(BaseModel):
 
 @router.post("/profile", response_model=UserProfile, status_code=status.HTTP_201_CREATED)
 async def create_user(firebase_user=Depends(verify_firebase_token)):
-    """Create a new user profile"""
+    """Create a new user profile after Firebase authentication."""
     try:
         profile = await create_user_profile(firebase_user)
         return profile
@@ -55,7 +60,7 @@ async def create_user(firebase_user=Depends(verify_firebase_token)):
 
 @router.get("/profile", response_model=UserProfile)
 async def get_current_user(firebase_user=Depends(verify_firebase_token)):
-    """Get current user's profile"""
+    """Get the current user's profile."""
     profile = await get_user_profile(firebase_user["uid"])
     if not profile:
         raise HTTPException(
@@ -70,7 +75,7 @@ async def update_preferences(
     preferences: UpdatePreferencesRequest,
     firebase_user=Depends(verify_firebase_token)
 ):
-    """Update user preferences"""
+    """Update user preferences (voice, style, push settings, etc.)."""
     try:
         profile = await get_user_profile(firebase_user["uid"])
         if not profile:
@@ -110,7 +115,7 @@ async def register_push_token(
     request: PushTokenRequest,
     firebase_user=Depends(verify_firebase_token)
 ):
-    """Register an Expo Push Token for the current user."""
+    """Register an Expo push token for the current user."""
     try:
         await save_push_token(firebase_user["uid"], request.token)
         return {"status": "success", "message": "Push token registered successfully"}
@@ -123,7 +128,7 @@ async def register_push_token(
 
 @router.get("/stats")
 async def get_user_stats(firebase_user=Depends(verify_firebase_token)):
-    """Get user statistics"""
+    """Get aggregated statistics about the user's activity (podcasts, listening time)."""
     try:
         stats = await get_user_stats_data(firebase_user["uid"])
         return stats
@@ -139,7 +144,7 @@ async def block_user_endpoint(
     blocked_user_id: str,
     firebase_user=Depends(verify_firebase_token)
 ):
-    """Block another user"""
+    """Block another user (their replies will be hidden)."""
     try:
         await block_target_user(firebase_user["uid"], blocked_user_id)
         return {"status": "success", "message": f"User {blocked_user_id} blocked."}
@@ -152,7 +157,7 @@ async def block_user_endpoint(
 
 @router.get("/blocked")
 async def fetch_blocked_users_endpoint(firebase_user=Depends(verify_firebase_token)):
-    """Fetch the list of blocked users with their usernames"""
+    """Get the list of users that the current user has blocked."""
     try:
         blocked_users = await get_blocked_users_list(firebase_user["uid"])
         return {"blocked_users": blocked_users}
@@ -168,7 +173,7 @@ async def unblock_user_endpoint(
     target_uid: str, 
     firebase_user=Depends(verify_firebase_token)
 ):
-    """Remove a user from the blocked list"""
+    """Remove a user from the blocked list."""
     try:
         success = await unblock_target_user(firebase_user["uid"], target_uid)
         if not success:
@@ -191,7 +196,7 @@ async def report_reply_endpoint(
     reply_id: str,
     firebase_user: dict = Depends(verify_firebase_token)
 ):
-    """Report a reply for Terms of Service violations."""
+    """Report a reply for violation of terms of service."""
     try:
         await report_reply_content(reply_id, firebase_user["uid"])
         return {"success": True, "message": "Content reported successfully."}
@@ -208,6 +213,7 @@ async def report_reply_endpoint(
 async def delete_account_endpoint(firebase_user=Depends(verify_firebase_token)):
     """
     Permanently delete the current user's account and all associated data.
+    This is irreversible.
     """
     try:
         user_uid = firebase_user["uid"]
@@ -229,7 +235,11 @@ async def delete_account_endpoint(firebase_user=Depends(verify_firebase_token)):
 
 @router.post("/topics/{topic_id}/follow")
 async def toggle_topic_follow(topic_id: str, firebase_user=Depends(verify_firebase_token)):
-    """Toggle following a topic using the mapping collection pattern"""
+    """
+    Follow or unfollow a topic.
+
+    Uses a separate mapping collection `topic_followers` to avoid large arrays in the topic document.
+    """
     try:
         if not ObjectId.is_valid(topic_id):
             raise HTTPException(status_code=400, detail="Invalid topic ID format")
@@ -267,7 +277,7 @@ async def toggle_topic_follow(topic_id: str, firebase_user=Depends(verify_fireba
 
 @router.get("/topics/{topic_id}/follow-status")
 async def get_topic_follow_status(topic_id: str, firebase_user=Depends(verify_firebase_token)):
-    """Check if the current user is following a specific topic"""
+    """Check whether the current user is following a specific topic."""
     try:
         if not ObjectId.is_valid(topic_id):
             raise HTTPException(status_code=400, detail="Invalid topic ID format")
@@ -291,25 +301,29 @@ async def get_topic_follow_status(topic_id: str, firebase_user=Depends(verify_fi
 
 @router.get("/followed-topics")
 async def get_all_followed_topics(firebase_user=Depends(verify_firebase_token)):
-    """Fetch all topics the user is currently following"""
+    """
+    Get all topics that the current user follows.
+
+    Returns the full topic objects (title, category, image, etc.) sorted by follow date.
+    """
     try:
         user_uid = firebase_user["uid"]
         
-        # 1. Get the mapping documents sorted by newest follows first
+        # Get the follow records, newest first.
         cursor = db["topic_followers"].find({"user_uid": user_uid}).sort("created_at", -1)
         followed_docs = await cursor.to_list(length=50)
         
         if not followed_docs:
             return {"topics": []}
             
-        # 2. Extract valid ObjectIds
+        # Extract valid topic IDs.
         topic_ids = [ObjectId(doc["topic_id"]) for doc in followed_docs if ObjectId.is_valid(doc["topic_id"])]
         
-        # 3. Fetch the actual topic data
+        # Fetch the actual topic documents.
         topics_cursor = db["topics"].find({"_id": {"$in": topic_ids}})
         topics_data = await topics_cursor.to_list(length=50)
         
-        # 4. Format for the frontend
+        # Format for the frontend.
         from app.controllers.topics_controller import _format_time_ago
         
         results = []

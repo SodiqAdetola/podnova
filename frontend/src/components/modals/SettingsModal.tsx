@@ -1,4 +1,9 @@
 // frontend/src/components/modals/SettingsModal.tsx
+/**
+ * Page‑sheet modal that wraps the ProfileSettings component.
+ * Provides the overall container and header for the settings screen.
+ */
+
 import React from "react";
 import {
   Modal,

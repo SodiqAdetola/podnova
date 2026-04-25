@@ -1,9 +1,12 @@
-# app/routes/podcast_routes.py
-import asyncio
-from datetime import time
-import datetime
+"""
+Podcast Routes – endpoints for generating, listing, and managing podcasts.
+"""
 
-from fastapi import APIRouter, HTTPException, status, Body, Depends, Query, UploadFile, File, Form
+import asyncio
+from datetime import datetime
+import time
+
+from fastapi import APIRouter, HTTPException, status, Query, Depends, UploadFile, File, Form
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from app.middleware.firebase_auth import verify_firebase_token
@@ -21,11 +24,12 @@ from app.middleware.rate_limit import RateLimit
 
 router = APIRouter()
 
+# Limit podcast generation to 5 per user per hour.
 generate_podcast_limit = RateLimit(limit=5, window_minutes=60, action_name="generate_podcast")
 
 
-# Pydantic models for request/response
 class CreatePodcastRequest(BaseModel):
+    """Request body for generating a podcast from a topic."""
     topic_id: str = Field(..., description="Topic ID to generate podcast from")
     voice: str = Field(default=PodcastVoice.NORMAL_FEMALE, description="Voice type")
     style: str = Field(default=PodcastStyle.STANDARD, description="Comprehension level")
@@ -35,6 +39,7 @@ class CreatePodcastRequest(BaseModel):
 
 
 class RegeneratePodcastRequest(BaseModel):
+    """Request body for regenerating an existing podcast with new settings."""
     voice: Optional[str] = None
     style: Optional[str] = None
     length_minutes: Optional[int] = Field(None, ge=1, le=30)
@@ -49,12 +54,10 @@ async def generate_podcast(
     firebase_user=Depends(generate_podcast_limit)
 ):
     """
-    Generate a new podcast from a topic
-    
-    This is an async operation - the podcast will be generated in the background.
-    Check the /podcasts/library endpoint or the specific podcast status for updates.
-    
-    Requires Firebase authentication.
+    Generate a new podcast from a topic.
+
+    This is an asynchronous operation – the endpoint returns immediately
+    with a podcast ID, and generation continues in the background.
     """
     try:
         user_uid = firebase_user["uid"]
@@ -83,10 +86,11 @@ async def generate_podcast(
             detail=f"Failed to create podcast: {str(e)}"
         )
 
+
 @router.post("/generate-custom")
 async def generate_custom_podcast_endpoint(
     files: List[UploadFile] = File(default=[]),
-    text_content: Optional[str] = Form(""), # 👈 NEW: Accept pasted text
+    text_content: Optional[str] = Form(""),
     podcast_title: str = Form("Custom Studio Podcast"), 
     custom_prompt: Optional[str] = Form(""),
     voice: str = Form(PodcastVoice.NORMAL_FEMALE),
@@ -95,20 +99,21 @@ async def generate_custom_podcast_endpoint(
     firebase_user=Depends(generate_podcast_limit)
 ):
     """
-    Generate a custom podcast from uploaded files AND/OR pasted text.
-    Uses multipart/form-data.
+    Generate a custom podcast from uploaded files and/or pasted text.
+
+    Uses multipart/form-data to accept both files and text content.
     """
     try:
         user_uid = firebase_user["uid"]
         
-        # Check if they provided *something*
+        # Ensure at least one source of content is provided.
         if not files and not text_content.strip():
             raise ValueError("You must provide either files or pasted text.")
             
         result = await create_custom_podcast(
             user_id=user_uid,
             files=files, 
-            text_content=text_content, # 👈 Pass it down
+            text_content=text_content,
             title=podcast_title,
             custom_prompt=custom_prompt or "",
             voice=voice,
@@ -126,7 +131,8 @@ async def generate_custom_podcast_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create custom podcast: {str(e)}"
         )
-    
+
+
 @router.get("/library")
 async def get_podcast_library(
     firebase_user=Depends(verify_firebase_token),
@@ -135,7 +141,9 @@ async def get_podcast_library(
     skip: int = Query(0, ge=0, description="Pagination offset")
 ):
     """
-    Get user's podcast library
+    Get the current user's podcast library.
+
+    Statuses: pending, generating_script, generating_audio, uploading, completed, failed.
     """
     try:
         user_uid = firebase_user["uid"]
@@ -166,9 +174,7 @@ async def get_podcast_details(
     podcast_id: str,
     firebase_user=Depends(verify_firebase_token)
 ):
-    """
-    Get detailed information about a specific podcast
-    """
+    """Get detailed information about a specific podcast, including its script."""
     try:
         user_uid = firebase_user["uid"]
         
@@ -180,6 +186,7 @@ async def get_podcast_details(
                 detail="Podcast not found"
             )
         
+        # Ensure the user can only see their own podcasts.
         if podcast["user_id"] != user_uid:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -205,7 +212,9 @@ async def regenerate_podcast_endpoint(
     firebase_user=Depends(verify_firebase_token)
 ):
     """
-    Regenerate an existing podcast with updated settings
+    Regenerate an existing podcast with updated settings.
+
+    Deletes the previous audio/transcript files and starts a fresh generation.
     """
     try:
         user_uid = firebase_user["uid"]
@@ -255,9 +264,7 @@ async def delete_podcast_endpoint(
     podcast_id: str,
     firebase_user=Depends(verify_firebase_token)
 ):
-    """
-    Delete a podcast
-    """
+    """Delete a podcast and its associated audio/transcript files."""
     try:
         user_uid = firebase_user["uid"]
         
@@ -286,7 +293,7 @@ async def delete_podcast_endpoint(
 
 @router.get("/voices/list")
 async def list_available_voices():
-    """Get list of available voice options"""
+    """Get the list of available TTS voice options for the frontend."""
     return {
         "voices": [
             {
@@ -331,7 +338,7 @@ async def list_available_voices():
 
 @router.get("/styles/list")
 async def list_available_styles():
-    """Get list of available comprehension styles"""
+    """Get the list of available comprehension style options for the frontend."""
     return {
         "styles": [
             {
@@ -366,7 +373,7 @@ async def list_available_styles():
 async def get_user_podcast_stats(
     firebase_user=Depends(verify_firebase_token)
 ):
-    """Get user's podcast generation statistics"""
+    """Get aggregated statistics about the user's podcast generation activity."""
     try:
         user_uid = firebase_user["uid"]
         all_podcasts = await get_user_podcasts(user_id=user_uid, limit=1000)
@@ -401,7 +408,7 @@ async def get_user_podcast_stats(
 
 @router.get("/debug/event-loop")
 async def check_event_loop():
-    """Debug endpoint to check if event loop is responsive"""
+    """Debug endpoint to check if the asyncio event loop is responsive."""
     start = time.time()
     await asyncio.sleep(0.1)
     return {
@@ -410,9 +417,10 @@ async def check_event_loop():
         "timestamp": datetime.now().isoformat()
     }
 
+
 @router.get("/debug/health")
 async def debug_health():
-    """Simple health check that doesn't depend on any services"""
+    """Simple health check that does not depend on any external services."""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),

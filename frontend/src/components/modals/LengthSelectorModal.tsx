@@ -1,4 +1,8 @@
 // frontend/src/components/PodcastLengthSelector.tsx
+/**
+ * Bottom‑sheet modal for selecting the default podcast length preference.
+ */
+
 import React, { useState } from "react";
 import {
   View,
@@ -48,6 +52,7 @@ const PodcastLengthSelector: React.FC<Props> = ({ visible, currentLength, onClos
 
       if (response.ok) {
         onUpdate(lengthId);
+        // Delay closing so the user sees the selection feedback.
         setTimeout(onClose, 150);
       } else {
         throw new Error("Failed to update");

@@ -1,4 +1,7 @@
-# app/routes/notification_routes.py
+"""
+Notification Routes – endpoints for fetching, reading, and deleting notifications.
+"""
+
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import Optional, List
 from pydantic import BaseModel
@@ -8,8 +11,9 @@ import traceback
 
 router = APIRouter()
 
-# Schema for bulk deletion
+
 class BulkDeleteRequest(BaseModel):
+    """Request body for deleting multiple notifications at once."""
     notification_ids: List[str]
 
 
@@ -20,7 +24,11 @@ async def get_notifications(
     skip: int = Query(0, ge=0, description="Number of notifications to skip"),
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Get user notifications with pagination"""
+    """
+    Get paginated notifications for the authenticated user.
+
+    Also returns total count and unread count in the response.
+    """
     try:
         result = await notification_controller.get_user_notifications(
             user_id=firebase_user["uid"],
@@ -30,7 +38,7 @@ async def get_notifications(
         )
         return result
     except Exception as e:
-        print(f"❌ Error in get_notifications: {e}")
+        print(f"Error in get_notifications: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -42,12 +50,12 @@ async def get_notifications(
 async def get_unread_count(
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Get unread notification count for current user"""
+    """Quick endpoint to get only the number of unread notifications."""
     try:
         result = await notification_controller.get_unread_count(firebase_user["uid"])
         return result
     except Exception as e:
-        print(f"❌ Error in get_unread_count: {e}")
+        print(f"Error in get_unread_count: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -60,7 +68,7 @@ async def mark_notification_read(
     notification_id: str,
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Mark a notification as read"""
+    """Mark a single notification as read."""
     try:
         result = await notification_controller.mark_notification_read(
             notification_id=notification_id,
@@ -72,7 +80,7 @@ async def mark_notification_read(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error in mark_notification_read: {e}")
+        print(f"Error in mark_notification_read: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -84,7 +92,7 @@ async def mark_notification_read(
 async def mark_all_read(
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Mark all notifications as read for current user"""
+    """Mark all notifications for the current user as read."""
     try:
         result = await notification_controller.mark_all_notifications_read(firebase_user["uid"])
         return result
@@ -97,32 +105,12 @@ async def mark_all_read(
         )
 
 
-@router.post("/{notification_id}/archive")
-async def archive_notification(
-    notification_id: str,
-    firebase_user: dict = Depends(require_firebase_token)
-):
-    """Archive a notification (hide from main view)"""
-    try:
-        result = await notification_controller.archive_notification(
-            notification_id=notification_id,
-            user_id=firebase_user["uid"]
-        )
-        if not result["success"]:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result["message"])
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-
 @router.post("/bulk-delete")
 async def bulk_delete_notifications(
     request: BulkDeleteRequest,
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Delete multiple notifications at once"""
+    """Delete multiple notifications at once by their IDs."""
     try:
         result = await notification_controller.bulk_delete_notifications(
             notification_ids=request.notification_ids,
@@ -130,21 +118,21 @@ async def bulk_delete_notifications(
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/delete-all")
 async def delete_all_notifications(
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Wipe all notifications for the current user"""
+    """Delete all notifications for the current user permanently."""
     try:
         result = await notification_controller.delete_all_notifications(
             user_id=firebase_user["uid"]
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{notification_id}")
@@ -152,16 +140,16 @@ async def delete_notification(
     notification_id: str,
     firebase_user: dict = Depends(require_firebase_token)
 ):
-    """Permanently delete a single notification"""
+    """Delete a single notification permanently."""
     try:
         result = await notification_controller.delete_notification(
             notification_id=notification_id,
             user_id=firebase_user["uid"]
         )
         if not result["success"]:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result["message"])
+            raise HTTPException(status_code=404, detail=result["message"])
         return result
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

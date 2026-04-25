@@ -1,4 +1,7 @@
-# app/routes/topics_routes.py
+"""
+Topics Routes – endpoints for listing, searching, and viewing topic details.
+"""
+
 from fastapi import APIRouter, HTTPException, status, Query
 from typing import Optional
 from bson import ObjectId
@@ -19,14 +22,16 @@ async def search_topics_endpoint(
     q: str = Query(..., min_length=1, description="Search query"),
     category: Optional[str] = Query(None, description="Filter by category"),
     limit: int = Query(50, ge=1, le=100, description="Maximum results to return"),
-    skip: int = Query(0, ge=0, description="Pagination offset") # 👈 FIXED: ADDED SKIP
+    skip: int = Query(0, ge=0, description="Pagination offset")
 ):
     """
-    Search topics by query string
+    Perform a full‑text search across topics.
+
+    Uses MongoDB Atlas Search with fuzzy matching (typo tolerance).
+    Returns topics sorted by relevance score.
     """
     try:
-        # 👈 FIXED: PASS SKIP TO CONTROLLER
-        result = await search_topics(q, category, limit, skip) 
+        result = await search_topics(q, category, limit, skip)
         return result
         
     except Exception as e:
@@ -38,7 +43,7 @@ async def search_topics_endpoint(
 
 @router.get("/categories")
 async def list_categories():
-    """Get all categories with topic counts"""
+    """Return all configured categories with their active topic counts and trending topics."""
     try:
         categories = await get_all_categories()
         return {"categories": categories}
@@ -56,9 +61,8 @@ async def get_category_topics(
     limit: int = Query(10, ge=1, le=100, description="Maximum results to return"),
     skip: int = Query(0, ge=0, description="Pagination offset") 
 ):
-    """Get topics for a specific category with optional sorting and pagination"""
+    """Get active topics for a specific category with sorting and pagination."""
     try:
-        # Pass limit and skip to the controller
         topics = await get_topics_by_category(category_name, sort_by, limit, skip)
         return {
             "category": category_name,
@@ -77,9 +81,7 @@ async def get_developing_stories(
     category_name: str,
     min_history_points: int = Query(3, ge=2, le=10, description="Minimum history points")
 ):
-    """
-    Get developing stories in a category
-    """
+    """Return topics that have evolved significantly (at least `min_history_points` snapshots)."""
     try:
         from app.db import db
         
@@ -119,20 +121,15 @@ async def get_developing_stories(
         )
 
 
-# PARAMETERIZED ROUTES LAST - These come after all specific routes
+# =============================================================================
+# Parameterised routes – must come after all fixed‑path routes.
+# =============================================================================
 
 @router.get("/{topic_id}")
 async def get_topic_details(topic_id: str):
-    """
-    Get full details for a specific topic
-    
-    Now includes:
-    - Last 10 history points in timeline
-    - History point count
-    - Development notes
-    """
+    """Get full details of a single topic, including articles, tags, and history timeline."""
     try:
-        # ✅ PROTECT AGAINST "undefined" OR BAD IDs
+        # Protect against invalid or placeholder IDs.
         if topic_id == "undefined" or not ObjectId.is_valid(topic_id):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -163,11 +160,8 @@ async def get_topic_history_timeline(
     topic_id: str,
     limit: int = Query(20, ge=1, le=50, description="Maximum history points to return")
 ):
-    """
-    Get complete history timeline for a topic
-    """
+    """Get the complete history timeline of a topic (snapshots of its evolution)."""
     try:
-        # ✅ PROTECT AGAINST "undefined" OR BAD IDs
         if topic_id == "undefined" or not ObjectId.is_valid(topic_id):
             return {
                 "topic_id": topic_id,
@@ -192,11 +186,8 @@ async def get_topic_history_timeline(
 
 @router.post("/{topic_id}/history/check")
 async def trigger_history_check(topic_id: str):
-    """
-    Manually trigger history check for a topic
-    """
+    """Manually trigger a history significance check (admin utility)."""
     try:
-        # ✅ PROTECT AGAINST "undefined" OR BAD IDs
         if topic_id == "undefined" or not ObjectId.is_valid(topic_id):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

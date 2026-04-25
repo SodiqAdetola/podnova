@@ -1,4 +1,6 @@
 // frontend/src/screens/CreateScreen.tsx
+// Allows users to create a custom podcast by uploading files or pasting text.
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -22,6 +24,7 @@ import CreateScreenSkeleton from "../components/skeletons/CreateScreenSkeleton";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
+// Available voices with icons for visual selection
 const VOICES = [
   { id: "calm_female", name: "Calm (Female)", icon: "woman" },
   { id: "calm_male", name: "Calm (Male)", icon: "man" },
@@ -31,6 +34,7 @@ const VOICES = [
   { id: "professional_male", name: "Professional (Male)", icon: "briefcase" },
 ];
 
+// Comprehension levels with friendly descriptions
 const STYLES = [
   { id: "casual", name: "Casual", description: "Simple & conversational" },
   { id: "standard", name: "Standard", description: "Balanced & clear" },
@@ -38,6 +42,7 @@ const STYLES = [
   { id: "expert", name: "Expert", description: "Technical & comprehensive" },
 ];
 
+// Maps user preference "tone" to the style ID used by the API
 const TONE_TO_STYLE: Record<string, string> = {
   casual: "casual",
   factual: "standard",
@@ -45,6 +50,7 @@ const TONE_TO_STYLE: Record<string, string> = {
   expert: "expert",
 };
 
+// Maps frontend length preference to minutes
 const LENGTH_TO_MINUTES: Record<string, number> = {
   short: 5,
   medium: 10,
@@ -57,8 +63,7 @@ const CreateScreen: React.FC = () => {
   const [title, setTitle] = useState("");
   const [inputType, setInputType] = useState<"upload" | "paste">("upload");
   const [files, setFiles] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
-  const [pastedText, setPastedText] = useState(""); // 👈 NEW STATE
-  
+  const [pastedText, setPastedText] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("calm_female");
   const [selectedStyle, setSelectedStyle] = useState("standard");
@@ -69,6 +74,7 @@ const CreateScreen: React.FC = () => {
   const [generationStarted, setGenerationStarted] = useState(false);
   const [estimatedTime, setEstimatedTime] = useState(60);
 
+  // Load saved user preferences when screen opens
   useEffect(() => {
     loadUserPreferences();
   }, []);
@@ -101,30 +107,25 @@ const CreateScreen: React.FC = () => {
   };
 
   const handlePickDocument = async () => {
-    try {
-      if (files.length >= 5) {
-        Alert.alert("Limit Reached", "You can only upload up to 5 files at a time.");
-        return;
-      }
+    if (files.length >= 5) {
+      Alert.alert("Limit Reached", "You can only upload up to 5 files at a time.");
+      return;
+    }
 
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'text/plain'],
-        copyToCacheDirectory: true,
-        multiple: true,
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'text/plain'],
+      copyToCacheDirectory: true,
+      multiple: true,
+    });
+
+    if (!result.canceled && result.assets) {
+      const newFiles = [...files];
+      result.assets.forEach(asset => {
+        if (!newFiles.find(f => f.uri === asset.uri) && newFiles.length < 5) {
+          newFiles.push(asset);
+        }
       });
-
-      if (!result.canceled && result.assets) {
-        const newFiles = [...files];
-        result.assets.forEach(asset => {
-          if (!newFiles.find(f => f.uri === asset.uri) && newFiles.length < 5) {
-            newFiles.push(asset);
-          }
-        });
-        setFiles(newFiles);
-      }
-    } catch (error) {
-      console.error("Error picking document:", error);
-      Alert.alert("Error", "Could not select the file.");
+      setFiles(newFiles);
     }
   };
 
@@ -133,13 +134,13 @@ const CreateScreen: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    // 👈 UPDATED VALIDATION
+    // Validate that user provided content
     if (inputType === "upload" && files.length === 0) {
       Alert.alert("Missing Content", "Please upload at least one file.");
       return;
     }
     if (inputType === "paste" && pastedText.trim().length < 50) {
-      Alert.alert("Content Too Short", "Please paste at least 50 characters of text to generate a podcast.");
+      Alert.alert("Content Too Short", "Please paste at least 50 characters.");
       return;
     }
 
@@ -151,9 +152,9 @@ const CreateScreen: React.FC = () => {
       
       const formData = new FormData();
       
-      // 👈 APPEND BASED ON SELECTED MODE
+      // Add files or pasted text based on user's choice
       if (inputType === "upload") {
-          files.forEach((file, index) => {
+          files.forEach((file) => {
             formData.append('files', {
               uri: file.uri,
               name: file.name,
@@ -212,6 +213,7 @@ const CreateScreen: React.FC = () => {
     (navigation as any).navigate("Library");
   };
 
+  // Show success screen after generation starts
   if (generationStarted) {
     return (
       <View style={styles.successContainer}>
@@ -254,7 +256,7 @@ const CreateScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           
-          {/* TITLE SECTION */}
+          {/* Title input */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Podcast Title</Text>
             <Text style={styles.sectionSubtitle}>Give your custom podcast a name.</Text>
@@ -267,7 +269,7 @@ const CreateScreen: React.FC = () => {
             />
           </View>
 
-          {/* SOURCE MATERIAL SECTION WITH TOGGLE */}
+          {/* Source material - choose upload or paste */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Source Material</Text>
             <Text style={styles.sectionSubtitle}>Provide content for PodNova AI to discuss.</Text>
@@ -327,7 +329,7 @@ const CreateScreen: React.FC = () => {
             )}
           </View>
 
-          {/* PROMPT SECTION */}
+          {/* Custom prompt / instructions */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Instructions</Text>
             <Text style={styles.sectionSubtitle}>What should the hosts focus on?</Text>
@@ -343,7 +345,7 @@ const CreateScreen: React.FC = () => {
             />
           </View>
 
-          {/* VOICE SECTION */}
+          {/* Voice selection */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Voice</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.voiceScroll}>
@@ -362,7 +364,7 @@ const CreateScreen: React.FC = () => {
             </ScrollView>
           </View>
 
-          {/* STYLE SECTION */}
+          {/* Comprehension level */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Comprehension Level</Text>
             <View style={styles.styleGrid}>
@@ -380,7 +382,7 @@ const CreateScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* LENGTH SECTION */}
+          {/* Length slider */}
           <View style={[styles.section, { borderBottomWidth: 0, paddingBottom: 20 }]}>
             <View style={styles.lengthHeader}>
               <Text style={styles.sectionTitle}>Target Length</Text>
@@ -399,7 +401,7 @@ const CreateScreen: React.FC = () => {
             />
           </View>
 
-          {/* INLINE GENERATE BUTTON */}
+          {/* Generate button */}
           <View style={styles.footer}>
             <TouchableOpacity
               style={[styles.generateButton, generating && styles.generateButtonDisabled]}

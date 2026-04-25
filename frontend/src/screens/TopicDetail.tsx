@@ -1,7 +1,9 @@
 // frontend/src/screens/TopicDetail.tsx
+// Displays a single topic with its summary, key insights, source articles, and discussion thread.
+
 import React, { useEffect, useState, useRef } from "react";
 import {
-  View, 
+  View,
   Text,
   StyleSheet,
   ScrollView,
@@ -72,11 +74,9 @@ const TopicDetailScreen: React.FC = () => {
   const [isArticlesExpanded, setIsArticlesExpanded] = useState(false);
   
   const [optimisticFollow, setOptimisticFollow] = useState<boolean | null>(null);
-  
-  // 👈 NEW STATE for the confirmation modal
   const [showFollowModal, setShowFollowModal] = useState(false);
 
-  // 1. FETCH TOPIC
+  // Fetch topic details
   const {
     data: topic,
     isLoading: loadingTopic,
@@ -98,7 +98,7 @@ const TopicDetailScreen: React.FC = () => {
     retry: 1,
   });
 
-  // 2. FETCH DISCUSSION
+  // Fetch the discussion associated with this topic
   const {
     data: discussion,
     isLoading: loadingDiscussion,
@@ -123,7 +123,7 @@ const TopicDetailScreen: React.FC = () => {
     staleTime: 1000 * 60 * 5,
   });
 
-  // 3. FETCH FOLLOW STATUS
+  // Check if the user is following this topic
   const { 
     data: followData, 
     refetch: refetchFollowStatus 
@@ -146,10 +146,10 @@ const TopicDetailScreen: React.FC = () => {
   const discussionId = discussion?.id || discussion?._id || null;
   const replyCount = discussion?.reply_count || 0;
 
+  // Optimistic follow status - updates UI immediately before server response
   const isFollowing = optimisticFollow !== null 
     ? optimisticFollow 
     : (followData?.is_following || false);
-
 
   useEffect(() => {
     if (isTopicError) {
@@ -178,14 +178,13 @@ const TopicDetailScreen: React.FC = () => {
     }, 400); 
   };
 
-  // TOGGLE LOGIC TO TRIGGER MODAL
   const handleToggleFollow = async () => {
     if (!topic?.id) return;
     
     const newStatus = !isFollowing;
     setOptimisticFollow(newStatus);
 
-    // Only show the premium modal when they FOLLOW, not unfollow
+    // Show confirmation modal only when following (not unfollowing)
     if (newStatus === true) {
       setShowFollowModal(true);
     }
@@ -206,7 +205,7 @@ const TopicDetailScreen: React.FC = () => {
       
     } catch (error) {
       setOptimisticFollow(isFollowing);
-      if (newStatus === true) setShowFollowModal(false); // Hide if it failed
+      if (newStatus === true) setShowFollowModal(false);
       Alert.alert("Error", "Could not update tracking preferences. Please try again.");
     }
   };
@@ -394,7 +393,6 @@ const TopicDetailScreen: React.FC = () => {
     );
   };
 
-  // IF LOADING FROM CACHE OR FETCH, SHOW SKELETON
   if (loadingTopic) return <TopicDetailSkeleton />;
   if (!topic) return <View style={styles.centerContainer}><Text style={styles.errorText}>Topic not found</Text></View>;
 
@@ -490,7 +488,7 @@ const TopicDetailScreen: React.FC = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Premium Notification Confirmation Modal */}
+      {/* Confirmation modal shown after following a topic */}
       <Modal
         visible={showFollowModal}
         transparent={true}
@@ -936,8 +934,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#6B7280",
   },
-
-  // 👈 NEW STYLES FOR THE CONFIRMATION MODAL
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(17, 24, 39, 0.6)",
@@ -962,7 +958,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#FEF3C7", // Amber-50
+    backgroundColor: "#FEF3C7",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,

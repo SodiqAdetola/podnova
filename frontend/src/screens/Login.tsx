@@ -1,3 +1,6 @@
+// frontend/src/screens/LoginScreen.tsx
+// Allows existing users to sign in with email and password.
+
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -41,7 +44,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-      // Navigation handled by auth state listener
     } catch (error: any) {
       let message = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') message = "No account found with this email.";
@@ -157,10 +159,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity 
-                onPress={() => navigation.replace('Register')}
-                // No animation for auth swap
-              >
+              <TouchableOpacity onPress={() => navigation.replace('Register')}>
                 <Text style={styles.linkText}>Create one</Text>
               </TouchableOpacity>
             </View>
@@ -248,9 +247,9 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   signInButton: {
-    height: 48, // Reduced from 52
+    height: 48,
     backgroundColor: "#6366F1",
-    borderRadius: 10, // Slightly smaller radius
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     marginTop: 16,
@@ -259,7 +258,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   signInText: {
-    fontSize: 15, // Reduced from 16
+    fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
   },

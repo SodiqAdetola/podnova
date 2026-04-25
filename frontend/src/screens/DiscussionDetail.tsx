@@ -1,4 +1,6 @@
 // frontend/src/screens/DiscussionDetailScreen.tsx
+// Shows a single discussion with its title, description, and all replies.
+
 import React, { useState } from "react";
 import {
   View,
@@ -43,6 +45,7 @@ interface Discussion {
   total_replies: number;
 }
 
+// Helper to get the right color for each category badge
 const getCategoryColor = (category?: string): string => {
   if (!category) return "#8B5CF6";
   switch (category.toLowerCase()) {
@@ -71,16 +74,14 @@ const getAuthToken = async (): Promise<string | null> => {
 const DiscussionDetailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
-  // placeholderDiscussion is for List-to-Detail instant hydration (if you add it to your lists later)
   const { discussionId, placeholderDiscussion } = route.params as { discussionId: string, placeholderDiscussion?: any };
   const { showPlayer } = useAudio();
   const queryClient = useQueryClient();
 
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
-  // ==========================================
-  // REACT QUERY: FETCH DISCUSSION METADATA
-  // ==========================================
+  // Fetch discussion metadata (title, description, stats, but not replies)
+  // Replies are fetched by the DiscussionThread component separately.
   const {
     data: discussion,
     isLoading,
@@ -102,7 +103,8 @@ const DiscussionDetailScreen: React.FC = () => {
       if (!response.ok) throw new Error("Failed to load discussion");
       
       const data = await response.json();
-      const { replies, ...discussionMeta } = data; // We only want the meta here, Thread fetches replies
+      // Remove replies from the response because DiscussionThread will fetch them
+      const { replies, ...discussionMeta } = data;
       return discussionMeta;
     },
     placeholderData: placeholderDiscussion,
@@ -115,11 +117,11 @@ const DiscussionDetailScreen: React.FC = () => {
     navigation.goBack();
   }
 
-  // --- ACTIONS ---
+  // Optimistic UI update for upvoting - updates instantly, then syncs with server
   const handleUpvoteDiscussion = async () => {
     if (!discussion) return;
 
-    // Optimistically update the UI instantly
+    // Update the UI immediately without waiting for server response
     queryClient.setQueryData(['discussionMeta', discussionId], (oldData: Discussion | undefined) => {
       if (!oldData) return oldData;
       return {
@@ -138,8 +140,7 @@ const DiscussionDetailScreen: React.FC = () => {
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // If it fails on the server, we could rollback the optimistic update here.
-      // But for simplicity, we let it be or refetch.
+      // If the server request fails, revert the optimistic update
       if (!response.ok) {
         queryClient.invalidateQueries({ queryKey: ['discussionMeta', discussionId] });
       }
@@ -149,7 +150,7 @@ const DiscussionDetailScreen: React.FC = () => {
     }
   };
 
-  // --- HEADER COMPONENT ---
+  // Header component that shows discussion metadata and is passed to DiscussionThread
   const renderDiscussionMetadata = () => {
     if (!discussion) return null;
 
@@ -164,6 +165,7 @@ const DiscussionDetailScreen: React.FC = () => {
 
     return (
       <View style={styles.metadataContainer}>
+        {/* Type and category badges */}
         <View style={styles.typeBadge}>
           <View style={[styles.typeBadgeInner, { backgroundColor: typeColors.bg }]}>
             <Ionicons name={typeColors.icon} size={12} color={typeColors.text} />
@@ -178,6 +180,7 @@ const DiscussionDetailScreen: React.FC = () => {
 
         <Text style={styles.title}>{discussion.title}</Text>
 
+        {/* Description with expand/collapse for long text */}
         {discussion.description && (
           <View style={styles.descriptionContainer}>
             <Text style={styles.description} numberOfLines={isDescriptionExpanded ? undefined : 1}>
@@ -191,6 +194,7 @@ const DiscussionDetailScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Tags */}
         {discussion.tags && discussion.tags.length > 0 && (
           <View style={styles.tagsRow}>
             {discussion.tags.slice(0, 3).map((tag, index) => (
@@ -201,6 +205,7 @@ const DiscussionDetailScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Stats row: author, time, reply count, upvote button */}
         <View style={styles.statsRow}>
           <View style={styles.statsLeft}>
             <Ionicons name="person-circle-outline" size={14} color="#6B7280" />
@@ -234,11 +239,11 @@ const DiscussionDetailScreen: React.FC = () => {
     );
   };
 
-  // --- RENDER SKELETON ---
   if (isLoading) {
     return <DiscussionDetailSkeleton />;
   }
 
+  // Add extra bottom padding to avoid overlapping with the mini player
   const miniPlayerHeight = showPlayer ? 70 : 0;
 
   return (

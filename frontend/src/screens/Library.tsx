@@ -1,4 +1,6 @@
 // frontend/src/screens/LibraryScreen.tsx
+// Shows the user's generated podcasts with tabs for All, Saved, and Downloads.
+// Supports offline downloads, saved bookmarks, and regeneration.
 
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -55,12 +57,12 @@ const LibraryScreen: React.FC = () => {
 
   const { loadPodcast, showPlayer, currentPodcast } = useAudio();
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
-  const previousPodcastCount = useRef<number>(0);
 
-  // NEW: Listen for global save events
+  // Load saved downloads and bookmarks from AsyncStorage when the screen mounts
   useEffect(() => { 
     loadLocalData(); 
     
+    // Listen for global events that indicate the library should refresh
     const subscription = DeviceEventEmitter.addListener("LIBRARY_UPDATED", () => {
       loadLocalData();
     });
@@ -96,7 +98,6 @@ const LibraryScreen: React.FC = () => {
       const data = await response.json();
       if (response.ok) {
         const newPodcasts = data.podcasts || [];
-        previousPodcastCount.current = newPodcasts.length;
         setPodcasts(newPodcasts);
         setHasInitiallyLoaded(true);
       }
@@ -108,6 +109,7 @@ const LibraryScreen: React.FC = () => {
     }
   };
 
+  // Refresh when the screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       fetchPodcasts(false, hasInitiallyLoaded);
@@ -120,6 +122,7 @@ const LibraryScreen: React.FC = () => {
     }, [hasInitiallyLoaded])
   );
 
+  // Poll every 5 seconds if any podcast is currently generating
   useEffect(() => {
     const hasGenerating = podcasts.some((p) =>
       ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
@@ -147,6 +150,7 @@ const LibraryScreen: React.FC = () => {
     fetchPodcasts(true);
   };
 
+  // Download a podcast to device storage for offline playback
   const downloadPodcast = async (podcast: Podcast) => {
     if (!podcast.audio_url) return;
     try {
@@ -172,6 +176,7 @@ const LibraryScreen: React.FC = () => {
     }
   };
 
+  // Delete a podcast (both from server and local storage)
   const deletePodcast = async (podcast: Podcast) => {
     Alert.alert(
       "Delete Podcast",
@@ -193,6 +198,7 @@ const LibraryScreen: React.FC = () => {
               });
 
               if (response.ok) {
+                // Delete local file if it exists
                 if (downloadedPodcasts.has(podcast.id)) {
                   try {
                     const file = new File(Paths.cache, `podcast_${podcast.id}.mp3`);
@@ -214,6 +220,7 @@ const LibraryScreen: React.FC = () => {
     );
   };
 
+  // Toggle saved/bookmarked status in local storage
   const toggleSaved = async (podcastId: string) => {
     try {
       setActiveMenu(null);
@@ -223,7 +230,7 @@ const LibraryScreen: React.FC = () => {
       setSavedPodcasts(newSaved);
       await AsyncStorage.setItem(STORAGE_KEYS.SAVED, JSON.stringify([...newSaved]));
       
-      // NEW: Broadcast update
+      // Notify other screens that the saved list changed
       DeviceEventEmitter.emit("LIBRARY_UPDATED");
       
     } catch (error) {
@@ -245,6 +252,7 @@ const LibraryScreen: React.FC = () => {
     ["pending", "generating_script", "generating_audio", "uploading"].includes(p.status)
   );
 
+  // Filter by tab (all/saved/downloads) and category
   const filteredPodcasts = completedPodcasts.filter((podcast) => {
     let matchesTab = true;
     if (activeTab === "downloads") matchesTab = downloadedPodcasts.has(podcast.id);
@@ -293,6 +301,7 @@ const LibraryScreen: React.FC = () => {
     return "#6366F1";
   };
 
+  // Context menu for each podcast (regenerate, save, download, delete)
   const renderMenu = (podcast: Podcast) => {
     if (activeMenu !== podcast.id) return null;
     const isDownloaded = downloadedPodcasts.has(podcast.id);
@@ -352,6 +361,7 @@ const LibraryScreen: React.FC = () => {
       <>
         <TouchableOpacity style={styles.podcastCard} activeOpacity={0.7} onPress={() => handlePlayPodcast(item)}>
           
+          {/* Orange badge showing that new updates are available for this topic */}
           {item.has_topic_update && (
             <View style={styles.absoluteUpdateBadge}>
               <Ionicons name="flash" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -360,6 +370,7 @@ const LibraryScreen: React.FC = () => {
           )}
 
           <View style={styles.cardContent}>
+            {/* Thumbnail: gradient for custom podcasts, colored icon for regular */}
             {isCustom ? (
               <LinearGradient colors={['#34D399', '#059669']} style={styles.thumbnail} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Ionicons name="document-text" size={28} color="#FFFFFF" />
@@ -447,6 +458,7 @@ const LibraryScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Tabs: All, Saved, Downloads */}
       <View style={styles.tabContainer}>
         <TouchableOpacity style={[styles.tab, activeTab === "all" && styles.activeTab]} onPress={() => setActiveTab("all")}>
           <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>All</Text>
@@ -462,6 +474,7 @@ const LibraryScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Category filter pills */}
       <View style={styles.filterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           {LIBRARY_CATEGORIES.map((category) => (
@@ -484,6 +497,7 @@ const LibraryScreen: React.FC = () => {
         </ScrollView>
       </View>
 
+      {/* Banner shown while a podcast is generating */}
       {hasGenerating && (
         <View style={styles.generatingBanner}>
           <ActivityIndicator size="small" color="#6366F1" />

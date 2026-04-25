@@ -1,3 +1,6 @@
+// frontend/src/screens/RegisterScreen.tsx
+// User registration screen with password strength validation.
+
 import React, { useState, useRef, useEffect } from "react";
 import {
   View,
@@ -33,7 +36,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [showRequirements, setShowRequirements] = useState(false);
 
-  // Password strength tracking with case requirement
+  // Password strength tracking
   const [passwordStrength, setPasswordStrength] = useState({
     score: 0, // 0-4
     label: "",
@@ -51,7 +54,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
-  // Real-time password analysis with case requirement
+  // Analyse password strength in real-time as user types
   useEffect(() => {
     if (!password) {
       setPasswordStrength({
@@ -79,7 +82,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     
     let score = 0;
     let label = "";
-    let color = "#EF4444"; // Red
+    let color = "#EF4444";
 
     if (metCount <= 1) {
       score = 1;
@@ -109,7 +112,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   const passwordsMatch = password === confirmPassword && password.length > 0;
 
-  // Show requirements when password field is focused
+  // Show password requirements when password field is focused
   useEffect(() => {
     if (focusedField === 'password') {
       setShowRequirements(true);
@@ -177,7 +180,6 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Render requirement item with checkmark
   const renderRequirement = (met: boolean, text: string) => (
     <View style={styles.requirementRow}>
       <Ionicons 
@@ -436,10 +438,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
-              <TouchableOpacity 
-                onPress={() => navigation.replace('Login')}
-                // No animation for auth swap
-              >
+              <TouchableOpacity onPress={() => navigation.replace('Login')}>
                 <Text style={styles.linkText}>Sign in</Text>
               </TouchableOpacity>
             </View>

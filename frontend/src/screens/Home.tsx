@@ -1,4 +1,6 @@
 // frontend/src/screens/Home.tsx
+// The main landing screen showing categories and recently active topics.
+
 import React from "react";
 import {
   View,
@@ -21,19 +23,21 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<MainStackParamList>;
 
+// Map category names to icon names
 const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   technology: "hardware-chip-outline",
   finance: "cash-outline",
   politics: "people-outline",
 };
 
-// --- API Fetching Functions ---
+// Fetch all categories with their topic counts
 const fetchCategories = async (): Promise<Category[]> => {
   const res = await fetch(`${API_BASE_URL}/topics/categories`);
   const data = await res.json();
   return data.categories || data || [];
 };
 
+// Fetch the 5 most recently updated topics across all categories
 const fetchRecentTopics = async (categories: Category[]): Promise<Topic[]> => {
   if (!categories || categories.length === 0) return [];
   
@@ -47,12 +51,13 @@ const fetchRecentTopics = async (categories: Category[]): Promise<Topic[]> => {
   const allTopics = await Promise.all(topicsPromises);
   const flatTopics = allTopics.flat();
   
+  // Sort by last_updated and take the top 5
   return flatTopics
     .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
     .slice(0, 5);
 };
 
-// Lightweight fetch just for the unread count
+// Get the user's unread notification count (for the badge on the bell icon)
 const fetchUnreadCount = async (): Promise<number> => {
   try {
     const auth = getAuth();
@@ -77,6 +82,7 @@ const fetchUnreadCount = async (): Promise<number> => {
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
 
+  // Fetch categories
   const { 
     data: categories = [], 
     isLoading: isLoadingCategories,
@@ -84,9 +90,10 @@ const HomeScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['categories'],
     queryFn: fetchCategories,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
+  // Fetch recent topics (depends on categories being loaded)
   const { 
     data: recentTopics = [], 
     isLoading: isLoadingTopics,
@@ -99,10 +106,11 @@ const HomeScreen: React.FC = () => {
     staleTime: 1000 * 60 * 2,
   });
 
+  // Fetch unread notification count (refreshes every minute)
   const { data: unreadCount = 0, refetch: refetchUnread } = useQuery({
     queryKey: ['unreadNotificationCount'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 1000 * 60, 
+    refetchInterval: 1000 * 60, // Poll every minute
   });
 
   const onRefresh = async () => {
@@ -119,7 +127,6 @@ const HomeScreen: React.FC = () => {
     }
   };
 
-  // Replaced ActivityIndicator with the production-ready Skeleton
   if (isLoadingCategories || isLoadingTopics) {
     return <HomeSkeleton />;
   }
@@ -138,6 +145,7 @@ const HomeScreen: React.FC = () => {
           >
             <Ionicons name="notifications-outline" size={20} color="#ffffff" />
             
+            {/* Red badge for unread notifications */}
             {unreadCount > 0 && (
               <View style={styles.badgeContainer}>
                 <Text style={styles.badgeText}>
@@ -149,6 +157,7 @@ const HomeScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Categories section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Explore</Text>
 
@@ -181,6 +190,7 @@ const HomeScreen: React.FC = () => {
         ))}
       </View>
 
+      {/* Recent topics horizontal scroll */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Recently Active Topics</Text>
 

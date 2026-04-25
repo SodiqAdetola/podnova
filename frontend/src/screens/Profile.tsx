@@ -1,4 +1,7 @@
 // frontend/src/screens/ProfileScreen.tsx
+// Displays user profile information, followed topics, and user's own discussions.
+// Provides access to settings and account management.
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -38,7 +41,6 @@ const ProfileScreen: React.FC = () => {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [stats, setStats] = useState({ podcasts: 0, discussions: 0, upvotes: 0 });
 
-  // Modals State
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [editingDiscussion, setEditingDiscussion] = useState<any>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -51,6 +53,7 @@ const ProfileScreen: React.FC = () => {
     return token;
   };
 
+  // Fetch topics that the user follows
   const { data: followedTopics, isLoading: loadingFollowed } = useQuery({
     queryKey: ['followedTopics'],
     queryFn: async () => {
@@ -64,6 +67,7 @@ const ProfileScreen: React.FC = () => {
     }
   });
 
+  // Fetch discussions created by the user
   const { data: myDiscussions, isLoading: loadingDiscussions } = useQuery({
     queryKey: ['myDiscussions', auth.currentUser?.uid],
     queryFn: async () => {
@@ -79,10 +83,10 @@ const ProfileScreen: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchProfileData(); // Initial load is NOT silent
+    fetchProfileData();
   }, []);
 
-  // 👈 ADDED 'silent' PARAMETER TO PREVENT MODAL JITTER
+  // Fetch profile data and statistics. 'silent' prevents loading indicator flicker when refreshing.
   const fetchProfileData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
@@ -94,6 +98,7 @@ const ProfileScreen: React.FC = () => {
       if (profileRes.ok) {
         setUserProfile(await profileRes.json());
       } else if (profileRes.status === 404) {
+        // Create profile if it doesn't exist yet
         const newProfileRes = await fetch(`${API_BASE_URL}/users/profile`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -127,8 +132,8 @@ const ProfileScreen: React.FC = () => {
         style: "destructive",
         onPress: async () => {
           try {
-            await stopPlayback(); 
-            queryClient.clear(); 
+            await stopPlayback();
+            queryClient.clear(); // Clear all cached data
             await signOut(auth);
           } catch (error) {
             Alert.alert("Error", "Failed to logout");
@@ -190,7 +195,7 @@ const ProfileScreen: React.FC = () => {
             });
             if (!res.ok) throw new Error("Failed to delete");
             queryClient.invalidateQueries({ queryKey: ['myDiscussions'] });
-            fetchProfileData(true); // Silent refresh
+            fetchProfileData(true);
           } catch (error) {
             Alert.alert("Error", "Could not delete discussion.");
           }
@@ -199,6 +204,7 @@ const ProfileScreen: React.FC = () => {
     ]);
   };
 
+  // Fallback gradient and icon for topics without an image
   const getCategoryFallback = (category?: string) => {
     const cat = category?.toLowerCase() || '';
     if (cat.includes('tech')) return { colors: ['#FDA4A3', '#F16365'], icon: 'hardware-chip-outline' };
@@ -228,6 +234,7 @@ const ProfileScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* User info section */}
         <View style={styles.userSection}>
           <View style={styles.avatarPlaceholder}>
             <Ionicons name="person" size={48} color="#FFFFFF" />
@@ -253,6 +260,7 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Followed topics section */}
         <View style={styles.followedSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Topics You Follow</Text>
@@ -302,6 +310,7 @@ const ProfileScreen: React.FC = () => {
           )}
         </View>
 
+        {/* User's own discussions section */}
         <View style={styles.followedSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Your Discussions</Text>
@@ -352,15 +361,14 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.footer} />
       </ScrollView>
 
-      {/* ENCAPSULATED SETTINGS MODAL */}
       <SettingsModal
         visible={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
         userProfile={userProfile}
-        onProfileUpdated={() => fetchProfileData(true)} // 👈 SILENT REFRESH TRUE
+        onProfileUpdated={() => fetchProfileData(true)}
       />
 
-      {/* EDIT DISCUSSION MODAL */}
+      {/* Modal for editing a discussion */}
       <Modal
         visible={!!editingDiscussion}
         transparent={true}
@@ -408,7 +416,6 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-
     </View>
   );
 };

@@ -1,4 +1,6 @@
 // frontend/src/screens/NotificationsScreen.tsx
+// Displays user notifications with support for marking as read, bulk delete, and navigation to source content.
+
 import React, { useState } from "react";
 import {
   View,
@@ -22,7 +24,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { getAuth } from "firebase/auth";
 import NotificationListSkeleton from "../components/skeletons/NotificationListSkeleton";
 
-// Enable LayoutAnimation for Android
+// Enable LayoutAnimation for smooth animations on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -48,7 +50,7 @@ interface Notification {
   time_ago: string;
 }
 
-// --- API Fetching Function ---
+// Fetch paginated notifications from the API
 const fetchNotifications = async ({ pageParam = 0 }: any) => {
   try {
     const auth = getAuth();
@@ -65,10 +67,7 @@ const fetchNotifications = async ({ pageParam = 0 }: any) => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Server Error (${response.status}): ${errorText}`);
-    }
+    if (!response.ok) throw new Error(`Server Error: ${response.status}`);
     
     return await response.json();
   } catch (error: any) {
@@ -80,11 +79,10 @@ const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
-  // Bottom Sheet State (used for long-press delete now)
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
 
-  // Selection Mode State
+  // Selection mode for bulk delete
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -109,6 +107,7 @@ const NotificationsScreen: React.FC = () => {
     staleTime: 1000 * 60, 
   });
 
+  // Flatten all pages of notifications
   const notifications = data?.pages?.reduce((acc: Notification[], page: any) => {
     if (page && Array.isArray(page.notifications)) {
       return [...acc, ...page.notifications];
@@ -118,7 +117,7 @@ const NotificationsScreen: React.FC = () => {
 
   const unreadCount = data?.pages?.[0]?.unread_count || 0;
 
-  // --- Mutations ---
+  // Mark a single notification as read
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
       const auth = getAuth();
@@ -131,6 +130,7 @@ const NotificationsScreen: React.FC = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
+  // Mark all notifications as read
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
       const auth = getAuth();
@@ -143,6 +143,7 @@ const NotificationsScreen: React.FC = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
+  // Delete a single notification
   const deleteNotificationMutation = useMutation({
     mutationFn: async (notificationId: string) => {
       const auth = getAuth();
@@ -162,6 +163,7 @@ const NotificationsScreen: React.FC = () => {
     onError: () => Alert.alert("Error", "Could not delete notification. Please try again.")
   });
 
+  // Delete multiple selected notifications
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       const auth = getAuth();
@@ -185,6 +187,7 @@ const NotificationsScreen: React.FC = () => {
     onError: () => Alert.alert("Error", "Some notifications could not be deleted.")
   });
 
+  // Delete all notifications
   const deleteAllMutation = useMutation({
     mutationFn: async () => {
       const auth = getAuth();
@@ -204,7 +207,7 @@ const NotificationsScreen: React.FC = () => {
     onError: () => Alert.alert("Error", "Failed to clear notifications.")
   });
 
-  // --- Handlers ---
+  // Toggle selection mode (for bulk delete)
   const toggleSelectionMode = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsSelectMode(!isSelectMode);
@@ -230,6 +233,7 @@ const NotificationsScreen: React.FC = () => {
     }
   };
 
+  // Delete either selected notifications or all if none are selected
   const handleDynamicDelete = () => {
     if (selectedIds.size === 0) {
       Alert.alert(
@@ -252,6 +256,7 @@ const NotificationsScreen: React.FC = () => {
     }
   };
 
+  // Handle tap on a notification: mark as read and navigate to the source
   const handleNotificationPress = (notification: Notification) => {
     if (isSelectMode) {
       toggleItemSelection(notification.id);
@@ -265,13 +270,9 @@ const NotificationsScreen: React.FC = () => {
     if (notification.source_type === "podcast") {
       (navigation as any).navigate("MainTabs", { screen: "Library" });
     } else if (notification.source_type === "discussion") {
-      navigation.navigate("DiscussionDetail", {
-        discussionId: notification.source_id,
-      });
+      navigation.navigate("DiscussionDetail", { discussionId: notification.source_id });
     } else if (notification.source_type === "topic") {
-      navigation.navigate("TopicDetail", {
-        topicId: notification.source_id,
-      });
+      navigation.navigate("TopicDetail", { topicId: notification.source_id });
     }
   };
 
@@ -287,7 +288,7 @@ const NotificationsScreen: React.FC = () => {
     }
   };
 
-  // --- Rendering Helpers ---
+  // Helper to get icon and color based on notification type
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "mention": return "at-circle";
@@ -324,7 +325,7 @@ const NotificationsScreen: React.FC = () => {
         onLongPress={() => openActionMenu(notification)} 
         activeOpacity={0.7}
       >
-        {/* 1. Left: Selection Checkbox */}
+        {/* Checkbox for selection mode */}
         {isSelectMode && (
           <View style={styles.checkboxContainer}>
             <Ionicons 
@@ -335,29 +336,23 @@ const NotificationsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* 2. Left: Icon */}
         <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(notification.type) + "20" }]}>
           <Ionicons name={getNotificationIcon(notification.type) as any} size={20} color={getNotificationColor(notification.type)} />
         </View>
 
-        {/* 3. Middle: Text Content */}
         <View style={styles.notificationContent}>
-          <View style={styles.titleRow}>
-            <Text style={styles.notificationTitle} numberOfLines={1}>
-              {notification.title || "Notification"}
-            </Text>
-          </View>
+          <Text style={styles.notificationTitle} numberOfLines={1}>
+            {notification.title || "Notification"}
+          </Text>
           <Text style={styles.notificationPreview} numberOfLines={2}>
             {notification.message || notification.preview || "You have a new update."}
           </Text>
-          <View style={styles.footerRow}>
-            <Text style={styles.notificationTime}>
-              {notification.time_ago || "Recently"}
-            </Text>
-          </View>
+          <Text style={styles.notificationTime}>
+            {notification.time_ago || "Recently"}
+          </Text>
         </View>
 
-        {/* 4. Right: Vertical Centered Dot (MOVED HERE) */}
+        {/* Blue dot for unread notifications */}
         {!notification.is_read && (
           <View style={styles.unreadDotContainer}>
             <View style={styles.unreadDot} />
@@ -405,7 +400,7 @@ const NotificationsScreen: React.FC = () => {
         <View style={styles.placeholder} />
       </View>
 
-      {/* PERMANENT BANNER */}
+      {/* Banner with unread count and action buttons */}
       <View style={styles.bannerContainer}>
         {isSelectMode ? (
           <>
@@ -461,7 +456,7 @@ const NotificationsScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Loading Overlay for Background Deletions */}
+      {/* Overlay shown during deletion operations */}
       {isDeleting && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#6366F1" />
@@ -499,7 +494,7 @@ const NotificationsScreen: React.FC = () => {
         />
       )}
 
-      {/* --- ACTION MENU BOTTOM SHEET --- */}
+      {/* Bottom sheet menu for single notification actions */}
       <Modal 
         visible={showActionMenu} 
         transparent 
@@ -540,7 +535,6 @@ const NotificationsScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
       </Modal>
-
     </View>
   );
 };
@@ -737,8 +731,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#6366F1",
   },
-
-  // --- BOTTOM SHEET STYLES ---
   bottomSheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

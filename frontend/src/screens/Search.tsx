@@ -1,4 +1,6 @@
 // frontend/src/screens/SearchScreen.tsx
+// Allows users to search across topics and discussions with infinite scroll.
+
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -24,7 +26,6 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { LinearGradient } from 'expo-linear-gradient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-
 const PAGE_LIMIT = 10;
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList>;
@@ -67,7 +68,7 @@ const CATEGORIES = [
 type SearchScope = "news" | "discussions";
 type DiscussionFilter = "all" | "topic" | "community";
 
-// FIX 1: pageParam defaults to 0
+// Fetch search results with pagination
 const fetchSearchResults = async ({ pageParam = 0, queryKey }: any) => {
   const [_, query, scope, category, discFilter] = queryKey;
   
@@ -84,7 +85,6 @@ const fetchSearchResults = async ({ pageParam = 0, queryKey }: any) => {
     params.append("category", category);
   }
 
-  // FIX 2: Safely map MongoDB _id to React Native id for both APIs
   if (scope === "news") {
     const response = await fetch(`${API_BASE_URL}/topics/search?${params.toString()}`);
     if (!response.ok) throw new Error("Network error");
@@ -121,6 +121,7 @@ const SearchScreen: React.FC = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
+  // Debounce search input: wait 400ms before submitting
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (!trimmed) {
@@ -147,12 +148,11 @@ const SearchScreen: React.FC = () => {
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < PAGE_LIMIT) return undefined;
-      
-      // FIX 3: Defensive Check to break infinite loops
+      // Prevent infinite loop if backend returns duplicate data
       if (allPages.length > 1) {
         const prevPage = allPages[allPages.length - 2];
         if (prevPage.length > 0 && lastPage.length > 0 && prevPage[0].id === lastPage[0].id) {
-          return undefined; // Backend returned identical data
+          return undefined;
         }
       }
       return allPages.length;
@@ -161,7 +161,7 @@ const SearchScreen: React.FC = () => {
     staleTime: 1000 * 60 * 5,
   });
 
-  // FIX 4: Deduplicate items to prevent FlatList crashes
+  // Deduplicate results by ID to prevent FlatList crashes
   const rawResults = data?.pages.flat() || [];
   const searchResults = Array.from(new Map(rawResults.map((item: any) => [item.id, item])).values());
 

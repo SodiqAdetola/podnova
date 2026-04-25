@@ -1,3 +1,6 @@
+// frontend/src/screens/WelcomeScreen.tsx
+// The entry screen of the app, showing branding and feature highlights.
+
 import React from 'react';
 import {
   View,
@@ -20,7 +23,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       <View style={styles.content}>
-        {/* Header with value proposition */}
+        {/* Header with logo and value proposition */}
         <View style={styles.header}>
           <LinearGradient
             colors={['#6366F1', '#8B5CF6']}
@@ -36,14 +39,14 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Feature highlights - reduces cognitive load by explaining value */}
+        {/* Feature list explaining the app's value */}
         <View style={styles.features}>
           <FeatureItem icon="newspaper-outline" text="30+ premium news sources" />
           <FeatureItem icon="sparkles-outline" text="AI-clustered, multi-perspective topics" />
           <FeatureItem icon="headphones-outline" text="Natural-voice podcast generation" />
         </View>
 
-        {/* Action buttons - clear primary/secondary hierarchy */}
+        {/* Action buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
             style={styles.primaryButton}
@@ -69,7 +72,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Legal disclaimer - builds trust */}
+        {/* Legal disclaimer */}
         <Text style={styles.legal}>
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </Text>
@@ -78,7 +81,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-// Reusable feature item component
+// Reusable feature row component
 const FeatureItem: React.FC<{ icon: any; text: string }> = ({ icon, text }) => (
   <View style={styles.featureRow}>
     <View style={styles.featureIconContainer}>

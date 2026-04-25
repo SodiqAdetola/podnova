@@ -85,7 +85,7 @@ class AudioService:
         
         Args:
             script: The podcast script text
-            voice_name: The voice model name (e.g., 'en-US-Journey-F')
+            voice_name: The voice model name
             speaking_rate: Speech speed multiplier (0.8-1.25)
             
         Returns:
@@ -126,7 +126,7 @@ class AudioService:
             )
             full_audio += audio_chunk
         
-        # Estimate duration based on word count (more accurate than file size for VBR MP3)
+        # Estimate duration based on word count
         word_count = len(script.split())
         # Average speaking rate: ~150 words per minute, adjust for speaking_rate
         duration_seconds = int((word_count / 150) * 60 / speaking_rate)
@@ -136,3 +136,5 @@ class AudioService:
     async def cleanup(self):
         """Clean up thread pool"""
         self.executor.shutdown(wait=True)
+
+

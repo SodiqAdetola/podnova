@@ -35,7 +35,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [showPlayer, setShowPlayer] = useState(false);
 
-  // Initialize production-grade audio mode
+  // Initialise audio mode
   useEffect(() => {
     const setupAudio = async () => {
       try {
@@ -128,9 +128,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const uriToPlay = isOfflineAvailable ? localFile.uri : podcast.audio_url!;
 
       if (isOfflineAvailable) {
-        console.log(`✈️ Playing OFFLINE downloaded file for podcast ${podcast.id}`);
+        console.log(`Playing OFFLINE downloaded file for podcast ${podcast.id}`);
       } else {
-        console.log(`🌐 Streaming ONLINE file for podcast ${podcast.id}`);
+        console.log(`Streaming ONLINE file for podcast ${podcast.id}`);
       }
       // ------------------------------------------------------------
 
@@ -154,8 +154,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         await newSound.setPositionAsync(savedPosition);
         setPosition(savedPosition);
       }
-
       setShowPlayer(true);
+
     } catch (error) {
       console.error('Error loading podcast:', error);
     }

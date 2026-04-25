@@ -12,7 +12,7 @@ router = APIRouter()
 class BulkDeleteRequest(BaseModel):
     notification_ids: List[str]
 
-# Removed the trailing slash ("/" -> "") to prevent 307 Redirects from stripping auth headers
+
 @router.get("")
 async def get_notifications(
     unread_only: bool = Query(False, description="Only show unread notifications"),
@@ -89,7 +89,7 @@ async def mark_all_read(
         result = await notification_controller.mark_all_notifications_read(firebase_user["uid"])
         return result
     except Exception as e:
-        print(f"❌ Error in mark_all_read: {e}")
+        print(f"Error in mark_all_read: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -116,7 +116,7 @@ async def archive_notification(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
-# --- NEW BULK DELETE ENDPOINT ---
+
 @router.post("/bulk-delete")
 async def bulk_delete_notifications(
     request: BulkDeleteRequest,
@@ -132,7 +132,7 @@ async def bulk_delete_notifications(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
-# --- NEW DELETE ALL ENDPOINT ---
+
 @router.delete("/delete-all")
 async def delete_all_notifications(
     firebase_user: dict = Depends(require_firebase_token)

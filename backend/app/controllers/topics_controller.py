@@ -7,7 +7,7 @@ from app.ai_pipeline.topic_history import TopicHistoryService
 from app.config import MONGODB_URI, MONGODB_DB_NAME
 import traceback
 
-# Initialize history service
+# Initialise history service
 history_service = TopicHistoryService(MONGODB_URI, MONGODB_DB_NAME)
 
 
@@ -270,7 +270,7 @@ def _extract_tags(topic: Dict) -> List[str]:
         if len(sources) >= 3:
             tags.append("multi-source")
         
-        # CRITICAL FIX: Safe integer evaluation 
+        # Safe integer evaluation 
         history_count = topic.get("history_point_count") or 0
         if history_count >= 3:
             tags.append("developing-story")
@@ -366,7 +366,7 @@ async def search_topics(query: str, category: Optional[str] = None, limit: int =
         }
 
     except Exception as e:
-        print(f"❌ Error in search_topics: {e}")
+        print(f"Error in search_topics: {e}")
         traceback.print_exc()
         # Fallback to empty results instead of crashing the frontend
         return {"query": query, "topics": [], "count": 0, "error": str(e)}

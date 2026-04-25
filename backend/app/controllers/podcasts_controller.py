@@ -39,19 +39,19 @@ class PodcastStatus(str, Enum):
 
 
 class PodcastVoice(str, Enum):
+    NORMAL_FEMALE = "normal_female"
+    NORMAL_MALE = "normal_male"
     CALM_FEMALE = "calm_female"
     CALM_MALE = "calm_male"
-    ENERGETIC_FEMALE = "energetic_female"
-    ENERGETIC_MALE = "energetic_male"
     PROFESSIONAL_FEMALE = "professional_female"
     PROFESSIONAL_MALE = "professional_male"
 
 
 VOICE_CONFIGS = {
-    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Autonoe",       
-    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Orus",            
-    PodcastVoice.ENERGETIC_FEMALE: "en-US-Chirp3-HD-Leda",    
-    PodcastVoice.ENERGETIC_MALE: "en-US-Chirp3-HD-Puck",     
+    PodcastVoice.NORMAL_FEMALE: "en-US-Chirp3-HD-Autonoe",       
+    PodcastVoice.NORMAL_MALE: "en-US-Chirp3-HD-Orus",            
+    PodcastVoice.CALM_FEMALE: "en-US-Chirp3-HD-Leda",    
+    PodcastVoice.CALM_MALE: "en-US-Chirp3-HD-Puck",     
     PodcastVoice.PROFESSIONAL_FEMALE: "en-US-Chirp3-HD-Aoede", 
     PodcastVoice.PROFESSIONAL_MALE: "en-US-Chirp3-HD-Charon",  
 }
@@ -94,9 +94,9 @@ async def create_podcast(
         if style is None:
             style = TONE_TO_STYLE_MAP.get(prefs.default_tone, PodcastStyle.STANDARD)
         if voice is None:
-            voice = PodcastVoice.CALM_FEMALE
+            voice = PodcastVoice.NORMAL_FEMALE
     else:
-        voice = voice or PodcastVoice.CALM_FEMALE
+        voice = voice or PodcastVoice.NORMAL_FEMALE
         style = style or PodcastStyle.STANDARD
         length_minutes = length_minutes or 5
     
@@ -149,7 +149,7 @@ async def create_podcast(
 async def create_custom_podcast(
     user_id: str,
     files: List[UploadFile],
-    text_content: str, # 👈 NEW PARAMETER
+    text_content: str,
     title: str,
     custom_prompt: str,
     voice: str,
@@ -215,7 +215,7 @@ async def _generate_podcast_async(podcast_id: str):
     try:
         podcast = await db["podcasts"].find_one({"_id": ObjectId(podcast_id)})
         if not podcast:
-            print(f"❌ Podcast {podcast_id} not found in DB. Aborting.")
+            print(f"Podcast {podcast_id} not found in DB. Aborting.")
             return
 
         await _update_podcast_status(podcast_id, PodcastStatus.GENERATING_SCRIPT)
@@ -270,13 +270,13 @@ async def _generate_podcast_async(podcast_id: str):
                     podcast_id=podcast_id,
                     topic_title=topic_title
                 )
-                print(f"  ✅ Podcast notification queued successfully")
+                print(f"Podcast notification queued successfully")
         except Exception as notif_e:
-            print(f"⚠️ Non-fatal error creating podcast notification: {notif_e}")
+            print(f"Non-fatal error creating podcast notification: {notif_e}")
             traceback.print_exc()
         
     except Exception as e:
-        print(f"❌ Fatal error in podcast generation: {e}")
+        print(f"Fatal error in podcast generation: {e}")
         await _update_podcast_status(
             podcast_id,
             PodcastStatus.FAILED,
@@ -332,7 +332,12 @@ async def get_user_podcasts(
     fifteen_mins_ago = datetime.utcnow().timestamp() - 900
     zombie_query = {
         "user_id": user_id,
-        "status": {"$in": [PodcastStatus.PENDING, PodcastStatus.GENERATING_SCRIPT, PodcastStatus.GENERATING_AUDIO, PodcastStatus.UPLOADING]},
+        "status": {
+            "$in": [PodcastStatus.PENDING, 
+                    PodcastStatus.GENERATING_SCRIPT, 
+                    PodcastStatus.GENERATING_AUDIO, 
+                    PodcastStatus.UPLOADING]
+                },
     }
     
     zombies = db["podcasts"].find(zombie_query)

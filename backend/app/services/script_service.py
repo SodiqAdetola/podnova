@@ -151,12 +151,12 @@ CRITICAL INCLUSIVITY & VOCABULARY RULES:
             
     def _sanitize_for_tts(self, text: str) -> str:
         """Deterministic post-processing to strip Markdown and TTS-breaking characters."""
-        text = re.sub(r'[*_#`]', '', text)
-        text = re.sub(r'\[.*?\]|\(.*?\)', '', text)
-        text = re.sub(r'^[-+]\s+', '', text, flags=re.MULTILINE)
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r' {2,}', ' ', text)
-        return text.strip()
+        text = re.sub(r'[*_#`]', '', text) # Remove Markdown characters
+        text = re.sub(r'\[.*?\]|\(.*?\)', '', text) # Remove anything in brackets or parentheses
+        text = re.sub(r'^[-+]\s+', '', text, flags=re.MULTILINE) # Remove list markers 
+        text = re.sub(r'\n{3,}', '\n\n', text) # Remove excessive newlines
+        text = re.sub(r' {2,}', ' ', text) # Remove extra space
+        return text.strip() 
     
     async def _fetch_articles(self, article_ids: List[ObjectId]) -> List[Dict]:
         """Fetch articles from database, returning raw dates for sorting logic later"""

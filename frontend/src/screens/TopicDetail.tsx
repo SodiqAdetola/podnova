@@ -1,7 +1,7 @@
 // frontend/src/screens/TopicDetail.tsx
 import React, { useEffect, useState, useRef } from "react";
 import {
-  View,
+  View, 
   Text,
   StyleSheet,
   ScrollView,
@@ -178,7 +178,7 @@ const TopicDetailScreen: React.FC = () => {
     }, 400); 
   };
 
-  // 👈 MODIFIED TOGGLE LOGIC TO TRIGGER MODAL
+  // TOGGLE LOGIC TO TRIGGER MODAL
   const handleToggleFollow = async () => {
     if (!topic?.id) return;
     

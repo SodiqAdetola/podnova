@@ -80,7 +80,7 @@ class NotificationService:
                         badge=1
                     )
                 )
-                logger.info(f"✅ Push notification sent successfully to {user_id}")
+                logger.info(f"Push notification sent successfully to {user_id}")
                 
             except DeviceNotRegisteredError:
                 # Token is dead (user uninstalled). Clean it up.
@@ -129,7 +129,7 @@ class NotificationService:
             
             return str(res.inserted_id)
         except Exception as e:
-            print(f"❌ Error creating notification: {e}")
+            print(f"Error creating notification: {e}")
             traceback.print_exc()
             return None
 
@@ -162,7 +162,7 @@ class NotificationService:
             try:
                 notifications.append(self._format_notification(n))
             except Exception as e:
-                print(f"⚠️ Skipping malformed legacy notification {n.get('_id')}: {e}")
+                print(f"Skipping malformed legacy notification {n.get('_id')}: {e}")
                 continue
                 
         return notifications

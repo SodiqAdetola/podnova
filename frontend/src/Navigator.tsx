@@ -28,7 +28,7 @@ import DiscussionDetailScreen from "./screens/DiscussionDetail";
 // Components
 import MiniPlayer from "./components/MiniPlayer";
 import PodcastPlayer from "./components/PodcastPlayer";
-import RegeneratePodcastModal from "./components/modals/RegeneratePodcastModal"; // <-- ADDED IMPORT
+import RegeneratePodcastModal from "./components/modals/RegeneratePodcastModal";
 import { Podcast } from "./types/podcasts";
 
 import * as Notifications from 'expo-notifications';
@@ -187,14 +187,10 @@ const SCREENS_WITH_TAB_BAR = [
 const RootAppOverlay: React.FC = () => {
   const { user } = useAuth();
   const { showPlayer, currentPodcast } = useAudio();
-  
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [currentRouteName, setCurrentRouteName] = useState<string>("Home");
-  
-  // NEW: State for the universal Regenerate Modal
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [selectedPodcastToRegen, setSelectedPodcastToRegen] = useState<Podcast | null>(null);
-
   const navigationRef = useNavigationContainerRef<MainStackParamList>();
 
   const shouldShowMiniPlayer = showPlayer && !showFullPlayer && currentPodcast;
@@ -256,7 +252,7 @@ const RootAppOverlay: React.FC = () => {
             onClose={() => setShowFullPlayer(false)}
             isSaved={false} 
             onToggleSave={() => {}} 
-            // NEW: Feed the regenerate request to the universal modal state
+            // feed the regenerate request to the universal modal state
             onRegenerateRequest={(podcast: Podcast) => {
               setSelectedPodcastToRegen(podcast);
               setTimeout(() => {
@@ -266,7 +262,7 @@ const RootAppOverlay: React.FC = () => {
           />
         )}
 
-        {/* NEW: Universal Regenerate Modal so it can be accessed anywhere */}
+        {/* Universal Regenerate Modal so it can be accessed anywhere */}
         <RegeneratePodcastModal
           visible={showRegenerateModal}
           podcast={selectedPodcastToRegen}

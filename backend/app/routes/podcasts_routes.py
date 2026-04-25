@@ -27,7 +27,7 @@ generate_podcast_limit = RateLimit(limit=5, window_minutes=60, action_name="gene
 # Pydantic models for request/response
 class CreatePodcastRequest(BaseModel):
     topic_id: str = Field(..., description="Topic ID to generate podcast from")
-    voice: str = Field(default=PodcastVoice.CALM_FEMALE, description="Voice type")
+    voice: str = Field(default=PodcastVoice.NORMAL_FEMALE, description="Voice type")
     style: str = Field(default=PodcastStyle.STANDARD, description="Comprehension level")
     length_minutes: int = Field(default=5, ge=1, le=30, description="Target length in minutes")
     custom_prompt: Optional[str] = Field(None, description="Custom instructions")
@@ -89,7 +89,7 @@ async def generate_custom_podcast_endpoint(
     text_content: Optional[str] = Form(""), # 👈 NEW: Accept pasted text
     podcast_title: str = Form("Custom Studio Podcast"), 
     custom_prompt: Optional[str] = Form(""),
-    voice: str = Form(PodcastVoice.CALM_FEMALE),
+    voice: str = Form(PodcastVoice.NORMAL_FEMALE),
     style: str = Form(PodcastStyle.STANDARD),
     length_minutes: int = Form(5),
     firebase_user=Depends(generate_podcast_limit)
@@ -290,26 +290,26 @@ async def list_available_voices():
     return {
         "voices": [
             {
+                "id": PodcastVoice.NORMAL_FEMALE,
+                "name": "Normal (Female)",
+                "description": "Soothing female voice, ideal for relaxed listening",
+                "language": "en-US"
+            },
+            {
+                "id": PodcastVoice.NORMAL_MALE,
+                "name": "Normal (Male)",
+                "description": "Soothing male voice, ideal for relaxed listening",
+                "language": "en-US"
+            },
+            {
                 "id": PodcastVoice.CALM_FEMALE,
                 "name": "Calm (Female)",
-                "description": "Soothing female voice, ideal for relaxed listening",
+                "description": "Upbeat female voice, great for engaging content",
                 "language": "en-US"
             },
             {
                 "id": PodcastVoice.CALM_MALE,
                 "name": "Calm (Male)",
-                "description": "Soothing male voice, ideal for relaxed listening",
-                "language": "en-US"
-            },
-            {
-                "id": PodcastVoice.ENERGETIC_FEMALE,
-                "name": "Energetic (Female)",
-                "description": "Upbeat female voice, great for engaging content",
-                "language": "en-US"
-            },
-            {
-                "id": PodcastVoice.ENERGETIC_MALE,
-                "name": "Energetic (Male)",
                 "description": "Upbeat male voice, great for engaging content",
                 "language": "en-US"
             },

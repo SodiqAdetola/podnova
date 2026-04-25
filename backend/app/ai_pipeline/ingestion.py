@@ -45,7 +45,7 @@ class ArticleIngestionService:
 
         self.http_semaphore = asyncio.Semaphore(5)
         
-        # 👈 NEW: STRICT SEMAPHORE TO PREVENT OOM CRASHES
+        # STRICT SEMAPHORE TO PREVENT OOM CRASHES
         # This forces the BeautifulSoup parser to only process 2 articles at a time
         self.process_semaphore = asyncio.Semaphore(2) 
         
@@ -136,7 +136,7 @@ class ArticleIngestionService:
             return None
 
     # =========================================================================
-    # IMAGE EXTRACTION LOGIC (Restored to original robust version)
+    # IMAGE EXTRACTION LOGIC
     # =========================================================================
     def extract_image_from_entry(self, entry: Dict, url: str) -> Optional[str]:
         """
@@ -320,7 +320,7 @@ class ArticleIngestionService:
         return best if best['score'] >= 50 else None
 
     # =========================================================================
-    # CORE PIPELINE LOGIC
+    # CORE PIPELINE LOGIC (UPDATED: cheap filters before scraping)
     # =========================================================================
     def generate_content_hash(self, text: str) -> str:
         return hashlib.md5(text.encode('utf-8')).hexdigest()
@@ -339,31 +339,26 @@ class ArticleIngestionService:
         except Exception:
             return "unknown"
 
-    def filter_article(self, article_data: Dict[str, Any]) -> bool:
+    def initial_filter(self, article_data: Dict[str, Any]) -> bool:
         """
-        Apply quality filters. Only rejects for noise, extreme length, age, or language.
-        Does NOT reject for being short (to allow graceful RSS fallbacks).
+        Apply cheap filters using only RSS metadata (no scraping).
+        Returns True if article passes, False if it should be rejected.
         """
-        content = article_data.get("content", "")
-        title = article_data.get("title", "")
-        word_count = article_data.get("word_count", 0)
-
-        # Reject if ridiculously long (likely grabbed a massive privacy policy)
-        if word_count > MAX_WORD_COUNT:
-            logger.debug(f"  [REJECTED] Too long ({word_count} words): {title[:40]}")
-            return False
-
-        if self.detect_language(content[:500]) != "en":
-            return False
-
+        # Age filter
         if not self.is_recent(article_data["published_date"]):
-            logger.debug(f"  [REJECTED] Too old: {title[:40]}")
+            logger.debug(f"  [REJECTED] Too old: {article_data['title'][:40]}")
             return False
 
-        # Strictly filter out defined noise
-        text_to_check = (title + " " + content[:500]).lower()
+        # Language filter (on title + description, before scraping)
+        text_sample = (article_data.get("title", "") + " " + article_data.get("description", ""))[:500]
+        if self.detect_language(text_sample) != "en":
+            logger.debug(f"  [REJECTED] Not English: {article_data['title'][:40]}")
+            return False
+
+        # Noise keyword filter (on title + description)
+        text_to_check = (article_data.get("title", "") + " " + article_data.get("description", "")).lower()
         if any(noise.lower() in text_to_check for noise in NOISE_KEYWORDS):
-            logger.debug(f"  [REJECTED] Noise detected: {title[:40]}")
+            logger.debug(f"  [REJECTED] Noise detected: {article_data['title'][:40]}")
             return False
 
         return True
@@ -405,23 +400,26 @@ class ArticleIngestionService:
             logger.error(f"Error parsing article: {str(e)}")
             return None
 
-    # 👈 NEW: Wrapper to apply the semaphore strictly to the heavy processing phase
     async def _safe_process_article(self, article_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         async with self.process_semaphore:
             return await self.process_article(article_data)
 
     async def process_article(self, article_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Process pipeline: Deduplicate -> Scrape -> Fallback -> Filter -> Hash Check
+        Process pipeline: URL dedup -> initial filters (metadata) -> scrape -> content filters -> hash dedup.
         """
-        # 1. Deduplication by URL FIRST (Saves massive bandwidth)
+        # 1. URL deduplication (cheapest)
         if await self.articles_collection.find_one({"url": article_data['url']}):
             return None
 
-        # 2. Attempt Web Scrape
+        # 2. Initial filters using only RSS metadata (no scraping yet)
+        if not self.initial_filter(article_data):
+            return None
+
+        # 3. Attempt full content scrape (only if cheap filters passed)
         full_content = await self.extract_full_content(article_data["url"])
 
-        # 3. Graceful Fallback Logic (if blocked or too short)
+        # 4. Fallback to RSS summary if scrape fails or content too short
         if full_content and self.count_words(full_content) >= MIN_WORD_COUNT:
             article_data["content"] = full_content
             article_data["has_full_content"] = True
@@ -433,13 +431,15 @@ class ArticleIngestionService:
 
         article_data["word_count"] = self.count_words(article_data["content"])
 
-        # 4. Filter for Noise & Age
-        if not self.filter_article(article_data):
+        # 5. Length filter (content-based)
+        if article_data["word_count"] > MAX_WORD_COUNT:
+            logger.debug(f"  [REJECTED] Too long: {article_data['title'][:40]}")
             return None
 
-        # 5. Final content hash generation & collision check
+        # 6. Content hash deduplication (content-based)
         article_data["content_hash"] = self.generate_content_hash(article_data["content"])
         if await self.articles_collection.find_one({"content_hash": article_data["content_hash"]}):
+            logger.debug(f"  [REJECTED] Duplicate content: {article_data['title'][:40]}")
             return None
 
         return article_data
@@ -456,7 +456,6 @@ class ArticleIngestionService:
         for entry in entries:
             article_data = self.parse_article(entry, feed_info, category)
             if article_data:
-                # 👈 NEW: Use the safe wrapper to prevent RAM spikes
                 tasks.append(self._safe_process_article(article_data))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)

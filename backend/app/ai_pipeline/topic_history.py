@@ -277,14 +277,14 @@ RULES FOR THE HEADLINE:
 - Be specific - include names, numbers, key details
 - Make it easy to understand in 2 seconds and INCLUSIVE FOR ALL COMPREHENSION LEVELS
 
-✅ GOOD EXAMPLES (clear, specific):
+GOOD EXAMPLES (clear, specific):
 • "Google fined €2.4 billion by EU regulators"
 • "Tesla delays Cybertruck production to 2025"
 • "AI software creates fake videos of UK streets"
 • "US Supreme Court blocks Trump trade tariffs"
 • "Microsoft bug exposes confidential emails"
 
-❌ BAD EXAMPLES (confusing, vague, jargon):
+BAD EXAMPLES (confusing, vague, jargon):
 • "AI slop costs threaten global economic reckoning" (uses slang, vague)
 • "Tech giant faces regulatory scrutiny" (too vague)
 • "The future of AI in question" (vague, says nothing)

@@ -126,7 +126,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
 
   const handleGenerate = async () => {
     setGenerating(true);
-
     try {
       const token = await auth.currentUser?.getIdToken(true);
       if (!token) throw new Error("User not authenticated");
@@ -145,7 +144,6 @@ const PodcastGenModal: React.FC<PodcastGenModalProps> = ({
           custom_prompt: customPrompt || null,
         }),
       });
-
       if (response.ok) {
         const data = await response.json();
         setPodcastId(data.id);

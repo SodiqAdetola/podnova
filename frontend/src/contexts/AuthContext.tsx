@@ -34,33 +34,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log("Must use physical device for Push Notifications");
                 return;
             }
-
             // 1. Check existing permissions (Silent)
             const { status: existingStatus } = await Notifications.getPermissionsAsync();
             let finalStatus = existingStatus;
-            
             // 2. Only ask if we haven't asked before (Shows native pop-up)
             if (existingStatus !== 'granted') {
                 const { status } = await Notifications.requestPermissionsAsync();
                 finalStatus = status;
             }
-            
             // 3. If they denied, stop here.
             if (finalStatus !== 'granted') {
                 console.log("Push permission denied");
                 return;
             }
-
             // 4. Get the Expo Push Token
             const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
             if (!projectId) {
                 console.log("Missing Project ID in app.json for push notifications");
                 return;
             }
-
             const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
             const expoPushToken = tokenData.data;
-
             // 5. Send token to your backend
             const authToken = await firebaseUser.getIdToken();
             await fetch(`${API_BASE_URL}/users/push-token`, {

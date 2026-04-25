@@ -63,7 +63,7 @@ async def list_discussions(
         }
         
     except Exception as e:
-        print(f"❌ Error in list_discussions: {e}")
+        print(f"Error in list_discussions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{discussion_id}")

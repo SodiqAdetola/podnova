@@ -159,7 +159,7 @@ class DiscussionService:
                 return await self._process_cursor(cursor, user_id)
                 
         except Exception as e:
-            print(f"❌ Error in get_discussions: {e}")
+            print(f"Error in get_discussions: {e}")
             traceback.print_exc()
             return []
 

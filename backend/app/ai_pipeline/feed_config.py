@@ -37,7 +37,7 @@ RSS_FEEDS = {
         {"name": "VentureBeat - AI", "url": "https://venturebeat.com/category/ai/feed/"},
         {"name": "Wired - Business Tech", "url": "https://www.wired.com/feed/category/business/latest/rss"},
         
-
+        # rss count - 11
     ],
 
     "finance": [
@@ -57,6 +57,8 @@ RSS_FEEDS = {
         {"name": "CNBC - Economy", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"},
         {"name": "CNBC - Investing & Markets", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069"},
         {"name": "Yahoo Finance - Global Markets", "url": "https://finance.yahoo.com/news/rssindex"},
+    
+        # rss count - 11
     ],
 
     "politics": [
@@ -72,6 +74,7 @@ RSS_FEEDS = {
         {"name": "United Nations News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml"},
         {"name": "Politico EU", "url": "https://www.politico.eu/feed/"}, 
 
+        # rss count - 8
     ]
 }
 
